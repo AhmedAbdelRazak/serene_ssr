@@ -1,0 +1,19 @@
+import { absoluteUrl } from "@/lib/config";
+
+export default function robots() {
+	return {
+		rules: [
+			{
+				userAgent: "*",
+				allow: "/",
+				disallow: ["/admin", "/seller", "/dashboard", "/signin", "/signup", "/cart"],
+			},
+		],
+		sitemap: [
+			absoluteUrl("/sitemap.xml"),
+			absoluteUrl("/google-merchant.xml"),
+			absoluteUrl("/facebook-feed.xml"),
+		],
+		host: absoluteUrl("/"),
+	};
+}
