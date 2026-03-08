@@ -30,12 +30,17 @@ const buildCloudinaryUrl = (url, width, format) => {
 		!isVersion && (first.includes(",") || first.includes("_"));
 	const tokens = hasTransform ? first.split(",") : [];
 
-	if (!tokens.some((token) => token.startsWith("w_"))) {
-		tokens.push(`w_${width}`);
-	}
-	if (!tokens.some((token) => token.startsWith("q_"))) {
-		tokens.push("q_auto");
-	}
+	const setOrAppendToken = (token, predicate) => {
+		const index = tokens.findIndex(predicate);
+		if (index >= 0) {
+			tokens[index] = token;
+		} else {
+			tokens.push(token);
+		}
+	};
+
+	setOrAppendToken(`w_${width}`, (token) => token.startsWith("w_"));
+	setOrAppendToken("q_auto", (token) => token.startsWith("q_"));
 
 	const formatIndex = tokens.findIndex((token) => token.startsWith("f_"));
 	if (format === "webp") {

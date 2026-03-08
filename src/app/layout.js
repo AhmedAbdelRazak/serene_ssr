@@ -30,15 +30,43 @@ export default function RootLayout({ children }) {
 				<link rel='preconnect' href='https://res.cloudinary.com' />
 				<link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
 				<link
+					rel='preload'
+					as='style'
+					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
+				/>
+				<link
 					rel='stylesheet'
 					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
+					media='print'
+					onLoad="this.media='all'"
+				/>
+				<link
+					rel='preload'
+					as='style'
+					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
+					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
+					crossOrigin='anonymous'
 				/>
 				<link
 					rel='stylesheet'
 					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
 					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
 					crossOrigin='anonymous'
+					media='print'
+					onLoad="this.media='all'"
 				/>
+				<noscript>
+					<link
+						rel='stylesheet'
+						href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
+					/>
+					<link
+						rel='stylesheet'
+						href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
+						integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
+						crossOrigin='anonymous'
+					/>
+				</noscript>
 				<meta
 					name='facebook-domain-verification'
 					content='ctdvedogjmpukl4fixfi03qzeax4w0'

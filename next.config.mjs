@@ -27,6 +27,12 @@ const nextConfig = {
 	experimental: {
 		externalDir: true,
 	},
+	turbopack: {
+		resolveAlias: {
+			"react-ga4": "./src/lib/perf/react-ga4-lite.js",
+			"react-facebook-pixel": "./src/lib/perf/react-facebook-pixel-lite.js",
+		},
+	},
 	env: {
 		REACT_APP_API_URL: normalizedApiUrl,
 		REACT_APP_API_URL_MAIN: normalizedApiMain,
