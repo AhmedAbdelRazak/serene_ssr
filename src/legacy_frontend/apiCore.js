@@ -569,17 +569,21 @@ export const gettingSpecificProducts = (
 	offers,
 	records,
 	skip = 0, // optional, goes in query
-	storeId = "" // optional, goes in query
+	storeId = "", // optional, goes in query
+	options = {} // optional flags
 ) => {
 	// Build the query string for skip & storeId
 	const params = new URLSearchParams();
+	const useLitePayload = options && options.lite === true;
 	// Only append skip if it's > 0
 	if (skip) params.append("skip", skip);
 	// Only append storeId if it's not empty
 	if (storeId) params.append("storeId", storeId);
+	if (useLitePayload) params.append("lite", "1");
 
 	// Construct the URL with path params and optional query
-	const url = `${process.env.REACT_APP_API_URL}/specific/products/${featured}/${newArrivals}/${customDesigns}/${sortByRate}/${offers}/${records}?${params.toString()}`;
+	const query = params.toString();
+	const url = `${process.env.REACT_APP_API_URL}/specific/products/${featured}/${newArrivals}/${customDesigns}/${sortByRate}/${offers}/${records}${query ? `?${query}` : ""}`;
 
 	return fetch(url, {
 		method: "GET",

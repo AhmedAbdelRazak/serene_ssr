@@ -1,8 +1,6 @@
 import "./globals.css";
 import "@/legacy_frontend/App.css";
-import "react-toastify/dist/ReactToastify.css";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
+import "@/legacy_frontend/slick-lite.css";
 import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
@@ -37,8 +35,7 @@ export default function RootLayout({ children }) {
 				<link
 					rel='stylesheet'
 					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
-					media='print'
-					onLoad="this.media='all'"
+					media='all'
 				/>
 				<link
 					rel='preload'
@@ -52,8 +49,7 @@ export default function RootLayout({ children }) {
 					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
 					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
 					crossOrigin='anonymous'
-					media='print'
-					onLoad="this.media='all'"
+					media='all'
 				/>
 				<noscript>
 					<link

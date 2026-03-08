@@ -1,3 +1,8 @@
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 function trimTrailingSlash(value = "") {
 	return `${value || ""}`.trim().replace(/\/+$/, "");
 }
@@ -32,6 +37,17 @@ const nextConfig = {
 			"react-ga4": "./src/lib/perf/react-ga4-lite.js",
 			"react-facebook-pixel": "./src/lib/perf/react-facebook-pixel-lite.js",
 		},
+	},
+	webpack: (config) => {
+		config.resolve = config.resolve || {};
+		config.resolve.alias = config.resolve.alias || {};
+		config.resolve.alias["react-ga4"] = path.resolve(
+			__dirname,
+			"src/lib/perf/react-ga4-lite.js",
+		);
+		config.resolve.alias["react-facebook-pixel"] =
+			path.resolve(__dirname, "src/lib/perf/react-facebook-pixel-lite.js");
+		return config;
 	},
 	env: {
 		REACT_APP_API_URL: normalizedApiUrl,

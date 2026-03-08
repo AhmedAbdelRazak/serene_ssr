@@ -15,6 +15,7 @@ export default function AnalyticsScripts() {
 	const hasFbPixel = Boolean(FACEBOOK_PIXEL_ID);
 	const normalizedPath = `${pathname || ""}`.toLowerCase();
 	const shouldSkipForLegacyRoute =
+		!normalizedPath ||
 		normalizedPath === "/" ||
 		normalizedPath.startsWith("/admin") ||
 		normalizedPath.startsWith("/seller") ||

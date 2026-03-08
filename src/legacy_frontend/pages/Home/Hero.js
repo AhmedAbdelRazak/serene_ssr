@@ -47,13 +47,26 @@ const Hero = ({ websiteSetup }) => {
 							pageRedirectURL,
 						} = banner;
 
-						// Cloudinary transforms
-						const base1600 = getCloudinaryOptimizedUrl(url, { width: 1600 });
-						const base1200 = getCloudinaryOptimizedUrl(url, { width: 1200 });
-						const base768 = getCloudinaryOptimizedUrl(url, { width: 768 });
-						const base480 = getCloudinaryOptimizedUrl(url, { width: 480 });
-
 						const isFirstSlide = idx === 0;
+						const quality = isFirstSlide ? "auto" : "auto:eco";
+
+						// Cloudinary transforms
+						const base1600 = getCloudinaryOptimizedUrl(url, {
+							width: 1600,
+							quality,
+						});
+						const base1200 = getCloudinaryOptimizedUrl(url, {
+							width: 1200,
+							quality,
+						});
+						const base768 = getCloudinaryOptimizedUrl(url, {
+							width: 768,
+							quality,
+						});
+						const base480 = getCloudinaryOptimizedUrl(url, {
+							width: 480,
+							quality,
+						});
 
 						return (
 							<Slide key={idx}>
@@ -173,14 +186,14 @@ const SliderContainer = styled.div`
 		color: #fff;
 	}
 	.slick-prev:before {
-		content: "‹";
+		content: "<";
 	}
 	.slick-next:before {
-		content: "›";
+		content: ">";
 	}
 
 	.slick-dots li button:before {
-		content: "•";
+		content: "\2022";
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 1;

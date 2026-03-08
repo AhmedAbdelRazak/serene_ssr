@@ -132,6 +132,45 @@ const AppContent = () => {
 		}
 	}, []);
 
+	// Defer Toastify CSS so it does not block initial paint on the homepage.
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		let loaded = false;
+		const loadToastStyles = () => {
+			if (loaded) return;
+			loaded = true;
+			import("react-toastify/dist/ReactToastify.css").catch(() => {});
+			window.removeEventListener("pointerdown", loadToastStyles);
+			window.removeEventListener("keydown", loadToastStyles);
+			window.removeEventListener("touchstart", loadToastStyles);
+			window.removeEventListener("scroll", loadToastStyles);
+		};
+		window.addEventListener("pointerdown", loadToastStyles, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", loadToastStyles, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", loadToastStyles, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("scroll", loadToastStyles, {
+			once: true,
+			passive: true,
+		});
+		const timeoutId = window.setTimeout(loadToastStyles, 60000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", loadToastStyles);
+			window.removeEventListener("keydown", loadToastStyles);
+			window.removeEventListener("touchstart", loadToastStyles);
+			window.removeEventListener("scroll", loadToastStyles);
+		};
+	}, []);
+
 	// Track page view on route change
 	useEffect(() => {
 		const pagePath = `${location.pathname || "/"}${location.search || ""}`;

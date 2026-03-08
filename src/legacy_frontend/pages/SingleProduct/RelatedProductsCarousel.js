@@ -3,8 +3,6 @@ import styled from "styled-components";
 import Slider from "react-slick";
 import { Card } from "antd";
 import { ShoppingCartOutlined } from "@ant-design/icons";
-import "slick-carousel/slick/slick.css";
-import "slick-carousel/slick/slick-theme.css";
 import { useCartContext } from "../../cart_context";
 import { readProduct } from "../../apiCore";
 import { useHistory } from "react-router-dom";

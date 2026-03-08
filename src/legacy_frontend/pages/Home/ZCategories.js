@@ -1,7 +1,6 @@
 import React, { useCallback } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
-import { Card } from "antd";
 import ReactGA from "react-ga4";
 import ReactPixel from "react-facebook-pixel";
 import axios from "axios";
@@ -78,41 +77,43 @@ const ZCategories = ({ allCategories }) => {
 					if (category.thumbnail && category.thumbnail.length > 0) {
 						const originalUrl = category.thumbnail[0].url;
 
-						// Base (JPEG/PNG/etc.) - forcing width=600 by default
+						// Base (JPEG/PNG/etc.) - tuned smaller to reduce homepage payload
 						const baseJpg = getCloudinaryOptimizedUrl(originalUrl, {
-							width: 600,
+							width: 640,
+							quality: "auto:eco",
 						});
 						// WebP version
 						const baseWebp = getCloudinaryOptimizedUrl(originalUrl, {
-							width: 600,
+							width: 640,
 							format: "webp",
+							quality: "auto:eco",
 						});
 
 						// Now let's do *responsive* widths via string replace:
-						// e.g. w_600 => w_480 or w_768 or w_1200
-						const jpg480 = baseJpg.replace("w_600", "w_480");
-						const jpg768 = baseJpg.replace("w_600", "w_768");
-						const jpg1200 = baseJpg.replace("w_600", "w_1200");
+						// e.g. w_640 => w_240/w_320/w_480
+						const jpg240 = baseJpg.replace("w_640", "w_240");
+						const jpg320 = baseJpg.replace("w_640", "w_320");
+						const jpg480 = baseJpg.replace("w_640", "w_480");
 
-						const webp480 = baseWebp.replace("w_600", "w_480");
-						const webp768 = baseWebp.replace("w_600", "w_768");
-						const webp1200 = baseWebp.replace("w_600", "w_1200");
+						const webp240 = baseWebp.replace("w_640", "w_240");
+						const webp320 = baseWebp.replace("w_640", "w_320");
+						const webp480 = baseWebp.replace("w_640", "w_480");
 
 						// We'll pass these to <source> and <img> so the browser picks the best size
 						imageUrl = {
-							fallback: jpg480, // smallest fallback if older browser doesn't handle srcset
-							srcset: `${jpg480} 480w,
-                       ${jpg768} 768w,
-                       ${jpg1200} 1200w,
-                       ${baseJpg} 1600w`,
+							fallback: jpg320, // smallest fallback if older browser doesn't handle srcset
+							srcset: `${jpg240} 240w,
+                       ${jpg320} 320w,
+                       ${jpg480} 480w,
+                       ${baseJpg} 640w`,
 						};
 
 						webpUrl = {
-							fallback: webp480, // smallest
-							srcset: `${webp480} 480w,
-                       ${webp768} 768w,
-                       ${webp1200} 1200w,
-                       ${baseWebp} 1600w`,
+							fallback: webp320, // smallest
+							srcset: `${webp240} 240w,
+                       ${webp320} 320w,
+                       ${webp480} 480w,
+                       ${baseWebp} 640w`,
 						};
 					}
 
@@ -150,6 +151,8 @@ const ZCategories = ({ allCategories }) => {
 												loading='lazy'
 												src={imageUrl.fallback}
 												alt={category.categoryName}
+												width={640}
+												height={360}
 											/>
 										</picture>
 									</CategoryImageWrapper>
@@ -198,13 +201,9 @@ const ZCategoriesWrapper = styled.div`
 		gap: 10px;
 		padding: 5px;
 	}
-
-	.ant-card-body {
-		padding: 0 !important; /* Remove padding from the card body */
-	}
 `;
 
-const CategoryCard = styled(Card)`
+const CategoryCard = styled.div`
 	border-radius: 10px;
 	overflow: hidden;
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);

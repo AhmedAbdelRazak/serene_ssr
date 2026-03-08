@@ -451,6 +451,15 @@ const PrintifyAvailableProducts = () => {
 		};
 	}, []);
 
+	const handleDirectPreviewImageError = useCallback((event, fallbackSrc) => {
+		const imageElement = event.currentTarget;
+		if (imageElement.dataset.fallbackApplied === "true") return;
+		const safeFallback = fallbackSrc ? `${fallbackSrc}`.trim() : "";
+		if (!safeFallback) return;
+		imageElement.dataset.fallbackApplied = "true";
+		imageElement.src = safeFallback;
+	}, []);
+
 	const registerPreviewForSessionCleanup = useCallback((item) => {
 		const sessionItems = normalizePreviewSessionCleanupItems([
 			...previewSessionCleanupRef.current,
@@ -907,14 +916,18 @@ const PrintifyAvailableProducts = () => {
 									<HoverPreviewContent>
 										<HoverPreviewImageWrap>
 											{readyPreview ? (
-												<ProductImage
+												<DirectPreviewImage
 													src={previewSrc}
-													fallbackSrc={placeholderSrc || primarySrc || fallbackSrc}
 													alt={`${product.productName} preview`}
 													loading='lazy'
 													decoding='async'
-													sizes='(max-width: 1200px) 360px, 420px'
-													widths={[420, 640, 900]}
+													referrerPolicy='no-referrer'
+													onError={(event) =>
+														handleDirectPreviewImageError(
+															event,
+															placeholderSrc || primarySrc
+														)
+													}
 												/>
 											) : (
 												<ProductImage
@@ -943,19 +956,23 @@ const PrintifyAvailableProducts = () => {
 								}
 							>
 								<CardAnchor>
-										<Card onClick={() => handleProductClick(product)}>
-											<ImageWrap>
-												{readyPreview ? (
-													<ProductImage
-														src={previewSrc}
-														fallbackSrc={placeholderSrc || primarySrc || fallbackSrc}
-														alt={product.productName}
-														loading='lazy'
-														decoding='async'
-														sizes='(max-width: 600px) 94vw, (max-width: 1024px) 46vw, 320px'
-														widths={[320, 480, 640, 900]}
-													/>
-												) : (
+									<Card onClick={() => handleProductClick(product)}>
+										<ImageWrap>
+											{readyPreview ? (
+												<DirectPreviewImage
+													src={previewSrc}
+													alt={product.productName}
+													loading='lazy'
+													decoding='async'
+													referrerPolicy='no-referrer'
+													onError={(event) =>
+														handleDirectPreviewImageError(
+															event,
+															placeholderSrc || primarySrc
+														)
+													}
+												/>
+											) : (
 												<ProductImage
 													src={placeholderSrc}
 													fallbackSrc={primarySrc || fallbackSrc}
@@ -1136,6 +1153,14 @@ const ImageWrap = styled.div`
 `;
 
 const ProductImage = styled(OptimizedImage)`
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+	padding: 8px;
+	display: block;
+`;
+
+const DirectPreviewImage = styled.img`
 	width: 100%;
 	height: 100%;
 	object-fit: contain;

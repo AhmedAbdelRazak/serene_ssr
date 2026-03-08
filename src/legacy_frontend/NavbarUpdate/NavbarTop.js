@@ -74,6 +74,8 @@ const NavbarTop = memo(() => {
 
 	return (
 		<>
+			{isSidebarOpen && <Overlay onClick={() => setIsSidebarOpen(false)} />}
+
 			<NavbarTopWrapper>
 				{/* Hamburger menu icon (mobile) */}
 				<MenuIcon onClick={() => setIsSidebarOpen(true)} />
@@ -276,11 +278,10 @@ const NavbarTopWrapper = styled.nav`
 `;
 
 const Logo = styled.img`
-	width: min(198px, 58vw);
-	aspect-ratio: 441 / 111;
-	height: auto;
+	height: 50px;
+	width: auto;
 	cursor: pointer;
-	object-fit: contain !important;
+	object-fit: cover !important;
 `;
 
 const MenuIcon = styled(FaBars)`
@@ -324,6 +325,16 @@ const NavLink = styled.a`
 	&:hover {
 		color: var(--secondary-color-dark);
 	}
+`;
+
+const Overlay = styled.div`
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background-color: rgba(0, 0, 0, 0.5);
+	z-index: 5;
 `;
 
 const Badge = styled.span`

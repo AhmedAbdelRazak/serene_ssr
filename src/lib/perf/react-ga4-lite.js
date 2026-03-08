@@ -32,9 +32,9 @@ function scheduleDeferred(callback) {
 	window.addEventListener("scroll", runOnce, { once: true, passive: true });
 
 	if (typeof window.requestIdleCallback === "function") {
-		window.requestIdleCallback(runOnce, { timeout: 12000 });
+		window.requestIdleCallback(runOnce, { timeout: 60000 });
 	} else {
-		window.setTimeout(runOnce, 10000);
+		window.setTimeout(runOnce, 60000);
 	}
 }
 

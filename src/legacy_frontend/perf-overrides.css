@@ -5,14 +5,13 @@
 }
 
 .slick-prev:before {
-	content: "‹" !important;
+	content: "<" !important;
 }
 
 .slick-next:before {
-	content: "›" !important;
+	content: ">" !important;
 }
 
 .slick-dots li button:before {
-	content: "•" !important;
+	content: "\2022" !important;
 }
-

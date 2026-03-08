@@ -1,4 +1,4 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
@@ -66,163 +66,70 @@ const generateKeywords = (products = []) => {
 
 // Generate structured data for products
 const generateProductSchema = (products = []) => {
-	return products.map((product) => {
-		const hasVariables =
-			product?.productAttributes && product.productAttributes.length > 0;
-
-		const price = hasVariables
-			? product.productAttributes[0].priceAfterDiscount
-			: product?.priceAfterDiscount || 0;
-
-		const quantity = hasVariables
-			? product.productAttributes.reduce((acc, attr) => acc + attr.quantity, 0)
-			: product?.quantity || 0;
-
-		const priceValidUntil = "2026-12-31";
-
-		// Ratings
-		const ratingValue =
-			product?.ratings?.length > 0
-				? (
-						product.ratings.reduce((acc, rating) => acc + rating.star, 0) /
-						product.ratings.length
-					).toFixed(1)
-				: "5.0";
-		const reviewCount =
-			product?.ratings?.length > 0 ? product.ratings.length : 1;
-
-		// Reviews
-		const reviews =
-			product?.comments?.length > 0
-				? product.comments.map((comment) => ({
-						"@type": "Review",
-						reviewRating: {
-							"@type": "Rating",
-							ratingValue: comment?.rating || 5,
-							bestRating: 5,
-							worstRating: 1,
-						},
-						author: {
-							"@type": "Person",
-							name: escapeJsonString(
-								comment?.postedBy ? comment.postedBy.name : "Anonymous"
-							),
-						},
-						reviewBody: escapeJsonString(comment?.text || ""),
-						datePublished: new Date(comment.created).toISOString(),
-					}))
-				: [
-						{
-							"@type": "Review",
-							reviewRating: {
-								"@type": "Rating",
-								ratingValue: 5,
-								bestRating: 5,
-								worstRating: 1,
-							},
-							author: {
-								"@type": "Person",
-								name: "Anonymous",
-							},
-							reviewBody: "Excellent product!",
-							datePublished: new Date().toISOString(),
-						},
-					];
-
-		// MPN
-		const mpn = hasVariables
+	return products.slice(0, 8).map((product) => {
+		const attributes = Array.isArray(product?.productAttributes)
 			? product.productAttributes
-					.map((attr) => `${product?.productSKU || ""}-${attr.SubSKU || ""}`)
-					.join(", ")
-			: product?.productSKU || "N/A";
-
+			: [];
+		const hasVariables = attributes.length > 0;
+		const firstAttribute = attributes[0] || {};
+		const price =
+			Number(firstAttribute?.priceAfterDiscount || 0) ||
+			Number(product?.priceAfterDiscount || 0) ||
+			Number(firstAttribute?.price || 0) ||
+			Number(product?.price || 0) ||
+			0;
+		const quantity = hasVariables
+			? attributes.reduce((acc, attr) => acc + Number(attr?.quantity || 0), 0)
+			: Number(product?.quantity || 0);
+		const rawDescription = (product?.description || "")
+			.replace(/<[^>]+>/g, " ")
+			.replace(/\s+/g, " ")
+			.trim();
+		const description = escapeJsonString(rawDescription.slice(0, 320));
+		const image =
+			resolveImageUrl(firstAttribute?.productImages?.[0]) ||
+			resolveImageUrl(product?.thumbnailImage?.[0]?.images?.[0]);
 		const productSchema = {
-			"@context": "http://schema.org",
+			"@context": "https://schema.org",
 			"@type": "Product",
 			name: capitalizeWords(escapeJsonString(product?.productName || "")),
-			image: resolveImageUrl(product?.thumbnailImage?.[0]?.images?.[0]),
-			description: escapeJsonString(
-				(product?.description || "").replace(/<[^>]+>/g, "")
-			),
+			image,
+			description,
 			brand: {
 				"@type": "Brand",
 				name: "Serene Jannat",
 			},
-			mpn,
 			offers: {
 				"@type": "Offer",
 				priceCurrency: "USD",
 				price: Number(price).toFixed(2),
-				priceValidUntil,
 				availability:
 					quantity > 0
-						? "http://schema.org/InStock"
-						: "http://schema.org/OutOfStock",
-				itemCondition: "http://schema.org/NewCondition",
-				hasMerchantReturnPolicy: {
-					"@type": "MerchantReturnPolicy",
-					returnPolicyCategory:
-						"https://schema.org/MerchantReturnFiniteReturnWindow",
-					merchantReturnDays: 7,
-					merchantReturnLink:
-						"https://serenejannat.com/privacy-policy-terms-conditions",
-					applicableCountry: {
-						"@type": "Country",
-						name: "US",
-					},
-					returnMethod: "https://schema.org/ReturnByMail",
-					returnFees: "https://schema.org/FreeReturn",
-				},
-				shippingDetails: {
-					"@type": "OfferShippingDetails",
-					shippingRate: {
-						"@type": "MonetaryAmount",
-						value: "5.00",
-						currency: "USD",
-					},
-					deliveryTime: {
-						"@type": "ShippingDeliveryTime",
-						handlingTime: {
-							"@type": "QuantitativeValue",
-							minValue: 0,
-							maxValue: 1,
-							unitCode: "d",
-						},
-						transitTime: {
-							"@type": "QuantitativeValue",
-							minValue: 3,
-							maxValue: 7,
-							unitCode: "d",
-						},
-					},
-					shippingDestination: {
-						"@type": "DefinedRegion",
-						addressCountry: {
-							"@type": "Country",
-							name: "US",
-						},
-						geoMidpoint: {
-							"@type": "GeoCoordinates",
-							latitude: 37.7749,
-							longitude: -122.4194,
-						},
-					},
-				},
+						? "https://schema.org/InStock"
+						: "https://schema.org/OutOfStock",
+				itemCondition: "https://schema.org/NewCondition",
+				url: `https://serenejannat.com/single-product/${product?.slug || ""}/${
+					product?.category?.categorySlug || ""
+				}/${product?._id}`,
 			},
-			aggregateRating: {
-				"@type": "AggregateRating",
-				ratingValue,
-				reviewCount,
-			},
-			review: reviews,
 			productID: product?._id,
 			url: `https://serenejannat.com/single-product/${product?.slug || ""}/${
 				product?.category?.categorySlug || ""
 			}/${product?._id}`,
+			identifier_exists: false,
 		};
 
-		// We set identifier_exists to false by default
-		productSchema.identifier_exists = false;
+		const ratings = Array.isArray(product?.ratings) ? product.ratings : [];
+		if (ratings.length > 0) {
+			const ratingValue =
+				ratings.reduce((acc, rating) => acc + Number(rating?.star || 0), 0) /
+				ratings.length;
+			productSchema.aggregateRating = {
+				"@type": "AggregateRating",
+				ratingValue: Number(ratingValue.toFixed(1)),
+				reviewCount: ratings.length,
+			};
+		}
 
 		return productSchema;
 	});
@@ -334,6 +241,7 @@ const Home = () => {
 	const [customDesignProducts, setCustomDesignProducts] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [belowFoldReady, setBelowFoldReady] = useState(false);
+	const belowFoldAnchorRef = useRef(null);
 
 	const { websiteSetup } = useCartContext();
 	const heroBanner = websiteSetup?.homeMainBanners?.[0];
@@ -359,25 +267,31 @@ const Home = () => {
 			if (loaded) return;
 			loaded = true;
 			loadAdSense();
-			window.removeEventListener("scroll", loadOnce);
-			window.removeEventListener("touchstart", loadOnce);
-			window.removeEventListener("mousemove", loadOnce);
+			window.removeEventListener("pointerdown", loadOnce);
 			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
 		};
 
-		window.addEventListener("scroll", loadOnce, { passive: true });
-		window.addEventListener("touchstart", loadOnce, { passive: true });
-		window.addEventListener("mousemove", loadOnce, { passive: true });
-		window.addEventListener("keydown", loadOnce, { passive: true });
+		window.addEventListener("pointerdown", loadOnce, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("keydown", loadOnce, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("touchstart", loadOnce, {
+			passive: true,
+			once: true,
+		});
 
-		const fallbackTimeoutId = window.setTimeout(loadOnce, 15000);
+		const fallbackTimeoutId = window.setTimeout(loadOnce, 60000);
 
 		return () => {
 			window.clearTimeout(fallbackTimeoutId);
-			window.removeEventListener("scroll", loadOnce);
-			window.removeEventListener("touchstart", loadOnce);
-			window.removeEventListener("mousemove", loadOnce);
+			window.removeEventListener("pointerdown", loadOnce);
 			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
 		};
 	}, []);
 
@@ -387,8 +301,18 @@ const Home = () => {
 				// Turn on loading
 				setLoading(true);
 
-				// (B) Categories & Subcategories
-				const categoriesData = await gettingCategoriesAndSubcategories();
+				const [
+					categoriesData,
+					featuredData,
+					newArrivalData,
+					customDesignData,
+				] = await Promise.all([
+					gettingCategoriesAndSubcategories(),
+					gettingSpecificProducts(1, 0, 0, 0, 0, 6, 0, "", { lite: true }),
+					gettingSpecificProducts(0, 1, 0, 0, 0, 6, 0, "", { lite: true }),
+					gettingSpecificProducts(0, 0, 1, 0, 0, 6, 0, "", { lite: true }),
+				]);
+
 				if (categoriesData?.error) {
 					console.log(categoriesData.error);
 				} else {
@@ -396,36 +320,21 @@ const Home = () => {
 					setSubcategories(categoriesData.subcategories || []);
 				}
 
-				// // (C) Featured Products => { featured:1, newArrivals:0, customDesigns:0, sortByRate:0, offers:0, records:5, skip=0 }
-				const featuredData = await gettingSpecificProducts(1, 0, 0, 0, 0, 6);
 				if (featuredData?.error) {
 					console.log(featuredData.error);
 				} else {
-					// Sort by date descending
 					const sortedFeatured = featuredData.sort(
 						(a, b) => new Date(b.createdAt) - new Date(a.createdAt)
 					);
-
 					setFeaturedProducts(sortedFeatured);
 				}
 
-				// // (D) New Arrival Products => { featured=0, newArrivals=1, ... }
-				const newArrivalData = await gettingSpecificProducts(0, 1, 0, 0, 0, 6);
 				if (newArrivalData?.error) {
 					console.log(newArrivalData.error);
 				} else {
 					setNewArrivalProducts(newArrivalData);
 				}
 
-				// (E) Custom Design Products => { featured=0, newArrivals=0, customDesigns=1, ... }
-				const customDesignData = await gettingSpecificProducts(
-					0,
-					0,
-					1,
-					0,
-					0,
-					6
-				);
 				if (customDesignData?.error) {
 					console.log(customDesignData.error);
 				} else {
@@ -444,50 +353,47 @@ const Home = () => {
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
+		if (belowFoldReady) return undefined;
 
 		const enableBelowFold = () => setBelowFoldReady(true);
-		const onFirstInteraction = () => {
-			enableBelowFold();
-			window.removeEventListener("scroll", onFirstInteraction);
-			window.removeEventListener("touchstart", onFirstInteraction);
-			window.removeEventListener("mousemove", onFirstInteraction);
-		};
 
-		if ("requestIdleCallback" in window) {
-			const idleId = window.requestIdleCallback(enableBelowFold, {
-				timeout: 4000,
-			});
-			window.addEventListener("scroll", onFirstInteraction, { passive: true });
-			window.addEventListener("touchstart", onFirstInteraction, {
-				passive: true,
-			});
-			window.addEventListener("mousemove", onFirstInteraction, { passive: true });
-			return () => {
-				window.cancelIdleCallback?.(idleId);
-				window.removeEventListener("scroll", onFirstInteraction);
-				window.removeEventListener("touchstart", onFirstInteraction);
-				window.removeEventListener("mousemove", onFirstInteraction);
-			};
+		let observer;
+		if (belowFoldAnchorRef.current && "IntersectionObserver" in window) {
+			observer = new IntersectionObserver(
+				(entries) => {
+					if (entries.some((entry) => entry.isIntersecting)) {
+						enableBelowFold();
+					}
+				},
+				{ rootMargin: "500px 0px", threshold: 0.01 }
+			);
+			observer.observe(belowFoldAnchorRef.current);
 		}
 
-		const timeoutId = window.setTimeout(enableBelowFold, 1200);
-		window.addEventListener("scroll", onFirstInteraction, { passive: true });
+		const onFirstInteraction = () => {
+			enableBelowFold();
+			window.removeEventListener("touchstart", onFirstInteraction);
+			window.removeEventListener("keydown", onFirstInteraction);
+		};
+
 		window.addEventListener("touchstart", onFirstInteraction, {
 			passive: true,
+			once: true,
 		});
-		window.addEventListener("mousemove", onFirstInteraction, { passive: true });
-		return () => {
-			window.clearTimeout(timeoutId);
-			window.removeEventListener("scroll", onFirstInteraction);
-			window.removeEventListener("touchstart", onFirstInteraction);
-			window.removeEventListener("mousemove", onFirstInteraction);
-		};
-	}, []);
+		window.addEventListener("keydown", onFirstInteraction, {
+			passive: true,
+			once: true,
+		});
 
-	// Scroll to top on mount
-	useEffect(() => {
-		window.scrollTo({ top: 0, behavior: "smooth" });
-	}, []);
+		const timeoutId = window.setTimeout(enableBelowFold, 9000);
+
+		return () => {
+			if (observer) observer.disconnect();
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("touchstart", onFirstInteraction);
+			window.removeEventListener("keydown", onFirstInteraction);
+		};
+	}, [belowFoldReady]);
 
 	return (
 		<HomeWrapper>
@@ -516,6 +422,7 @@ const Home = () => {
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
+			<BelowFoldAnchor ref={belowFoldAnchorRef} aria-hidden='true' />
 
 			{belowFoldReady ? (
 				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
@@ -555,6 +462,11 @@ export default Home;
 
 /* Styled for the Home page */
 const HomeWrapper = styled.div`
+	width: 100%;
+`;
+
+const BelowFoldAnchor = styled.div`
+	height: 1px;
 	width: 100%;
 `;
 

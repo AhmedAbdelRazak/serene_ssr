@@ -32,7 +32,17 @@ const ZCustomDesigns = ({ customDesignProducts }) => {
 		try {
 			// customDesigns=1 => (featured=0, newArrivals=0, customDesigns=1)
 			// records=1 => skip=skip
-			const data = await gettingSpecificProducts(0, 0, 1, 0, 0, 1, skip);
+			const data = await gettingSpecificProducts(
+				0,
+				0,
+				1,
+				0,
+				0,
+				1,
+				skip,
+				"",
+				{ lite: true },
+			);
 			if (data && !data.error) {
 				if (data.length > 0) {
 					setDesignList((prev) => [...prev, ...data]);

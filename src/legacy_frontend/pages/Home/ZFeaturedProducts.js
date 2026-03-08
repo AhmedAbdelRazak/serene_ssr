@@ -42,7 +42,17 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 		try {
 			// featured=1 => newArrivals=0 => customDesigns=0 => sortByRate=0 => offers=0 => records=1
 			// skip = how many we've already loaded
-			const data = await gettingSpecificProducts(1, 0, 0, 0, 0, 1, skip);
+			const data = await gettingSpecificProducts(
+				1,
+				0,
+				0,
+				0,
+				0,
+				1,
+				skip,
+				"",
+				{ lite: true },
+			);
 			if (data && !data.error) {
 				if (data.length > 0) {
 					// Append the new product(s)

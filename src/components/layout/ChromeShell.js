@@ -37,13 +37,15 @@ export default function ChromeShell({ children }) {
 		return false;
 	}, [pathname]);
 
+	if (hideLayout) {
+		return children;
+	}
+
 	return (
 		<>
-			{!hideLayout ? <SiteHeader /> : null}
-			<main className={`page-main ${hideLayout ? "page-main--legacy" : ""}`}>
-				{children}
-			</main>
-			{!hideLayout ? <SiteFooter /> : null}
+			<SiteHeader />
+			<main className='page-main'>{children}</main>
+			<SiteFooter />
 		</>
 	);
 }

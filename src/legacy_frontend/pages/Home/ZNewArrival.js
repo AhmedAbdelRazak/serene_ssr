@@ -41,7 +41,17 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 		try {
 			// newArrivals=1 => (featured=0, newArrivals=1, customDesigns=0, etc.)
 			// skip = how many we have so far, records=1 means fetch just one
-			const data = await gettingSpecificProducts(0, 1, 0, 0, 0, 1, skip);
+			const data = await gettingSpecificProducts(
+				0,
+				1,
+				0,
+				0,
+				0,
+				1,
+				skip,
+				"",
+				{ lite: true },
+			);
 			if (data && !data.error) {
 				// If we got something back, append it
 				if (data.length > 0) {
