@@ -6,21 +6,50 @@ function toApiPath(path = "") {
 	return safePath.startsWith("/") ? safePath : `/${safePath}`;
 }
 
-async function fetchJson(path, { revalidate = 300, cacheMode = "force-cache" } = {}) {
+async function fetchJson(
+	path,
+	{ revalidate = 300, cacheMode = "force-cache", timeoutMs = 15000 } = {}
+) {
 	const url = `${API_BASE_URL}${toApiPath(path)}`;
-	const response = await fetch(url, {
-		method: "GET",
-		headers: {
-			Accept: "application/json",
-		},
-		next: { revalidate },
-		cache: cacheMode,
-	});
+	const controller = new AbortController();
+	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
+	let response;
+	try {
+		response = await fetch(url, {
+			method: "GET",
+			headers: {
+				Accept: "application/json",
+			},
+			next: { revalidate },
+			cache: cacheMode,
+			signal: controller.signal,
+		});
+	} finally {
+		clearTimeout(timeoutId);
+	}
 
 	if (!response.ok) {
-		throw new Error(`API request failed (${response.status}) for ${url}`);
+		const body = await response.text().catch(() => "");
+		throw new Error(
+			`API request failed (${response.status}) for ${url}${
+				body ? ` | ${body.slice(0, 180)}` : ""
+			}`
+		);
 	}
-	return response.json();
+
+	const fallbackResponse =
+		typeof response.clone === "function" ? response.clone() : null;
+	try {
+		return await response.json();
+	} catch (error) {
+		const body = await fallbackResponse?.text?.().catch(() => "");
+		throw new Error(
+			`Invalid JSON payload for ${url}${
+				body ? ` | ${body.slice(0, 180)}` : ""
+			}${error?.message ? ` | ${error.message}` : ""}`
+		);
+	}
 }
 
 export const getSpecificProducts = cache(
@@ -104,20 +133,35 @@ export const getAllProductsForSeo = cache(
 
 		if (totalPages <= 1) return firstProducts;
 
-		const pageRequests = [];
-		for (let page = 2; page <= totalPages; page += 1) {
-			pageRequests.push(
-				fetchJson(`/seo/products/${page}/${safeRecords}`, {
-					revalidate,
-					cacheMode: "no-store",
-				})
-			);
+		const extraProducts = [];
+		const batchSize = 6;
+		for (let page = 2; page <= totalPages; page += batchSize) {
+			const currentBatch = [];
+			for (
+				let currentPage = page;
+				currentPage < page + batchSize && currentPage <= totalPages;
+				currentPage += 1
+			) {
+				currentBatch.push(
+					fetchJson(`/seo/products/${currentPage}/${safeRecords}`, {
+						revalidate,
+						cacheMode: "no-store",
+					})
+				);
+			}
+
+			const settled = await Promise.allSettled(currentBatch);
+			for (const entry of settled) {
+				if (entry.status !== "fulfilled") continue;
+				const pageProducts = Array.isArray(entry.value?.products)
+					? entry.value.products
+					: [];
+				if (pageProducts.length) {
+					extraProducts.push(...pageProducts);
+				}
+			}
 		}
 
-		const extraPages = await Promise.all(pageRequests);
-		const extraProducts = extraPages.flatMap((pageData) =>
-			Array.isArray(pageData?.products) ? pageData.products : []
-		);
 		return [...firstProducts, ...extraProducts];
 	}
 );

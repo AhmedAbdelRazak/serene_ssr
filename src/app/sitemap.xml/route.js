@@ -90,6 +90,9 @@ export async function GET() {
 
 	STATIC_PATHS.forEach((path) => addUrl(absoluteUrl(path), "0.8", "daily"));
 	addUrl(absoluteUrl("/our-products?offers=1"), "0.74", "daily");
+	addUrl(absoluteUrl("/google-merchant.xml"), "0.6", "daily");
+	addUrl(absoluteUrl("/merchant-center-feed.xml"), "0.6", "daily");
+	addUrl(absoluteUrl("/facebook-feed.xml"), "0.6", "daily");
 
 	for (const occasion of POD_OCCASIONS) {
 		addUrl(
@@ -100,7 +103,7 @@ export async function GET() {
 	}
 
 	try {
-		const [allProducts, categoryData, filterData] = await Promise.all([
+		const settledData = await Promise.allSettled([
 			getAllProductsForSeo({ maxPages: 200, records: 200, revalidate: 1800 }),
 			getCategoriesAndSubcategories({ revalidate: 1800 }),
 			getFilteredProducts({
@@ -111,6 +114,15 @@ export async function GET() {
 				cacheMode: "force-cache",
 			}),
 		]);
+		const allProducts =
+			settledData[0]?.status === "fulfilled" &&
+			Array.isArray(settledData[0].value)
+				? settledData[0].value
+				: [];
+		const categoryData =
+			settledData[1]?.status === "fulfilled" ? settledData[1].value : {};
+		const filterData =
+			settledData[2]?.status === "fulfilled" ? settledData[2].value : {};
 
 		const categories = Array.isArray(categoryData?.categories)
 			? categoryData.categories
