@@ -1,17 +1,10 @@
-﻿import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
 import { useCartContext } from "../../cart_context";
-// Ant Design Spinner
-import { Spin } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
-
 // Components
 import ZCategories from "./ZCategories";
-import ZFeaturedProducts from "./ZFeaturedProducts";
-import ZNewArrival from "./ZNewArrival";
-import ZCustomDesigns from "./ZCustomDesigns";
 import Hero from "./Hero";
 import {
 	gettingCategoriesAndSubcategories,
@@ -23,6 +16,9 @@ import {
 	resolveImageUrl,
 } from "../../utils/image";
 
+const ZFeaturedProducts = lazy(() => import("./ZFeaturedProducts"));
+const ZCustomDesigns = lazy(() => import("./ZCustomDesigns"));
+const ZNewArrival = lazy(() => import("./ZNewArrival"));
 /* Keyframes for the fade-up animation */
 const fadeUp = keyframes`
   0% {
@@ -316,11 +312,6 @@ const HomePageHelmet = ({
 	);
 };
 
-/* Ant Design loading icon with custom size */
-const loadingIcon = (
-	<LoadingOutlined style={{ fontSize: 60, color: "#555" }} spin />
-);
-
 const VisuallyHiddenH1 = styled.h1`
 	position: absolute;
 	top: 0;
@@ -341,7 +332,8 @@ const Home = () => {
 	const [featuredProducts, setFeaturedProducts] = useState([]);
 	const [newArrivalProducts, setNewArrivalProducts] = useState([]);
 	const [customDesignProducts, setCustomDesignProducts] = useState([]);
-	const [loading, setLoading] = useState([]);
+	const [loading, setLoading] = useState(false);
+	const [belowFoldReady, setBelowFoldReady] = useState(false);
 
 	const { websiteSetup } = useCartContext();
 	const heroBanner = websiteSetup?.homeMainBanners?.[0];
@@ -362,13 +354,31 @@ const Home = () => {
 
 		if (typeof window === "undefined") return undefined;
 
-		if ("requestIdleCallback" in window) {
-			const idleId = window.requestIdleCallback(loadAdSense, { timeout: 3000 });
-			return () => window.cancelIdleCallback?.(idleId);
-		}
+		let loaded = false;
+		const loadOnce = () => {
+			if (loaded) return;
+			loaded = true;
+			loadAdSense();
+			window.removeEventListener("scroll", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("mousemove", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+		};
 
-		const timeoutId = window.setTimeout(loadAdSense, 3000);
-		return () => window.clearTimeout(timeoutId);
+		window.addEventListener("scroll", loadOnce, { passive: true });
+		window.addEventListener("touchstart", loadOnce, { passive: true });
+		window.addEventListener("mousemove", loadOnce, { passive: true });
+		window.addEventListener("keydown", loadOnce, { passive: true });
+
+		const fallbackTimeoutId = window.setTimeout(loadOnce, 15000);
+
+		return () => {
+			window.clearTimeout(fallbackTimeoutId);
+			window.removeEventListener("scroll", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("mousemove", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -432,20 +442,52 @@ const Home = () => {
 		fetchData();
 	}, []);
 
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+
+		const enableBelowFold = () => setBelowFoldReady(true);
+		const onFirstInteraction = () => {
+			enableBelowFold();
+			window.removeEventListener("scroll", onFirstInteraction);
+			window.removeEventListener("touchstart", onFirstInteraction);
+			window.removeEventListener("mousemove", onFirstInteraction);
+		};
+
+		if ("requestIdleCallback" in window) {
+			const idleId = window.requestIdleCallback(enableBelowFold, {
+				timeout: 4000,
+			});
+			window.addEventListener("scroll", onFirstInteraction, { passive: true });
+			window.addEventListener("touchstart", onFirstInteraction, {
+				passive: true,
+			});
+			window.addEventListener("mousemove", onFirstInteraction, { passive: true });
+			return () => {
+				window.cancelIdleCallback?.(idleId);
+				window.removeEventListener("scroll", onFirstInteraction);
+				window.removeEventListener("touchstart", onFirstInteraction);
+				window.removeEventListener("mousemove", onFirstInteraction);
+			};
+		}
+
+		const timeoutId = window.setTimeout(enableBelowFold, 1200);
+		window.addEventListener("scroll", onFirstInteraction, { passive: true });
+		window.addEventListener("touchstart", onFirstInteraction, {
+			passive: true,
+		});
+		window.addEventListener("mousemove", onFirstInteraction, { passive: true });
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("scroll", onFirstInteraction);
+			window.removeEventListener("touchstart", onFirstInteraction);
+			window.removeEventListener("mousemove", onFirstInteraction);
+		};
+	}, []);
+
 	// Scroll to top on mount
 	useEffect(() => {
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	}, []);
-
-	if (loading) {
-		return (
-			<HomeWrapper>
-				<div className='loading-section'>
-					<Spin indicator={loadingIcon} />
-				</div>
-			</HomeWrapper>
-		);
-	}
 
 	return (
 		<HomeWrapper>
@@ -464,35 +506,47 @@ const Home = () => {
 			<Hero websiteSetup={websiteSetup} />
 
 			{/* Categories */}
-			{categories.length > 0 && (
+			{categories.length > 0 ? (
 				<FadeUpDiv>
 					<ZCategories
 						allCategories={categories}
 						allSubcategories={subcategories}
 					/>
 				</FadeUpDiv>
-			)}
+			) : loading ? (
+				<SectionSkeleton aria-hidden='true' />
+			) : null}
 
-			{/* Featured Products */}
-			{featuredProducts.length > 0 && (
-				<FadeUpDiv>
-					<ZFeaturedProducts featuredProducts={featuredProducts} />
-				</FadeUpDiv>
-			)}
+			{belowFoldReady ? (
+				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+					{/* Featured Products */}
+					{featuredProducts.length > 0 ? (
+						<FadeUpDiv>
+							<ZFeaturedProducts featuredProducts={featuredProducts} />
+						</FadeUpDiv>
+					) : loading ? (
+						<SectionSkeleton aria-hidden='true' />
+					) : null}
 
-			{/* Custom Designs */}
-			{customDesignProducts.length > 0 && (
-				<FadeUpDiv>
-					<ZCustomDesigns customDesignProducts={customDesignProducts} />
-				</FadeUpDiv>
-			)}
+					{/* Custom Designs */}
+					{customDesignProducts.length > 0 ? (
+						<FadeUpDiv>
+							<ZCustomDesigns customDesignProducts={customDesignProducts} />
+						</FadeUpDiv>
+					) : loading ? (
+						<SectionSkeleton aria-hidden='true' />
+					) : null}
 
-			{/* New Arrivals */}
-			{newArrivalProducts.length > 0 && (
-				<FadeUpDiv>
-					<ZNewArrival newArrivalProducts={newArrivalProducts} />
-				</FadeUpDiv>
-			)}
+					{/* New Arrivals */}
+					{newArrivalProducts.length > 0 ? (
+						<FadeUpDiv>
+							<ZNewArrival newArrivalProducts={newArrivalProducts} />
+						</FadeUpDiv>
+					) : loading ? (
+						<SectionSkeleton aria-hidden='true' />
+					) : null}
+				</Suspense>
+			) : null}
 		</HomeWrapper>
 	);
 };
@@ -502,11 +556,27 @@ export default Home;
 /* Styled for the Home page */
 const HomeWrapper = styled.div`
 	width: 100%;
-	.loading-section {
-		min-height: 60vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+`;
+
+const SectionSkeleton = styled.div`
+	width: min(96%, 1400px);
+	height: 340px;
+	margin: 20px auto;
+	border-radius: 12px;
+	background: linear-gradient(90deg, #f1f1f1 25%, #e7e7e7 37%, #f1f1f1 63%);
+	background-size: 400% 100%;
+	animation: shimmer 1.4s ease infinite;
+
+	@keyframes shimmer {
+		0% {
+			background-position: 100% 0;
+		}
+		100% {
+			background-position: -100% 0;
+		}
 	}
 `;
+
+
+
 

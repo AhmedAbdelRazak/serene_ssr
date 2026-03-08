@@ -1,5 +1,4 @@
 import { getAllProductsForSeo } from "@/lib/api";
-import { absoluteUrl } from "@/lib/config";
 import {
 	buildProductPath,
 	getPrimaryProductImage,
@@ -9,7 +8,7 @@ import {
 	resolveImageUrl,
 } from "@/lib/product-helpers";
 import { formatPrice } from "@/lib/utils";
-import { escapeXml, xmlResponse } from "@/lib/xml";
+import { absoluteXmlUrl, escapeXml, xmlResponse } from "@/lib/xml";
 
 export const revalidate = 1800;
 export const dynamic = "force-dynamic";
@@ -50,6 +49,15 @@ function inferCurrency(product = {}) {
 function toSafeQueryValue(value = "") {
 	if (typeof value === "symbol") return "";
 	return `${value ?? ""}`.trim();
+}
+
+function toFeedIdToken(value = "") {
+	const raw = toSafeQueryValue(value);
+	if (!raw) return "";
+	return raw
+		.replace(/[^a-zA-Z0-9._-]+/g, "-")
+		.replace(/-+/g, "-")
+		.replace(/^-|-$/g, "");
 }
 
 function extractImageUrls(source) {
@@ -111,6 +119,8 @@ function buildVariantLink(baseLink = "", product = {}, attr = {}) {
 	if (isPod && !params.has("occasion")) {
 		const fallbackOccasion =
 			toSafeQueryValue(
+				attr?.defaultDesigns?.[0]?.occassion ||
+					attr?.defaultDesigns?.[0]?.occasion ||
 				product?.defaultDesigns?.[0]?.occassion ||
 					product?.defaultDesigns?.[0]?.occasion
 			) || "Birthday";
@@ -121,7 +131,9 @@ function buildVariantLink(baseLink = "", product = {}, attr = {}) {
 	return query ? `${baseLink}?${query}` : baseLink;
 }
 
-export async function GET() {
+export async function GET(request) {
+	const toAbsoluteUrl = (path = "/") => absoluteXmlUrl(path, request);
+
 	let products = [];
 	try {
 		products = await getAllProductsForSeo({ maxPages: 200, records: 200, revalidate: 1800 });
@@ -134,12 +146,12 @@ export async function GET() {
 		.flatMap((product) => {
 			const name = getProductDisplayName(product);
 			const description = getProductDescription(product);
-			const link = absoluteUrl(buildProductPath(product));
+			const link = toAbsoluteUrl(buildProductPath(product));
 			const currency = inferCurrency(product);
 			const brand = product?.brandName || "Serene Jannat";
 			const categoryName = product?.category?.categoryName || "Gifts";
 			const googleCategory = inferGoogleProductCategory(product);
-			const fallbackImage = getPrimaryProductImage(product) || absoluteUrl("/logo512.png");
+			const fallbackImage = getPrimaryProductImage(product) || toAbsoluteUrl("/logo512.png");
 
 			const attributes = Array.isArray(product?.productAttributes)
 				? product.productAttributes
@@ -215,7 +227,11 @@ export async function GET() {
 						Number(attr?.quantity || product?.quantity || 0) > 0
 							? "in stock"
 							: "out of stock";
-				const variantId = `${product._id}-${attr?.SubSKU || attr?.PK || index + 1}`;
+				const variantToken =
+					toFeedIdToken(attr?.SubSKU) ||
+					toFeedIdToken(attr?.PK) ||
+					`${index + 1}`;
+				const variantId = `${product._id}-${variantToken}`;
 				const variantTitleSuffix = [attr?.size, attr?.color, attr?.scent]
 					.filter(Boolean)
 					.join(" / ");
@@ -260,7 +276,7 @@ export async function GET() {
 <rss version="2.0" xmlns:g="http://base.google.com/ns/1.0">
 <channel>
 	<title>Serene Jannat Product Feed</title>
-	<link>${escapeXml(absoluteUrl("/"))}</link>
+	<link>${escapeXml(toAbsoluteUrl("/"))}</link>
 	<description>Dynamic Google Merchant feed for Serene Jannat</description>
 	${itemsXml}
 </channel>

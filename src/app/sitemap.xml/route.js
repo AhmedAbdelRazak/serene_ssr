@@ -3,13 +3,13 @@ import {
 	getCategoriesAndSubcategories,
 	getFilteredProducts,
 } from "@/lib/api";
-import { absoluteUrl, POD_OCCASIONS } from "@/lib/config";
+import { POD_OCCASIONS } from "@/lib/config";
 import {
 	buildPodQueryCombinations,
 	buildProductPath,
 	isPodProduct,
 } from "@/lib/product-helpers";
-import { escapeXml, xmlResponse } from "@/lib/xml";
+import { absoluteXmlUrl, escapeXml, xmlResponse } from "@/lib/xml";
 
 export const revalidate = 1800;
 export const dynamic = "force-dynamic";
@@ -75,7 +75,9 @@ function buildPriceBuckets(minPrice = 0, maxPrice = 0, bucketCount = 4) {
 	return buckets;
 }
 
-export async function GET() {
+export async function GET(request) {
+	const toAbsoluteUrl = (path = "/") => absoluteXmlUrl(path, request);
+
 	const urlMap = new Map();
 	const addUrl = (value, priority = "0.7", changefreq = "weekly", lastmod = "") => {
 		if (urlMap.size >= MAX_SITEMAP_URLS) return;
@@ -88,15 +90,15 @@ export async function GET() {
 		});
 	};
 
-	STATIC_PATHS.forEach((path) => addUrl(absoluteUrl(path), "0.8", "daily"));
-	addUrl(absoluteUrl("/our-products?offers=1"), "0.74", "daily");
-	addUrl(absoluteUrl("/google-merchant.xml"), "0.6", "daily");
-	addUrl(absoluteUrl("/merchant-center-feed.xml"), "0.6", "daily");
-	addUrl(absoluteUrl("/facebook-feed.xml"), "0.6", "daily");
+	STATIC_PATHS.forEach((path) => addUrl(toAbsoluteUrl(path), "0.8", "daily"));
+	addUrl(toAbsoluteUrl("/our-products?offers=1"), "0.74", "daily");
+	addUrl(toAbsoluteUrl("/google-merchant.xml"), "0.6", "daily");
+	addUrl(toAbsoluteUrl("/merchant-center-feed.xml"), "0.6", "daily");
+	addUrl(toAbsoluteUrl("/facebook-feed.xml"), "0.6", "daily");
 
 	for (const occasion of POD_OCCASIONS) {
 		addUrl(
-			absoluteUrl(`/custom-gifts?occasion=${encodeURIComponent(occasion)}`),
+			toAbsoluteUrl(`/custom-gifts?occasion=${encodeURIComponent(occasion)}`),
 			"0.75",
 			"daily"
 		);
@@ -130,7 +132,7 @@ export async function GET() {
 		for (const category of categories) {
 			if (!category?._id) continue;
 			addUrl(
-				absoluteUrl(`/our-products?category=${encodeURIComponent(category._id)}`),
+				toAbsoluteUrl(`/our-products?category=${encodeURIComponent(category._id)}`),
 				"0.74",
 				"daily"
 			);
@@ -157,7 +159,7 @@ export async function GET() {
 
 		for (const color of filterColors.slice(0, 30)) {
 			addUrl(
-				absoluteUrl(`/our-products?color=${encodeURIComponent(color)}`),
+				toAbsoluteUrl(`/our-products?color=${encodeURIComponent(color)}`),
 				"0.72",
 				"daily"
 			);
@@ -165,7 +167,7 @@ export async function GET() {
 
 		for (const size of filterSizes.slice(0, 30)) {
 			addUrl(
-				absoluteUrl(`/our-products?size=${encodeURIComponent(size)}`),
+				toAbsoluteUrl(`/our-products?size=${encodeURIComponent(size)}`),
 				"0.72",
 				"daily"
 			);
@@ -174,7 +176,7 @@ export async function GET() {
 		for (const gender of filterGenders.slice(0, 16)) {
 			if (!gender?.id) continue;
 			addUrl(
-				absoluteUrl(`/our-products?gender=${encodeURIComponent(gender.id)}`),
+				toAbsoluteUrl(`/our-products?gender=${encodeURIComponent(gender.id)}`),
 				"0.71",
 				"daily"
 			);
@@ -183,7 +185,7 @@ export async function GET() {
 		for (const store of filterStores.slice(0, 24)) {
 			if (!store?.id) continue;
 			addUrl(
-				absoluteUrl(`/our-products?store=${encodeURIComponent(store.id)}`),
+				toAbsoluteUrl(`/our-products?store=${encodeURIComponent(store.id)}`),
 				"0.7",
 				"weekly"
 			);
@@ -191,7 +193,7 @@ export async function GET() {
 
 		for (const bucket of priceBuckets) {
 			addUrl(
-				absoluteUrl(
+				toAbsoluteUrl(
 					`/our-products?priceMin=${encodeURIComponent(
 						bucket.min
 					)}&priceMax=${encodeURIComponent(bucket.max)}`
@@ -206,7 +208,7 @@ export async function GET() {
 			if (!categoryId) continue;
 			for (const color of filterColors.slice(0, 8)) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/our-products?category=${encodeURIComponent(
 							categoryId
 						)}&color=${encodeURIComponent(color)}`
@@ -217,7 +219,7 @@ export async function GET() {
 			}
 			for (const size of filterSizes.slice(0, 8)) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/our-products?category=${encodeURIComponent(
 							categoryId
 						)}&size=${encodeURIComponent(size)}`
@@ -228,7 +230,7 @@ export async function GET() {
 			}
 			for (const bucket of priceBuckets) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/our-products?category=${encodeURIComponent(
 							categoryId
 						)}&priceMin=${encodeURIComponent(
@@ -247,7 +249,7 @@ export async function GET() {
 				const categoryId = category?.id || category?._id;
 				if (!categoryId) continue;
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/our-products?category=${encodeURIComponent(
 							categoryId
 						)}&gender=${encodeURIComponent(gender.id)}`
@@ -261,14 +263,14 @@ export async function GET() {
 		for (const occasion of POD_OCCASIONS) {
 			const encodedOccasion = encodeURIComponent(occasion);
 			addUrl(
-				absoluteUrl(`/custom-gifts?occasion=${encodedOccasion}&name=Your+Name`),
+				toAbsoluteUrl(`/custom-gifts?occasion=${encodedOccasion}&name=Your+Name`),
 				"0.74",
 				"daily"
 			);
 
 			for (const color of podColors.slice(0, 20)) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/custom-gifts?occasion=${encodedOccasion}&color=${encodeURIComponent(
 							color
 						)}`
@@ -280,7 +282,7 @@ export async function GET() {
 
 			for (const size of podSizes.slice(0, 20)) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/custom-gifts?occasion=${encodedOccasion}&size=${encodeURIComponent(
 							size
 						)}`
@@ -292,7 +294,7 @@ export async function GET() {
 
 			for (const scent of podScents.slice(0, 12)) {
 				addUrl(
-					absoluteUrl(
+					toAbsoluteUrl(
 						`/custom-gifts?occasion=${encodedOccasion}&scent=${encodeURIComponent(
 							scent
 						)}`
@@ -305,7 +307,7 @@ export async function GET() {
 			for (const size of podSizes.slice(0, 10)) {
 				for (const color of podColors.slice(0, 10)) {
 					addUrl(
-						absoluteUrl(
+						toAbsoluteUrl(
 							`/custom-gifts?occasion=${encodedOccasion}&size=${encodeURIComponent(
 								size
 							)}&color=${encodeURIComponent(color)}`
@@ -321,7 +323,7 @@ export async function GET() {
 			if (!product?._id) continue;
 			const productPath = buildProductPath(product);
 			const productLastmod = product?.updatedAt || product?.createdAt;
-			addUrl(absoluteUrl(productPath), "0.9", "daily", productLastmod);
+			addUrl(toAbsoluteUrl(productPath), "0.9", "daily", productLastmod);
 
 			const productAttributes = Array.isArray(product?.productAttributes)
 				? product.productAttributes
@@ -341,7 +343,7 @@ export async function GET() {
 
 			if (isPodProduct(product)) {
 				addUrl(
-					absoluteUrl(`/custom-gifts/${product._id}`),
+					toAbsoluteUrl(`/custom-gifts/${product._id}`),
 					"0.84",
 					"daily",
 					productLastmod
@@ -349,7 +351,7 @@ export async function GET() {
 				const podCombos = buildPodQueryCombinations(product);
 				for (const combo of podCombos) {
 					addUrl(
-						absoluteUrl(`${productPath}?${combo}`),
+						toAbsoluteUrl(`${productPath}?${combo}`),
 						"0.82",
 						"daily",
 						productLastmod
@@ -360,7 +362,7 @@ export async function GET() {
 						const scopedParams = new URLSearchParams(variantQuery);
 						scopedParams.set("occasion", occasion);
 						addUrl(
-							absoluteUrl(`${productPath}?${scopedParams.toString()}`),
+							toAbsoluteUrl(`${productPath}?${scopedParams.toString()}`),
 							"0.81",
 							"daily",
 							productLastmod
@@ -370,7 +372,7 @@ export async function GET() {
 			} else {
 				for (const variantQuery of variantQueries) {
 					addUrl(
-						absoluteUrl(`${productPath}?${variantQuery}`),
+						toAbsoluteUrl(`${productPath}?${variantQuery}`),
 						"0.83",
 						"weekly",
 						productLastmod
@@ -398,3 +400,4 @@ ${Array.from(urlMap.values())
 
 	return xmlResponse(xml);
 }
+

@@ -1,4 +1,4 @@
-import React, { useEffect, Suspense, lazy, startTransition } from "react";
+import React, { useEffect, Suspense, lazy } from "react";
 import {
 	BrowserRouter as Router,
 	Switch,
@@ -12,6 +12,7 @@ import ReactPixel from "react-facebook-pixel";
 import NavbarTop from "./NavbarUpdate/NavbarTop";
 import NavbarBottom from "./NavbarUpdate/NavbarBottom";
 import Footer from "./Footer";
+import Home from "./pages/Home/Home";
 // eslint-disable-next-line
 // import AnimationWalkingComponent from "./pages/MyAnimationComponents/AnimationWalkingComponent";
 // eslint-disable-next-line
@@ -57,7 +58,6 @@ const WebsiteMain = lazy(() => import("./Admin/EditingWebsite/WebsiteMain"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const RegisterSeller = lazy(() => import("./pages/RegisterSeller"));
-const Home = lazy(() => import("./pages/Home/Home")); // We'll possibly pre-import below
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 const ReturnRefundPolicy = lazy(() => import("./pages/ReturnRefundPolicy"));
@@ -104,14 +104,6 @@ const PrivateRoute = lazy(() => import("./auth/PrivateRoute"));
  * so we can use useLocation() inside <AppContent />.
  */
 const App = () => {
-	// (Optional) "pre-import" the Home page chunk if you suspect most users start at "/"
-	// This doesn't block initial render, but requests the chunk in parallel
-	// so if the user hits "/", there's less to load on route change.
-	// Check network logs to ensure it doesn't hamper performance if user seldom visits "/".
-	startTransition(() => {
-		Home.preload?.();
-	});
-
 	return (
 		<Router>
 			<AppContent />
@@ -126,15 +118,30 @@ const AppContent = () => {
 	const shouldHideLayout =
 		location.pathname.includes("admin") || location.pathname.includes("seller");
 
-	// Initialize GA ONCE at app start
+	// Initialize trackers once for legacy routes
 	useEffect(() => {
-		ReactGA.initialize(process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID);
+		try {
+			if (process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID) {
+				ReactGA.initialize(process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID);
+			}
+			if (process.env.REACT_APP_FACEBOOK_PIXEL_ID) {
+				ReactPixel.init(process.env.REACT_APP_FACEBOOK_PIXEL_ID);
+			}
+		} catch {
+			// no-op
+		}
 	}, []);
 
-	// Send pageview to GA every time route changes
+	// Track page view on route change
 	useEffect(() => {
-		ReactGA.send({ hitType: "pageview", page: location.pathname });
-	}, [location]);
+		const pagePath = `${location.pathname || "/"}${location.search || ""}`;
+		try {
+			ReactGA.send({ hitType: "pageview", page: pagePath });
+			ReactPixel.pageView();
+		} catch {
+			// no-op
+		}
+	}, [location.pathname, location.search]);
 
 	// Clear certain local storage keys unless we are on /checkout
 	useEffect(() => {
@@ -147,42 +154,20 @@ const AppContent = () => {
 		// no eslint-disable-next-line needed, location is in deps
 	}, [location]);
 
-	// Facebook Pixel Setup
-	const PixelRouteTracker = () => {
-		const location = useLocation();
-
-		useEffect(() => {
-			// Trigger PageView event on route change
-			ReactPixel.pageView(); // Logs the page view
-			ReactPixel.track("PageView", { path: location.pathname }); // Optionally add path as a parameter
-		}, [location]);
-
-		return null;
-	};
-
-	useEffect(() => {
-		// Initialize Facebook Pixel with ID from .env
-		ReactPixel.init(process.env.REACT_APP_FACEBOOK_PIXEL_ID);
-
-		// Trigger the initial page view when the app loads
-		ReactPixel.pageView();
-	}, []);
-
 	return (
 		<>
 			<ToastContainer className='toast-top-center' position='top-center' />
-			<Suspense fallback={<div>Loading...</div>}>
-				<PixelRouteTracker />
-				{/* Only show Navbars if NOT admin/seller */}
-				{!shouldHideLayout && (
-					<>
-						<NavbarTop />
-						<NavbarBottom />
-					</>
-				)}
+			{/* Only show Navbars if NOT admin/seller */}
+			{!shouldHideLayout && (
+				<>
+					<NavbarTop />
+					<NavbarBottom />
+				</>
+			)}
 
+			<Suspense fallback={<div style={{ minHeight: "60vh" }} />}>
 				<Switch>
-					<Route path='/' exact component={() => <Home />} />
+					<Route path='/' exact component={Home} />
 					<Route path='/about' exact component={() => <About />} />
 					<Route
 						path='/single-product/:productSlug/:categorySlug/:productId'

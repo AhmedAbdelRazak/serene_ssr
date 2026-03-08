@@ -1,9 +1,9 @@
 import "./globals.css";
 import "@/legacy_frontend/App.css";
-import "@/legacy_frontend/perf-overrides.css";
 import "react-toastify/dist/ReactToastify.css";
 import "slick-carousel/slick/slick.css";
 import "slick-carousel/slick/slick-theme.css";
+import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
 import JsonLd from "@/components/seo/JsonLd";
@@ -28,9 +28,7 @@ export default function RootLayout({ children }) {
 		<html lang='en'>
 			<head>
 				<link rel='preconnect' href='https://res.cloudinary.com' />
-				<link rel='preconnect' href='https://fonts.googleapis.com' />
 				<link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
-				<link rel='preconnect' href='https://stackpath.bootstrapcdn.com' crossOrigin='anonymous' />
 				<link
 					rel='stylesheet'
 					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'

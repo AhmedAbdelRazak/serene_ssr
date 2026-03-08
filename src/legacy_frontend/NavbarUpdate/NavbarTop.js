@@ -276,10 +276,11 @@ const NavbarTopWrapper = styled.nav`
 `;
 
 const Logo = styled.img`
-	height: 50px;
-	width: auto;
+	width: min(198px, 58vw);
+	aspect-ratio: 441 / 111;
+	height: auto;
 	cursor: pointer;
-	object-fit: cover !important;
+	object-fit: contain !important;
 `;
 
 const MenuIcon = styled(FaBars)`

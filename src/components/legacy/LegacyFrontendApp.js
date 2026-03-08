@@ -2,7 +2,7 @@
 
 import "@ant-design/v5-patch-for-react-19";
 import dynamic from "next/dynamic";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { HelmetProvider } from "react-helmet-async";
 import { StyleSheetManager } from "styled-components";
@@ -19,6 +19,15 @@ export default function LegacyFrontendApp() {
 		process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
 		process.env.REACT_APP_GOOGLE_CLIENT_ID ||
 		"";
+	const requiresGoogleProvider = useMemo(() => {
+		if (typeof window === "undefined") return true;
+		const path = `${window.location.pathname || ""}`.toLowerCase();
+		return (
+			path.startsWith("/signin") ||
+			path.startsWith("/signup") ||
+			path.startsWith("/sellingagent/signup")
+		);
+	}, []);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -82,9 +91,13 @@ export default function LegacyFrontendApp() {
 		<StyleSheetManager shouldForwardProp={shouldForwardProp}>
 			<HelmetProvider>
 				<CartProvider>
-					<GoogleOAuthProvider clientId={clientId}>
+					{requiresGoogleProvider ? (
+						<GoogleOAuthProvider clientId={clientId}>
+							<LegacyApp />
+						</GoogleOAuthProvider>
+					) : (
 						<LegacyApp />
-					</GoogleOAuthProvider>
+					)}
 				</CartProvider>
 			</HelmetProvider>
 		</StyleSheetManager>

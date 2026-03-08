@@ -1,8 +1,8 @@
-import { notFound } from "next/navigation";
 import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
 import JsonLd from "@/components/seo/JsonLd";
-import { getSingleProductBySlug } from "@/lib/api";
+import { getProductById } from "@/lib/api";
 import {
+	buildProductPath,
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
@@ -20,22 +20,18 @@ function getSafeSearchParamValue(source, key) {
 
 export async function generateMetadata({ params, searchParams }) {
 	try {
-		const product = await getSingleProductBySlug({
-			productSlug: params.productSlug,
-			categorySlug: params.categorySlug,
-			productId: params.productId,
-			revalidate: 120,
-		});
+		const product = await getProductById(params.productId, { revalidate: 120 });
 		const name = getProductDisplayName(product);
 		const description = getProductDescription(product);
 		const image = getPrimaryProductImage(product);
 		const color = getSafeSearchParamValue(searchParams, "color");
 		const size = getSafeSearchParamValue(searchParams, "size");
 		const scent = getSafeSearchParamValue(searchParams, "scent");
+		const canonicalPath = buildProductPath(product);
 		return createMetadata({
 			title: `${name} | Serene Jannat`,
 			description,
-			pathname: `/single-product/${params.productSlug}/${params.categorySlug}/${params.productId}`,
+			pathname: canonicalPath,
 			searchParams,
 			image,
 			keywords: [name, params.categorySlug, "shop", color, size, scent].filter(
@@ -53,30 +49,24 @@ export async function generateMetadata({ params, searchParams }) {
 }
 
 export default async function SingleProductPage({ params }) {
-	let product;
+	let product = null;
 	try {
-		product = await getSingleProductBySlug({
-			productSlug: params.productSlug,
-			categorySlug: params.categorySlug,
-			productId: params.productId,
-			revalidate: 90,
-		});
-	} catch {
-		notFound();
-	}
+		product = await getProductById(params.productId, { revalidate: 90 });
+	} catch {}
+
+	if (!product) return <LegacyFrontendAppEntry />;
 
 	const title = getProductDisplayName(product);
 	const description = getProductDescription(product);
 	const image = getPrimaryProductImage(product);
 	const price = getProductPrice(product);
+	const canonicalPath = buildProductPath(product);
 	const schema = productSchema({
 		name: title,
 		description,
 		image,
 		price,
-		url: absoluteUrl(
-			`/single-product/${params.productSlug}/${params.categorySlug}/${params.productId}`
-		),
+		url: absoluteUrl(canonicalPath),
 		availability:
 			Number(product?.quantity || 0) > 0
 				? "https://schema.org/InStock"

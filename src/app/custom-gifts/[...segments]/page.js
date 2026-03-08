@@ -1,4 +1,3 @@
-import { notFound } from "next/navigation";
 import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
 import JsonLd from "@/components/seo/JsonLd";
 import { getProductById } from "@/lib/api";
@@ -98,14 +97,14 @@ export async function generateMetadata({ params, searchParams }) {
 
 export default async function PodProductPage({ params, searchParams }) {
 	const parsed = parseSegments(params?.segments || []);
-	if (!parsed?.productId) notFound();
+	if (!parsed?.productId) return <LegacyFrontendAppEntry />;
 
-	let product;
+	let product = null;
 	try {
 		product = await getProductById(parsed.productId, { revalidate: 90 });
-	} catch {
-		notFound();
-	}
+	} catch {}
+
+	if (!product) return <LegacyFrontendAppEntry />;
 
 	const title = getProductDisplayName(product);
 	const description = getProductDescription(product);

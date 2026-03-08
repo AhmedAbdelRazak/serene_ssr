@@ -247,7 +247,21 @@ export function isPodProduct(product = {}) {
 	return Boolean(product?.isPrintifyProduct && product?.printifyProductDetails?.POD);
 }
 
+export function getPodProductSlug(product = {}) {
+	const candidate =
+		product?.title ||
+		product?.productName ||
+		product?.printifyProductDetails?.title ||
+		product?.slug ||
+		"custom-gift";
+	return toSlug(candidate) || "custom-gift";
+}
+
 export function getProductSlug(product = {}) {
+	const isPod = Boolean(
+		product?.isPrintifyProduct && product?.printifyProductDetails?.POD
+	);
+	if (isPod) return getPodProductSlug(product);
 	return product?.slug || toSlug(getProductDisplayName(product));
 }
 

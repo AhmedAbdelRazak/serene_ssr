@@ -1,5 +1,8 @@
+"use client";
+
 import { Suspense } from "react";
 import Script from "next/script";
+import { usePathname } from "next/navigation";
 import {
 	GOOGLE_ANALYTICS_ID,
 	FACEBOOK_PIXEL_ID,
@@ -7,8 +10,32 @@ import {
 import RouteTracker from "./RouteTracker";
 
 export default function AnalyticsScripts() {
+	const pathname = usePathname();
 	const hasGa = Boolean(GOOGLE_ANALYTICS_ID);
 	const hasFbPixel = Boolean(FACEBOOK_PIXEL_ID);
+	const normalizedPath = `${pathname || ""}`.toLowerCase();
+	const shouldSkipForLegacyRoute =
+		normalizedPath === "/" ||
+		normalizedPath.startsWith("/admin") ||
+		normalizedPath.startsWith("/seller") ||
+		normalizedPath.startsWith("/dashboard") ||
+		normalizedPath.startsWith("/cart") ||
+		normalizedPath.startsWith("/signin") ||
+		normalizedPath.startsWith("/signup") ||
+		normalizedPath.startsWith("/sellingagent") ||
+		normalizedPath.startsWith("/about") ||
+		normalizedPath.startsWith("/contact") ||
+		normalizedPath.startsWith("/our-products") ||
+		normalizedPath.startsWith("/custom-gifts") ||
+		normalizedPath.startsWith("/single-product") ||
+		normalizedPath.startsWith("/privacy-policy-terms-conditions") ||
+		normalizedPath.startsWith("/cookie-policy") ||
+		normalizedPath.startsWith("/return-refund-policy") ||
+		normalizedPath.startsWith("/payment-link");
+
+	if (shouldSkipForLegacyRoute) {
+		return null;
+	}
 
 	return (
 		<>
@@ -16,9 +43,9 @@ export default function AnalyticsScripts() {
 				<>
 					<Script
 						src={`https://www.googletagmanager.com/gtag/js?id=${GOOGLE_ANALYTICS_ID}`}
-						strategy='afterInteractive'
+						strategy='lazyOnload'
 					/>
-					<Script id='ga-init' strategy='afterInteractive'>
+					<Script id='ga-init' strategy='lazyOnload'>
 						{`
 							window.dataLayer = window.dataLayer || [];
 							function gtag(){dataLayer.push(arguments);}
@@ -32,7 +59,7 @@ export default function AnalyticsScripts() {
 
 			{hasFbPixel ? (
 				<>
-					<Script id='fb-pixel-init' strategy='afterInteractive'>
+					<Script id='fb-pixel-init' strategy='lazyOnload'>
 						{`
 							!function(f,b,e,v,n,t,s)
 							{if(f.fbq)return;n=f.fbq=function(){n.callMethod?

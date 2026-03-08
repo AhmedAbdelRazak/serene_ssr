@@ -2,16 +2,29 @@ import React from "react";
 import Slider from "react-slick";
 import styled from "styled-components";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
+import fallbackHeroBanner from "../../GeneralImages/HomePageBanner1.jpg";
 
 const HERO_IMAGE_WIDTH = 1920;
 const HERO_IMAGE_HEIGHT = 997;
 
 const Hero = ({ websiteSetup }) => {
 	const banners = websiteSetup?.homeMainBanners || [];
+	const bannerItems = banners.length
+		? banners
+		: [
+				{
+					url: fallbackHeroBanner,
+					title: "",
+					subTitle: "",
+					buttonTitle: "",
+					btnBackgroundColor: "#000",
+					pageRedirectURL: "",
+				},
+			];
 
 	const settings = {
 		dots: true,
-		infinite: true,
+		infinite: bannerItems.length > 1,
 		speed: 500,
 		slidesToShow: 1,
 		slidesToScroll: 1,
@@ -24,7 +37,7 @@ const Hero = ({ websiteSetup }) => {
 		<HeroSection>
 			<SliderContainer>
 				<Slider {...settings}>
-					{banners.map((banner, idx) => {
+					{bannerItems.map((banner, idx) => {
 						const {
 							url,
 							title,
@@ -153,10 +166,29 @@ const SliderContainer = styled.div`
 
 	.slick-prev:before,
 	.slick-next:before {
-		font-family: "slick";
-		font-size: 20px;
+		font-family: inherit;
+		font-size: 30px;
 		line-height: 1;
 		opacity: 1;
+		color: #fff;
+	}
+	.slick-prev:before {
+		content: "‹";
+	}
+	.slick-next:before {
+		content: "›";
+	}
+
+	.slick-dots li button:before {
+		content: "•";
+		font-family: inherit;
+		font-size: 13px;
+		line-height: 1;
+		color: rgba(255, 255, 255, 0.8);
+		opacity: 1;
+	}
+
+	.slick-dots li.slick-active button:before {
 		color: #fff;
 	}
 
@@ -176,8 +208,8 @@ const SliderContainer = styled.div`
 const Slide = styled.div`
 	position: relative;
 	width: 100%;
-	height: 100%;
-	max-height: 700px !important;
+	height: clamp(260px, 52vw, 700px);
+	max-height: 700px;
 `;
 
 /**
@@ -186,17 +218,14 @@ const Slide = styled.div`
  */
 const BannerImageWrapper = styled.div`
 	width: 100%;
-	max-height: 700px;
+	height: clamp(260px, 52vw, 700px);
 	overflow: hidden;
 
 	img {
+		display: block;
 		width: 100%;
-		height: auto;
+		height: 100%;
 		object-fit: cover;
-
-		@media (max-width: 600px) {
-			min-height: 450px !important;
-		}
 	}
 `;
 

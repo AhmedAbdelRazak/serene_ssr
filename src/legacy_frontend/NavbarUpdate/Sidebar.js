@@ -158,6 +158,9 @@ const Sidebar = ({
 								src={fallbackLogoUrl}
 								alt='Serene Janat Shop Logo'
 								loading='lazy'
+								decoding='async'
+								width={300}
+								height={76}
 							/>
 						</picture>
 					</Logo>
