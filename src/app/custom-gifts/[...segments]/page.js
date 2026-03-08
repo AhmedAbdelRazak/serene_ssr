@@ -73,7 +73,6 @@ export async function generateMetadata({ params, searchParams }) {
 			title: `${name} | Custom Gift`,
 			description,
 			pathname: path,
-			searchParams,
 			image,
 			keywords: [
 				"custom gift",

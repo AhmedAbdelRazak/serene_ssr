@@ -32,7 +32,6 @@ export async function generateMetadata({ params, searchParams }) {
 			title: `${name} | Serene Jannat`,
 			description,
 			pathname: canonicalPath,
-			searchParams,
 			image,
 			keywords: [name, params.categorySlug, "shop", color, size, scent].filter(
 				Boolean
@@ -43,7 +42,6 @@ export async function generateMetadata({ params, searchParams }) {
 			title: "Product",
 			description: "Product details page.",
 			pathname: `/single-product/${params.productSlug}/${params.categorySlug}/${params.productId}`,
-			searchParams,
 		});
 	}
 }

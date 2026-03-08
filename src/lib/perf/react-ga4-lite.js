@@ -13,14 +13,17 @@ function hasWindow() {
 function scheduleDeferred(callback) {
 	if (!hasWindow()) return;
 	let fired = false;
+	let fallbackTimeoutId = null;
 	const runOnce = () => {
 		if (fired) return;
 		fired = true;
+		if (fallbackTimeoutId) {
+			window.clearTimeout(fallbackTimeoutId);
+		}
 		callback();
 		window.removeEventListener("pointerdown", runOnce);
 		window.removeEventListener("keydown", runOnce);
 		window.removeEventListener("touchstart", runOnce);
-		window.removeEventListener("scroll", runOnce);
 	};
 
 	window.addEventListener("pointerdown", runOnce, { once: true, passive: true });
@@ -29,13 +32,9 @@ function scheduleDeferred(callback) {
 		once: true,
 		passive: true,
 	});
-	window.addEventListener("scroll", runOnce, { once: true, passive: true });
 
-	if (typeof window.requestIdleCallback === "function") {
-		window.requestIdleCallback(runOnce, { timeout: 60000 });
-	} else {
-		window.setTimeout(runOnce, 60000);
-	}
+	// Keep third-party scripts off the initial page-load critical path.
+	fallbackTimeoutId = window.setTimeout(runOnce, 45000);
 }
 
 function ensureGtagStub() {

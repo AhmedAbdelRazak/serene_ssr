@@ -24,6 +24,7 @@ const STATIC_PATHS = [
 	"/privacy-policy-terms-conditions",
 	"/cookie-policy",
 	"/return-refund-policy",
+	"/llms.txt",
 	"/signin",
 	"/signup",
 	"/sellingagent/signup",

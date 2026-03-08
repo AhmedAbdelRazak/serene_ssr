@@ -10,7 +10,7 @@ import PrintifyPageHelmet from "./PrintifyPageHelmet";
 import { isAuthenticated } from "../../auth";
 import { cleanupPodListPreviewSession, getPodListPreview } from "../../apiCore";
 import OptimizedImage from "../../components/OptimizedImage";
-import { resolveImageUrl } from "../../utils/image";
+import { getCloudinaryOptimizedUrl, resolveImageUrl } from "../../utils/image";
 import {
 	POD_OCCASION_OPTIONS,
 	resolvePodPersonalization,
@@ -449,6 +449,15 @@ const PrintifyAvailableProducts = () => {
 			fallbackSrc,
 			exampleSrc: examplePrimary || exampleFallback || null,
 		};
+	}, []);
+
+	const getOptimizedPreviewImageUrl = useCallback((src, width) => {
+		const safeSrc = `${src || ""}`.trim();
+		if (!safeSrc) return "";
+		return getCloudinaryOptimizedUrl(safeSrc, {
+			width,
+			quality: "auto:eco",
+		});
 	}, []);
 
 	const handleDirectPreviewImageError = useCallback((event, fallbackSrc) => {
@@ -902,6 +911,20 @@ const PrintifyAvailableProducts = () => {
 						const previewSrc = readyPreview
 							? previewByProductId[product._id]
 							: placeholderSrc;
+						const hoverPreviewSrc = readyPreview
+							? getOptimizedPreviewImageUrl(previewSrc, 900)
+							: placeholderSrc;
+						const cardPreviewSrc = readyPreview
+							? getOptimizedPreviewImageUrl(previewSrc, 640)
+							: placeholderSrc;
+						const hoverFallbackSrc = getOptimizedPreviewImageUrl(
+							placeholderSrc || primarySrc,
+							900,
+						);
+						const cardFallbackSrc = getOptimizedPreviewImageUrl(
+							placeholderSrc || primarySrc,
+							640,
+						);
 						const loadingPreview = previewStatus === "loading";
 
 						return (
@@ -917,7 +940,7 @@ const PrintifyAvailableProducts = () => {
 										<HoverPreviewImageWrap>
 											{readyPreview ? (
 												<DirectPreviewImage
-													src={previewSrc}
+													src={hoverPreviewSrc}
 													alt={`${product.productName} preview`}
 													loading='lazy'
 													decoding='async'
@@ -925,7 +948,7 @@ const PrintifyAvailableProducts = () => {
 													onError={(event) =>
 														handleDirectPreviewImageError(
 															event,
-															placeholderSrc || primarySrc
+															hoverFallbackSrc || placeholderSrc || primarySrc
 														)
 													}
 												/>
@@ -960,7 +983,7 @@ const PrintifyAvailableProducts = () => {
 										<ImageWrap>
 											{readyPreview ? (
 												<DirectPreviewImage
-													src={previewSrc}
+													src={cardPreviewSrc}
 													alt={product.productName}
 													loading='lazy'
 													decoding='async'
@@ -968,7 +991,7 @@ const PrintifyAvailableProducts = () => {
 													onError={(event) =>
 														handleDirectPreviewImageError(
 															event,
-															placeholderSrc || primarySrc
+															cardFallbackSrc || placeholderSrc || primarySrc
 														)
 													}
 												/>

@@ -27,7 +27,6 @@ export async function generateMetadata({ searchParams }) {
 		description:
 			"Choose a product, personalize with your occasion and name, and preview premium Print On Demand gifts.",
 		pathname: "/custom-gifts",
-		searchParams,
 		keywords: [
 			"custom gifts",
 			"print on demand",

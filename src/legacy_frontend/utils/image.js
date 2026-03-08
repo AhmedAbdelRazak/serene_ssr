@@ -22,6 +22,17 @@ const sanitizeUrlCandidate = (value = "") => {
 const isCloudinaryUrl = (url) =>
 	typeof url === "string" && url.includes("res.cloudinary.com");
 
+const isCloudinaryTransformToken = (token = "") =>
+	/^[a-z]{1,3}_.+/i.test(`${token || ""}`.trim());
+
+const isCloudinaryTransformationSegment = (segment = "") => {
+	const normalized = `${segment || ""}`.trim();
+	if (!normalized || /^v\d+$/i.test(normalized)) return false;
+	const tokens = normalized.split(",").map((token) => token.trim()).filter(Boolean);
+	if (!tokens.length) return false;
+	return tokens.every((token) => isCloudinaryTransformToken(token));
+};
+
 export const getCloudinaryOptimizedUrl = (
 	url,
 	{ width, format = "auto", quality = "auto" } = {}
@@ -34,7 +45,7 @@ export const getCloudinaryOptimizedUrl = (
 	const parts = rest.split("/");
 	const first = parts[0];
 	const isVersion = /^v\d+/.test(first);
-	const hasTransform = !isVersion && (first.includes(",") || first.includes("_"));
+	const hasTransform = !isVersion && isCloudinaryTransformationSegment(first);
 	const tokens = hasTransform ? first.split(",") : [];
 
 	const setOrAppendToken = (token, predicate) => {

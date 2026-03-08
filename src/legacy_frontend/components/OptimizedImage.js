@@ -19,6 +19,17 @@ const toAbsoluteUrl = (url) => {
 const isCloudinaryUrl = (url) =>
 	typeof url === "string" && url.includes("res.cloudinary.com");
 
+const isCloudinaryTransformToken = (token = "") =>
+	/^[a-z]{1,3}_.+/i.test(`${token || ""}`.trim());
+
+const isCloudinaryTransformationSegment = (segment = "") => {
+	const normalized = `${segment || ""}`.trim();
+	if (!normalized || /^v\d+$/i.test(normalized)) return false;
+	const tokens = normalized.split(",").map((token) => token.trim()).filter(Boolean);
+	if (!tokens.length) return false;
+	return tokens.every((token) => isCloudinaryTransformToken(token));
+};
+
 const buildCloudinaryUrl = (url, width, format) => {
 	const [prefix, rest] = url.split("/upload/");
 	if (!rest) return url;
@@ -26,8 +37,7 @@ const buildCloudinaryUrl = (url, width, format) => {
 	const parts = rest.split("/");
 	const first = parts[0];
 	const isVersion = /^v\d+/.test(first);
-	const hasTransform =
-		!isVersion && (first.includes(",") || first.includes("_"));
+	const hasTransform = !isVersion && isCloudinaryTransformationSegment(first);
 	const tokens = hasTransform ? first.split(",") : [];
 
 	const setOrAppendToken = (token, predicate) => {
@@ -100,6 +110,8 @@ const OptimizedImage = ({
 }) => {
 	const baseSrc = src || fallbackSrc || "";
 	const fallback = toAbsoluteUrl(fallbackSrc || baseSrc);
+	const safeWidths = Array.isArray(widths) && widths.length ? widths : DEFAULT_WIDTHS;
+	const primaryWidth = safeWidths[0] || 480;
 	const origin =
 		typeof window !== "undefined" ? window.location.origin : "";
 	const normalizedSrc = toAbsoluteUrl(baseSrc);
@@ -117,21 +129,42 @@ const OptimizedImage = ({
 	}
 
 	const useFetch = enableFetchOptimization && !isSameSite && !isCloudinarySource;
+	const shouldUseResponsiveSources = useFetch || isCloudinarySource;
 
-	const { srcSet, webpSrcSet, resolvedSrc } = useMemo(() => {
+	const { srcSet, webpSrcSet, resolvedSrc, resolvedFallback } = useMemo(() => {
 		if (!baseSrc) {
-			return { srcSet: "", webpSrcSet: "", resolvedSrc: "" };
+			return {
+				srcSet: "",
+				webpSrcSet: "",
+				resolvedSrc: "",
+				resolvedFallback: "",
+			};
 		}
 
-		const resolved = buildOptimizedUrl(baseSrc, widths[0], "auto", {
+		const resolved = buildOptimizedUrl(baseSrc, primaryWidth, "auto", {
 			useFetch,
 		});
+		const optimizedFallback = fallback
+			? buildOptimizedUrl(fallback, primaryWidth, "auto", { useFetch })
+			: "";
 		return {
-			srcSet: useFetch ? buildSrcSet(baseSrc, widths, "auto") : "",
-			webpSrcSet: useFetch ? buildSrcSet(baseSrc, widths, "webp") : "",
-			resolvedSrc: resolved || fallback,
+			srcSet: shouldUseResponsiveSources
+				? buildSrcSet(baseSrc, safeWidths, "auto")
+				: "",
+			webpSrcSet: shouldUseResponsiveSources
+				? buildSrcSet(baseSrc, safeWidths, "webp")
+				: "",
+			resolvedSrc: resolved || optimizedFallback || fallback,
+			resolvedFallback: optimizedFallback || fallback,
 		};
-	}, [baseSrc, fallback, useFetch, widths]);
+	}, [
+		baseSrc,
+		fallback,
+		primaryWidth,
+		safeWidths,
+		shouldUseResponsiveSources,
+		useFetch,
+	]);
 
 	if (!baseSrc) {
 		return null;
@@ -139,20 +172,20 @@ const OptimizedImage = ({
 
 	const handleError = (event) => {
 		const img = event.currentTarget;
-		if (!fallback || img.dataset.fallbackApplied === "true") {
+		if (!resolvedFallback || img.dataset.fallbackApplied === "true") {
 			return;
 		}
 		img.dataset.fallbackApplied = "true";
 		img.removeAttribute("srcset");
 		img.removeAttribute("sizes");
-		img.src = fallback;
+		img.src = resolvedFallback;
 	};
 
-	if (!useFetch) {
+	if (!srcSet && !webpSrcSet) {
 		return (
 			<img
 				{...imgProps}
-				src={resolvedSrc || fallback}
+				src={resolvedSrc || resolvedFallback || fallback}
 				alt={alt}
 				className={className}
 				style={style}
@@ -160,7 +193,7 @@ const OptimizedImage = ({
 				decoding={decoding}
 				fetchPriority={fetchPriority}
 				referrerPolicy={referrerPolicy}
-				data-fallback={fallback}
+				data-fallback={resolvedFallback || fallback}
 				onError={handleError}
 			/>
 		);
@@ -172,7 +205,7 @@ const OptimizedImage = ({
 			<source type='image/jpeg' srcSet={srcSet} sizes={sizes} />
 			<img
 				{...imgProps}
-				src={resolvedSrc}
+				src={resolvedSrc || resolvedFallback || fallback}
 				alt={alt}
 				className={className}
 				style={style}
@@ -180,7 +213,7 @@ const OptimizedImage = ({
 				decoding={decoding}
 				fetchPriority={fetchPriority}
 				referrerPolicy={referrerPolicy}
-				data-fallback={fallback}
+				data-fallback={resolvedFallback || fallback}
 				onError={handleError}
 			/>
 		</picture>

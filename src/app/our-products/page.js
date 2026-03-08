@@ -40,7 +40,6 @@ export async function generateMetadata({ searchParams }) {
 		description:
 			"Browse all products with advanced filtering by category, size, color, price, and store.",
 		pathname: "/our-products",
-		searchParams,
 		keywords: dynamicKeywords,
 	});
 }
