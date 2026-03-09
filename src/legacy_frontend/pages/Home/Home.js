@@ -1,11 +1,17 @@
-import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
+import React, { useEffect, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
 import { useCartContext } from "../../cart_context";
+// Ant Design Spinner
+import { Spin } from "antd";
+import { LoadingOutlined } from "@ant-design/icons";
 // Components
 import ZCategories from "./ZCategories";
 import Hero from "./Hero";
+import ZFeaturedProducts from "./ZFeaturedProducts";
+import ZNewArrival from "./ZNewArrival";
+import ZCustomDesigns from "./ZCustomDesigns";
 import {
 	gettingCategoriesAndSubcategories,
 	gettingSpecificProducts,
@@ -16,9 +22,6 @@ import {
 	resolveImageUrl,
 } from "../../utils/image";
 
-const ZFeaturedProducts = lazy(() => import("./ZFeaturedProducts"));
-const ZCustomDesigns = lazy(() => import("./ZCustomDesigns"));
-const ZNewArrival = lazy(() => import("./ZNewArrival"));
 /* Keyframes for the fade-up animation */
 const fadeUp = keyframes`
   0% {
@@ -35,8 +38,6 @@ const fadeUp = keyframes`
 const FadeUpDiv = styled.div`
 	content-visibility: auto;
 	contain-intrinsic-size: 1000px;
-	will-change: transform, opacity;
-	transform: translateZ(0);
 	animation: ${fadeUp} 1.2s ease-in-out;
 `;
 
@@ -235,6 +236,11 @@ const VisuallyHiddenH1 = styled.h1`
 	border: 0;
 `;
 
+/* Ant Design loading icon with custom size */
+const loadingIcon = (
+	<LoadingOutlined style={{ fontSize: 60, color: "#555" }} spin />
+);
+
 const Home = () => {
 	const [categories, setCategories] = useState([]);
 	const [subcategories, setSubcategories] = useState([]);
@@ -242,9 +248,6 @@ const Home = () => {
 	const [newArrivalProducts, setNewArrivalProducts] = useState([]);
 	const [customDesignProducts, setCustomDesignProducts] = useState([]);
 	const [loading, setLoading] = useState(false);
-	const [belowFoldReady, setBelowFoldReady] = useState(false);
-	const [belowFoldFetched, setBelowFoldFetched] = useState(false);
-	const belowFoldAnchorRef = useRef(null);
 
 	const { websiteSetup } = useCartContext();
 	const heroBanner = websiteSetup?.homeMainBanners?.[0];
@@ -265,177 +268,75 @@ const Home = () => {
 
 		if (typeof window === "undefined") return undefined;
 
-		let loaded = false;
-		const loadOnce = () => {
-			if (loaded) return;
-			loaded = true;
-			loadAdSense();
-			window.removeEventListener("pointerdown", loadOnce);
-			window.removeEventListener("keydown", loadOnce);
-			window.removeEventListener("touchstart", loadOnce);
-		};
+		if ("requestIdleCallback" in window) {
+			const idleId = window.requestIdleCallback(loadAdSense, { timeout: 3000 });
+			return () => window.cancelIdleCallback?.(idleId);
+		}
 
-		window.addEventListener("pointerdown", loadOnce, {
-			passive: true,
-			once: true,
-		});
-		window.addEventListener("keydown", loadOnce, {
-			passive: true,
-			once: true,
-		});
-		window.addEventListener("touchstart", loadOnce, {
-			passive: true,
-			once: true,
-		});
-
-		const fallbackTimeoutId = window.setTimeout(loadOnce, 60000);
-
-		return () => {
-			window.clearTimeout(fallbackTimeoutId);
-			window.removeEventListener("pointerdown", loadOnce);
-			window.removeEventListener("keydown", loadOnce);
-			window.removeEventListener("touchstart", loadOnce);
-		};
+		const timeoutId = window.setTimeout(loadAdSense, 3000);
+		return () => window.clearTimeout(timeoutId);
 	}, []);
 
 	useEffect(() => {
-		const fetchCategories = async () => {
+		const fetchData = async () => {
 			try {
 				setLoading(true);
-				const categoriesData = await gettingCategoriesAndSubcategories();
 
+				const categoriesData = await gettingCategoriesAndSubcategories();
 				if (categoriesData?.error) {
 					console.log(categoriesData.error);
 				} else {
 					setCategories(categoriesData.categories || []);
 					setSubcategories(categoriesData.subcategories || []);
 				}
+
+				const featuredData = await gettingSpecificProducts(1, 0, 0, 0, 0, 6);
+				if (featuredData?.error) {
+					console.log(featuredData.error);
+				} else {
+					const sortedFeatured = featuredData.sort(
+						(a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+					);
+					setFeaturedProducts(sortedFeatured);
+				}
+
+				const newArrivalData = await gettingSpecificProducts(0, 1, 0, 0, 0, 6);
+				if (newArrivalData?.error) {
+					console.log(newArrivalData.error);
+				} else {
+					setNewArrivalProducts(newArrivalData);
+				}
+
+				const customDesignData = await gettingSpecificProducts(0, 0, 1, 0, 0, 6);
+				if (customDesignData?.error) {
+					console.log(customDesignData.error);
+				} else {
+					setCustomDesignProducts(customDesignData);
+				}
 			} catch (error) {
-				console.error("Error fetching categories in Home: ", error);
+				console.error("Error fetching data in Home: ", error);
 			} finally {
 				setLoading(false);
 			}
 		};
 
-		fetchCategories();
+		fetchData();
 	}, []);
 
 	useEffect(() => {
-		const shouldFetchBelowFoldData = belowFoldReady && !belowFoldFetched;
-		if (!shouldFetchBelowFoldData) return;
+		if (typeof window === "undefined") return;
+		window.scrollTo({ top: 0, behavior: "smooth" });
+	}, []);
 
-		let isCancelled = false;
-		setBelowFoldFetched(true);
-
-		const fetchBelowFoldData = async () => {
-			try {
-				setLoading(true);
-				const [featuredData, newArrivalData, customDesignData] = await Promise.all([
-					gettingSpecificProducts(1, 0, 0, 0, 0, 6, 0, "", { lite: true }),
-					gettingSpecificProducts(0, 1, 0, 0, 0, 6, 0, "", { lite: true }),
-					gettingSpecificProducts(0, 0, 1, 0, 0, 6, 0, "", { lite: true }),
-				]);
-
-				if (!isCancelled) {
-					if (featuredData?.error) {
-						console.log(featuredData.error);
-					} else {
-						const sortedFeatured = featuredData.sort(
-							(a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-						);
-						setFeaturedProducts(sortedFeatured);
-					}
-
-					if (newArrivalData?.error) {
-						console.log(newArrivalData.error);
-					} else {
-						setNewArrivalProducts(newArrivalData);
-					}
-
-					if (customDesignData?.error) {
-						console.log(customDesignData.error);
-					} else {
-						setCustomDesignProducts(customDesignData);
-					}
-				}
-			} catch (error) {
-				if (!isCancelled) {
-					console.error("Error fetching below-fold products in Home: ", error);
-				}
-			} finally {
-				if (!isCancelled) {
-					setLoading(false);
-				}
-			}
-		};
-
-		fetchBelowFoldData();
-
-		return () => {
-			isCancelled = true;
-		};
-	}, [
-		belowFoldReady,
-		belowFoldFetched,
-	]);
-
-	useEffect(() => {
-		if (typeof window === "undefined") return undefined;
-		if (belowFoldReady) return undefined;
-
-		const enableBelowFold = () => setBelowFoldReady(true);
-
-		let observer;
-		if (belowFoldAnchorRef.current && "IntersectionObserver" in window) {
-			observer = new IntersectionObserver(
-				(entries) => {
-					if (entries.some((entry) => entry.isIntersecting)) {
-						enableBelowFold();
-					}
-				},
-				{ rootMargin: "500px 0px", threshold: 0.01 }
-			);
-			observer.observe(belowFoldAnchorRef.current);
-		}
-
-		const onFirstInteraction = () => {
-			enableBelowFold();
-			window.removeEventListener("pointerdown", onFirstInteraction);
-			window.removeEventListener("scroll", onFirstInteraction);
-			window.removeEventListener("touchstart", onFirstInteraction);
-			window.removeEventListener("keydown", onFirstInteraction);
-		};
-
-		window.addEventListener("pointerdown", onFirstInteraction, {
-			passive: true,
-			once: true,
-		});
-		window.addEventListener("scroll", onFirstInteraction, {
-			passive: true,
-			once: true,
-		});
-		window.addEventListener("touchstart", onFirstInteraction, {
-			passive: true,
-			once: true,
-		});
-		window.addEventListener("keydown", onFirstInteraction, {
-			passive: true,
-			once: true,
-		});
-
-		// Keep below-the-fold sections deferred long enough to avoid impacting
-		// initial paint metrics if the user has not interacted yet.
-		const timeoutId = window.setTimeout(enableBelowFold, 25000);
-
-		return () => {
-			if (observer) observer.disconnect();
-			window.clearTimeout(timeoutId);
-			window.removeEventListener("pointerdown", onFirstInteraction);
-			window.removeEventListener("scroll", onFirstInteraction);
-			window.removeEventListener("touchstart", onFirstInteraction);
-			window.removeEventListener("keydown", onFirstInteraction);
-		};
-	}, [belowFoldReady]);
+	if (loading) {
+		return (
+			<HomeWrapper>
+				<div className='loading-section'>
+					<Spin indicator={loadingIcon} />
+				</div>
+			</HomeWrapper>
+		);
+	}
 
 	return (
 		<HomeWrapper>
@@ -461,40 +362,27 @@ const Home = () => {
 						allSubcategories={subcategories}
 					/>
 				</FadeUpDiv>
-			) : loading ? (
-				<SectionSkeleton aria-hidden='true' />
 			) : null}
-			<BelowFoldAnchor ref={belowFoldAnchorRef} aria-hidden='true' />
 
-			{belowFoldReady ? (
-				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
-					{/* Featured Products */}
-					{featuredProducts.length > 0 ? (
-						<FadeUpDiv>
-							<ZFeaturedProducts featuredProducts={featuredProducts} />
-						</FadeUpDiv>
-					) : loading ? (
-						<SectionSkeleton aria-hidden='true' />
-					) : null}
+			{/* Featured Products */}
+			{featuredProducts.length > 0 ? (
+				<FadeUpDiv>
+					<ZFeaturedProducts featuredProducts={featuredProducts} />
+				</FadeUpDiv>
+			) : null}
 
-					{/* Custom Designs */}
-					{customDesignProducts.length > 0 ? (
-						<FadeUpDiv>
-							<ZCustomDesigns customDesignProducts={customDesignProducts} />
-						</FadeUpDiv>
-					) : loading ? (
-						<SectionSkeleton aria-hidden='true' />
-					) : null}
+			{/* Custom Designs */}
+			{customDesignProducts.length > 0 ? (
+				<FadeUpDiv>
+					<ZCustomDesigns customDesignProducts={customDesignProducts} />
+				</FadeUpDiv>
+			) : null}
 
-					{/* New Arrivals */}
-					{newArrivalProducts.length > 0 ? (
-						<FadeUpDiv>
-							<ZNewArrival newArrivalProducts={newArrivalProducts} />
-						</FadeUpDiv>
-					) : loading ? (
-						<SectionSkeleton aria-hidden='true' />
-					) : null}
-				</Suspense>
+			{/* New Arrivals */}
+			{newArrivalProducts.length > 0 ? (
+				<FadeUpDiv>
+					<ZNewArrival newArrivalProducts={newArrivalProducts} />
+				</FadeUpDiv>
 			) : null}
 		</HomeWrapper>
 	);
@@ -505,29 +393,11 @@ export default Home;
 /* Styled for the Home page */
 const HomeWrapper = styled.div`
 	width: 100%;
-`;
-
-const BelowFoldAnchor = styled.div`
-	height: 1px;
-	width: 100%;
-`;
-
-const SectionSkeleton = styled.div`
-	width: min(96%, 1400px);
-	height: 340px;
-	margin: 20px auto;
-	border-radius: 12px;
-	background: linear-gradient(90deg, #f1f1f1 25%, #e7e7e7 37%, #f1f1f1 63%);
-	background-size: 400% 100%;
-	animation: shimmer 1.4s ease infinite;
-
-	@keyframes shimmer {
-		0% {
-			background-position: 100% 0;
-		}
-		100% {
-			background-position: -100% 0;
-		}
+	.loading-section {
+		min-height: 60vh;
+		display: flex;
+		align-items: center;
+		justify-content: center;
 	}
 `;
 

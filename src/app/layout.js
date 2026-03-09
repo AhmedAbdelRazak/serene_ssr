@@ -4,7 +4,6 @@ import "@/legacy_frontend/slick-lite.css";
 import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
-import DeferredBootstrapStyles from "@/components/tracking/DeferredBootstrapStyles";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
 
@@ -28,6 +27,7 @@ export default function RootLayout({ children }) {
 			<head>
 				<link rel='preconnect' href='https://res.cloudinary.com' />
 				<link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
+				<link rel='preconnect' href='https://stackpath.bootstrapcdn.com' crossOrigin='anonymous' />
 				<link
 					rel='preload'
 					as='style'
@@ -44,13 +44,24 @@ export default function RootLayout({ children }) {
 						href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
 					/>
 				</noscript>
+				<link
+					rel='preload'
+					as='style'
+					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
+					crossOrigin='anonymous'
+				/>
+				<link
+					rel='stylesheet'
+					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
+					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
+					crossOrigin='anonymous'
+				/>
 				<meta
 					name='facebook-domain-verification'
 					content='ctdvedogjmpukl4fixfi03qzeax4w0'
 				/>
 			</head>
 			<body>
-				<DeferredBootstrapStyles />
 				<AnalyticsScripts />
 				<JsonLd data={organizationSchema()} />
 				<ChromeShell>{children}</ChromeShell>

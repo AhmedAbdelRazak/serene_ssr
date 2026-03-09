@@ -3,15 +3,33 @@ import styled from "styled-components";
 import Slider from "react-slick";
 import { Card } from "antd";
 import { useHistory } from "react-router-dom";
-import ReactGA from "react-ga4";
 import { gettingSpecificProducts } from "../../apiCore";
-import ReactPixel from "react-facebook-pixel";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageSources } from "../../utils/image";
 
 const { Meta } = Card;
 
 const MAX_PRODUCTS = 15;
+
+const emitGaEvent = async (payload) => {
+	try {
+		const module = await import("react-ga4");
+		const ReactGA = module?.default || module;
+		ReactGA?.event?.(payload);
+	} catch (error) {
+		// Ignore GA load failures to avoid impacting UX.
+	}
+};
+
+const emitFbTrack = async (eventName, payload, options) => {
+	try {
+		const module = await import("react-facebook-pixel");
+		const ReactPixel = module?.default || module;
+		ReactPixel?.track?.(eventName, payload, options);
+	} catch (error) {
+		// Ignore FB pixel load failures to avoid impacting UX.
+	}
+};
 
 const ZCustomDesigns = ({ customDesignProducts }) => {
 	const history = useHistory();
@@ -120,13 +138,13 @@ const ZCustomDesigns = ({ customDesignProducts }) => {
 		(product) => {
 			// If it's a POD product, redirect to custom gifts page
 			if (product.isPrintifyProduct && product.printifyProductDetails?.POD) {
-				ReactGA.event({
+				void emitGaEvent({
 					category: "Custom Design Product Clicked",
 					action: "Custom Design Clicked",
 					label: `User Custom Design ${product.productName} single page`,
 				});
 
-				ReactPixel.track("Lead", {
+				void emitFbTrack("Lead", {
 					content_name: `User Navigated to ${product.productName} single page`,
 					click_type: "Print On Demand Clicked",
 					// You can add more parameters if you want

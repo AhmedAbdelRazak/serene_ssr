@@ -6,8 +6,6 @@ import { ShoppingCartOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import { readProduct, gettingSpecificProducts } from "../../apiCore";
 import { useHistory } from "react-router-dom";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
 import axios from "axios";
 import { isAuthenticated } from "../../auth";
 import OptimizedImage from "../../components/OptimizedImage";
@@ -16,6 +14,26 @@ import { resolveImageUrl } from "../../utils/image";
 const { Meta } = Card;
 
 const MAX_PRODUCTS = 30;
+
+const emitGaEvent = async (payload) => {
+	try {
+		const module = await import("react-ga4");
+		const ReactGA = module?.default || module;
+		ReactGA?.event?.(payload);
+	} catch (error) {
+		// Ignore GA load failures to avoid impacting UX.
+	}
+};
+
+const emitFbTrack = async (eventName, payload, options) => {
+	try {
+		const module = await import("react-facebook-pixel");
+		const ReactPixel = module?.default || module;
+		ReactPixel?.track?.(eventName, payload, options);
+	} catch (error) {
+		// Ignore FB pixel load failures to avoid impacting UX.
+	}
+};
 
 const ZFeaturedProducts = ({ featuredProducts }) => {
 	const { openSidebar2, addToCart } = useCartContext();
@@ -147,14 +165,14 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 				history.push(`/custom-gifts/${product._id}`);
 				return;
 			}
-			ReactGA.event({
+			void emitGaEvent({
 				category: "Add To The Cart Featured Products",
 				action: "User Added Featured Product To The Cart",
 				label: `User added ${product.productName} to the cart from Featured Products`,
 			});
 			const eventId = `AddToCart-${product._id}-${Date.now()}`; // must match client if deduplicating
 
-			ReactPixel.track("AddToCart", {
+			void emitFbTrack("AddToCart", {
 				content_name: product.productName,
 				content_ids: [product._id],
 				content_type: "product",
@@ -195,7 +213,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 			}
 
 			// (C) Google Analytics Event (already in your code)
-			ReactGA.event({
+			void emitGaEvent({
 				category: "Add To The Cart Featured Products",
 				action: "User Added Featured Product To The Cart",
 				label: `User added ${product.productName} to the cart from Featured Products`,
@@ -226,7 +244,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 				history.push(`/custom-gifts/${product._id}`);
 				return;
 			}
-			ReactGA.event({
+			void emitGaEvent({
 				category: "Featured Product Clicked",
 				action: "Featured Product Clicked",
 				label: `User Navigated to ${product.productName} single page`,
@@ -234,7 +252,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 
 			const eventId = `Lead-FeaturedProducts-${product._id}-${Date.now()}`;
 
-			ReactPixel.track("Lead", {
+			void emitFbTrack("Lead", {
 				content_name: `User Navigated to ${product.productName} single page`,
 				click_type: "Featured Product Clicked",
 				// You can add more parameters if you want

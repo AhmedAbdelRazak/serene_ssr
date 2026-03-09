@@ -6,14 +6,32 @@ import { ShoppingCartOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import { readProduct, gettingSpecificProducts } from "../../apiCore";
 import { useHistory } from "react-router-dom";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
 import axios from "axios";
 import { isAuthenticated } from "../../auth";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageUrl } from "../../utils/image";
 
 const { Meta } = Card;
+
+const emitGaEvent = async (payload) => {
+	try {
+		const module = await import("react-ga4");
+		const ReactGA = module?.default || module;
+		ReactGA?.event?.(payload);
+	} catch (error) {
+		// Ignore GA load failures to avoid impacting UX.
+	}
+};
+
+const emitFbTrack = async (eventName, payload, options) => {
+	try {
+		const module = await import("react-facebook-pixel");
+		const ReactPixel = module?.default || module;
+		ReactPixel?.track?.(eventName, payload, options);
+	} catch (error) {
+		// Ignore FB pixel load failures to avoid impacting UX.
+	}
+};
 
 const ZNewArrival = ({ newArrivalProducts }) => {
 	const { openSidebar2, addToCart } = useCartContext();
@@ -141,13 +159,13 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 
 			const eventId = `addToCart-newArrivals-${product._id}-${Date.now()}`;
 
-			ReactGA.event({
+			void emitGaEvent({
 				category: "Add To The Cart New Arrivals",
 				action: "User Added New Arrival Product To The Cart",
 				label: `User added ${product.productName} to the cart from New Arrivals`,
 			});
 
-			ReactPixel.track(
+			void emitFbTrack(
 				"AddToCart",
 				{
 					content_name: product.productName,
@@ -200,7 +218,7 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 				history.push(`/custom-gifts/${product._id}`);
 				return;
 			}
-			ReactGA.event({
+			void emitGaEvent({
 				category: "New Arrival Product Clicked",
 				action: "New Arrival Product Clicked",
 				label: `User Navigated to ${product.productName} single page`,
@@ -208,7 +226,7 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 
 			const eventId = `Lead-newArrivals-${product._id}-${Date.now()}`;
 
-			ReactPixel.track("Lead", {
+			void emitFbTrack("Lead", {
 				content_name: `User Navigated to ${product.productName} single page`,
 				click_type: "New Arrival Product Clicked",
 				// You can add more parameters if you want
