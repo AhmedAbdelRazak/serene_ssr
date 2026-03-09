@@ -4,6 +4,7 @@ import "@/legacy_frontend/slick-lite.css";
 import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
+import DeferredBootstrapStyles from "@/components/tracking/DeferredBootstrapStyles";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
 
@@ -37,30 +38,10 @@ export default function RootLayout({ children }) {
 					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
 					media='all'
 				/>
-				<link
-					rel='preload'
-					as='style'
-					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
-					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
-					crossOrigin='anonymous'
-				/>
-				<link
-					rel='stylesheet'
-					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
-					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
-					crossOrigin='anonymous'
-					media='all'
-				/>
 				<noscript>
 					<link
 						rel='stylesheet'
 						href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
-					/>
-					<link
-						rel='stylesheet'
-						href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
-						integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
-						crossOrigin='anonymous'
 					/>
 				</noscript>
 				<meta
@@ -69,6 +50,7 @@ export default function RootLayout({ children }) {
 				/>
 			</head>
 			<body>
+				<DeferredBootstrapStyles />
 				<AnalyticsScripts />
 				<JsonLd data={organizationSchema()} />
 				<ChromeShell>{children}</ChromeShell>

@@ -35,6 +35,8 @@ const fadeUp = keyframes`
 const FadeUpDiv = styled.div`
 	content-visibility: auto;
 	contain-intrinsic-size: 1000px;
+	will-change: transform, opacity;
+	transform: translateZ(0);
 	animation: ${fadeUp} 1.2s ease-in-out;
 `;
 

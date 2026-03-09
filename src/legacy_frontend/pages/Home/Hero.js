@@ -91,7 +91,7 @@ const Hero = ({ websiteSetup }) => {
 						} = banner;
 
 						const isFirstSlide = idx === 0;
-						const quality = isFirstSlide ? "auto" : "auto:low";
+						const quality = isFirstSlide ? "auto" : "auto:eco";
 
 						// Cloudinary transforms
 						const base1600 = getCloudinaryOptimizedUrl(url, {
