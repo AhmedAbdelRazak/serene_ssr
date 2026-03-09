@@ -907,6 +907,10 @@ const PrintifyAvailableProducts = () => {
 						const previewStatus = previewStatusByProductId[product._id] || "idle";
 						const readyPreview =
 							previewStatus === "ready" && Boolean(previewByProductId[product._id]);
+						const storedDefaultHoverImages = !`${podName || ""}`.trim()
+							? getStoredDefaultDesignImagesForOccasion(product, podOccasion)
+							: [];
+						const hasStoredDefaultHoverImages = storedDefaultHoverImages.length > 0;
 						const placeholderSrc = exampleSrc || fallbackSrc || primarySrc;
 						const previewSrc = readyPreview
 							? previewByProductId[product._id]
@@ -925,6 +929,13 @@ const PrintifyAvailableProducts = () => {
 							placeholderSrc || primarySrc,
 							640,
 						);
+						const hoverGallerySources = hasStoredDefaultHoverImages
+							? storedDefaultHoverImages
+									.map(
+										(src) => getOptimizedPreviewImageUrl(src, 720) || `${src || ""}`.trim(),
+									)
+									.filter(Boolean)
+							: [];
 						const loadingPreview = previewStatus === "loading";
 
 						return (
@@ -937,44 +948,75 @@ const PrintifyAvailableProducts = () => {
 								destroyOnHidden
 								content={
 									<HoverPreviewContent>
-										<HoverPreviewImageWrap>
-											{readyPreview ? (
-												<DirectPreviewImage
-													src={hoverPreviewSrc}
-													alt={`${product.productName} preview`}
-													loading='lazy'
-													decoding='async'
-													referrerPolicy='no-referrer'
-													onError={(event) =>
-														handleDirectPreviewImageError(
-															event,
-															hoverFallbackSrc || placeholderSrc || primarySrc
-														)
-													}
-												/>
-											) : (
-												<ProductImage
-													src={placeholderSrc}
-													fallbackSrc={primarySrc || fallbackSrc}
-													alt={`${product.productName} preview`}
-													loading='lazy'
-													decoding='async'
-													sizes='(max-width: 1200px) 360px, 420px'
-													widths={[420, 640, 800]}
-												/>
-											)}
-											{loadingPreview && (
-												<CardPreviewBadge>
-													<CardPreviewBadgeSpinner />
-													<span>Generating live preview...</span>
-												</CardPreviewBadge>
-											)}
-										</HoverPreviewImageWrap>
-										<HoverPreviewLabel>
-											{readyPreview
-												? "Personalized preview"
-												: "Generating personalized preview..."}
-										</HoverPreviewLabel>
+										{hasStoredDefaultHoverImages ? (
+											<>
+												<HoverPreviewGallery>
+													{hoverGallerySources.map((imageSrc, index) => (
+														<HoverPreviewGalleryItem
+															key={`${product._id}-default-hover-${index}`}
+														>
+															<DirectPreviewImage
+																src={imageSrc}
+																alt={`${product.productName} default example ${
+																	index + 1
+																}`}
+																loading='lazy'
+																decoding='async'
+																referrerPolicy='no-referrer'
+																onError={(event) =>
+																	handleDirectPreviewImageError(
+																		event,
+																		placeholderSrc || primarySrc || fallbackSrc
+																	)
+																}
+															/>
+														</HoverPreviewGalleryItem>
+													))}
+												</HoverPreviewGallery>
+												<HoverPreviewLabel>Default design examples</HoverPreviewLabel>
+											</>
+										) : (
+											<>
+												<HoverPreviewImageWrap>
+													{readyPreview ? (
+														<DirectPreviewImage
+															src={hoverPreviewSrc}
+															alt={`${product.productName} preview`}
+															loading='lazy'
+															decoding='async'
+															referrerPolicy='no-referrer'
+															onError={(event) =>
+																handleDirectPreviewImageError(
+																	event,
+																	hoverFallbackSrc || placeholderSrc || primarySrc
+																)
+															}
+														/>
+													) : (
+														<ProductImage
+															src={placeholderSrc}
+															fallbackSrc={primarySrc || fallbackSrc}
+															alt={`${product.productName} preview`}
+															loading='lazy'
+															decoding='async'
+															sizes='(max-width: 1200px) 360px, 420px'
+															widths={[420, 640, 800]}
+														/>
+													)}
+													{loadingPreview && (
+														<CardPreviewBadge>
+															<CardPreviewBadgeSpinner />
+															<span>Generating live preview...</span>
+														</CardPreviewBadge>
+													)}
+												</HoverPreviewImageWrap>
+												<HoverPreviewLabel>
+													{readyPreview
+														? "Personalized preview"
+														: "Generating personalized preview..."}
+												</HoverPreviewLabel>
+											</>
+										)}
 									</HoverPreviewContent>
 								}
 							>
@@ -1222,7 +1264,23 @@ const CardPreviewBadgeSpinner = styled.span`
 `;
 
 const HoverPreviewContent = styled.div`
-	width: min(420px, 74vw);
+	width: min(760px, 92vw);
+`;
+
+const HoverPreviewGallery = styled.div`
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+	gap: 10px;
+`;
+
+const HoverPreviewGalleryItem = styled.div`
+	position: relative;
+	width: 100%;
+	aspect-ratio: 1 / 1;
+	border-radius: 10px;
+	overflow: hidden;
+	border: 1px solid #efded0;
+	background: linear-gradient(180deg, #faf7f3 0%, #f3ece3 100%);
 `;
 
 const HoverPreviewImageWrap = styled.div`

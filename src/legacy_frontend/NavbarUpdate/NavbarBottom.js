@@ -7,30 +7,71 @@ import { useCartContext } from "../cart_context";
 
 const NavbarBottom = () => {
 	const [clickedLink, setClickedLink] = useState("");
-	const [isSticky, setIsSticky] = useState(false);
+	const [isPinned, setIsPinned] = useState(false);
+	const [isScrolledStyle, setIsScrolledStyle] = useState(false);
+	const [navHeight, setNavHeight] = useState(58);
 	const rafRef = useRef(null);
-	const lastStickyStateRef = useRef(false);
+	const navRef = useRef(null);
+	const triggerOffsetRef = useRef(Number.POSITIVE_INFINITY);
+	const lastPinnedRef = useRef(false);
+	const lastScrolledStyleRef = useRef(false);
 	const location = useLocation();
 	const { openSidebar2, total_items } = useCartContext();
 
-	// Sticky style logic (position is CSS sticky; JS only controls visual state).
+	// Deterministic sticky behavior with hysteresis to avoid flicker.
 	useEffect(() => {
+		const measure = () => {
+			const navElement = navRef.current;
+			if (!navElement) return;
+			const measuredHeight = Number(navElement.offsetHeight || 0);
+			if (measuredHeight > 0) setNavHeight(measuredHeight);
+			if (!lastPinnedRef.current) {
+				const docTop =
+					Number(navElement.getBoundingClientRect()?.top || 0) + window.scrollY;
+				if (Number.isFinite(docTop)) {
+					triggerOffsetRef.current = Math.max(0, docTop);
+				}
+			}
+		};
+
 		const handleScroll = () => {
 			if (rafRef.current) return;
 			rafRef.current = window.requestAnimationFrame(() => {
-				const nextStickyState = window.scrollY > 8;
-				if (lastStickyStateRef.current !== nextStickyState) {
-					lastStickyStateRef.current = nextStickyState;
-					setIsSticky(nextStickyState);
+				const scrollY = Number(window.scrollY || window.pageYOffset || 0);
+				const trigger = Number.isFinite(triggerOffsetRef.current)
+					? triggerOffsetRef.current
+					: 0;
+				const currentlyPinned = lastPinnedRef.current;
+				const nextPinned = currentlyPinned
+					? scrollY >= Math.max(0, trigger - 10)
+					: scrollY >= Math.max(0, trigger - 1);
+				const nextScrolledStyle = scrollY > 120;
+
+				if (currentlyPinned !== nextPinned) {
+					lastPinnedRef.current = nextPinned;
+					setIsPinned(nextPinned);
+				}
+
+				if (lastScrolledStyleRef.current !== nextScrolledStyle) {
+					lastScrolledStyleRef.current = nextScrolledStyle;
+					setIsScrolledStyle(nextScrolledStyle);
 				}
 				rafRef.current = null;
 			});
 		};
 
+		const handleResize = () => {
+			measure();
+			handleScroll();
+		};
+
+		measure();
 		handleScroll();
 		window.addEventListener("scroll", handleScroll, { passive: true });
+		window.addEventListener("resize", handleResize, { passive: true });
 		return () => {
 			window.removeEventListener("scroll", handleScroll);
+			window.removeEventListener("resize", handleResize);
 			if (rafRef.current) {
 				window.cancelAnimationFrame(rafRef.current);
 				rafRef.current = null;
@@ -62,12 +103,17 @@ const NavbarBottom = () => {
 
 	return (
 		<>
-			<NavbarBottomWrapper $isSticky={isSticky}>
+			{isPinned ? <NavbarBottomSpacer $height={navHeight} /> : null}
+			<NavbarBottomWrapper
+				ref={navRef}
+				$isPinned={isPinned}
+				$isScrolledStyle={isScrolledStyle}
+			>
 				<NavLinks
 					onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
 				>
 					<StyledNavLink
-						$isSticky={isSticky}
+						$isSticky={isScrolledStyle}
 						to='/'
 						onClick={() => handleNavLinkClick("home")}
 						className={clickedLink === "home" ? "active" : ""}
@@ -75,7 +121,7 @@ const NavbarBottom = () => {
 						Home
 					</StyledNavLink>
 					<StyledNavLink
-						$isSticky={isSticky}
+						$isSticky={isScrolledStyle}
 						to='/our-products'
 						onClick={() => handleNavLinkClick("products")}
 						className={clickedLink === "products" ? "active" : ""}
@@ -83,7 +129,7 @@ const NavbarBottom = () => {
 						Products
 					</StyledNavLink>
 					<StyledNavLink
-						$isSticky={isSticky}
+						$isSticky={isScrolledStyle}
 						to='/custom-gifts'
 						onClick={() => handleNavLinkClick("customgifts")}
 						className={clickedLink === "customgifts" ? "active" : ""}
@@ -91,7 +137,7 @@ const NavbarBottom = () => {
 						Print on Demand
 					</StyledNavLink>
 					<StyledNavLink
-						$isSticky={isSticky}
+						$isSticky={isScrolledStyle}
 						to='/about'
 						onClick={() => handleNavLinkClick("about")}
 						className={clickedLink === "about" ? "active" : ""}
@@ -99,7 +145,7 @@ const NavbarBottom = () => {
 						About
 					</StyledNavLink>
 					<StyledNavLink
-						$isSticky={isSticky}
+						$isSticky={isScrolledStyle}
 						to='/contact'
 						onClick={() => handleNavLinkClick("contact")}
 						className={clickedLink === "contact" ? "active" : ""}
@@ -109,7 +155,7 @@ const NavbarBottom = () => {
 				</NavLinks>
 
 				<CartIconWrapper>
-					<CartIcon $isSticky={isSticky} onClick={() => openSidebar2()} />
+					<CartIcon $isSticky={isScrolledStyle} onClick={() => openSidebar2()} />
 					{total_items > 0 && <Badge>{total_items}</Badge>}
 				</CartIconWrapper>
 			</NavbarBottomWrapper>
@@ -128,23 +174,38 @@ const NavbarBottomWrapper = styled.nav`
 	justify-content: space-between;
 	align-items: center;
 	padding: 0.5rem 5rem;
-	position: sticky;
-	top: 0;
+	position: ${(props) => (props.$isPinned ? "fixed" : "relative")};
+	top: ${(props) => (props.$isPinned ? "0" : "auto")};
+	left: ${(props) => (props.$isPinned ? "0" : "auto")};
+	right: ${(props) => (props.$isPinned ? "0" : "auto")};
+	width: 100%;
 	z-index: 1150;
 	background-color: ${(props) =>
-		props.$isSticky ? "rgba(62, 62, 62, 0.94)" : "var(--accent-color-2-dark)"};
+		props.$isScrolledStyle
+			? "rgba(62, 62, 62, 0.94)"
+			: "var(--accent-color-2-dark)"};
 	color: var(--text-color-secondary);
 	box-shadow: ${(props) =>
-		props.$isSticky
+		props.$isScrolledStyle
 			? "0 8px 24px rgba(0, 0, 0, 0.18)"
 			: "0 2px 8px rgba(0, 0, 0, 0.08)"};
 	transition:
+		top 180ms ease,
 		background-color 220ms ease,
 		box-shadow 220ms ease;
 	will-change: background-color, box-shadow;
-	backdrop-filter: saturate(150%) blur(8px);
-	-webkit-backdrop-filter: saturate(150%) blur(8px);
+	backdrop-filter: saturate(145%) blur(6px);
+	-webkit-backdrop-filter: saturate(145%) blur(6px);
 	transform: translateZ(0);
+
+	@media (max-width: 768px) {
+		display: none;
+	}
+`;
+
+const NavbarBottomSpacer = styled.div`
+	display: block;
+	height: ${(props) => `${Math.max(0, Number(props.$height || 0))}px`};
 
 	@media (max-width: 768px) {
 		display: none;

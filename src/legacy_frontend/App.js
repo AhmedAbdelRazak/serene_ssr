@@ -264,7 +264,6 @@ const AppContent = () => {
 			window.removeEventListener("pointerdown", loadToastStyles);
 			window.removeEventListener("keydown", loadToastStyles);
 			window.removeEventListener("touchstart", loadToastStyles);
-			window.removeEventListener("scroll", loadToastStyles);
 		};
 		window.addEventListener("pointerdown", loadToastStyles, {
 			once: true,
@@ -278,17 +277,12 @@ const AppContent = () => {
 			once: true,
 			passive: true,
 		});
-		window.addEventListener("scroll", loadToastStyles, {
-			once: true,
-			passive: true,
-		});
 		const timeoutId = window.setTimeout(loadToastStyles, 20000);
 		return () => {
 			window.clearTimeout(timeoutId);
 			window.removeEventListener("pointerdown", loadToastStyles);
 			window.removeEventListener("keydown", loadToastStyles);
 			window.removeEventListener("touchstart", loadToastStyles);
-			window.removeEventListener("scroll", loadToastStyles);
 		};
 	}, []);
 
@@ -305,7 +299,6 @@ const AppContent = () => {
 			window.removeEventListener("pointerdown", enableChat);
 			window.removeEventListener("keydown", enableChat);
 			window.removeEventListener("touchstart", enableChat);
-			window.removeEventListener("scroll", enableChat);
 		};
 
 		window.addEventListener("pointerdown", enableChat, {
@@ -320,10 +313,6 @@ const AppContent = () => {
 			once: true,
 			passive: true,
 		});
-		window.addEventListener("scroll", enableChat, {
-			once: true,
-			passive: true,
-		});
 
 		const timeoutId = window.setTimeout(enableChat, 15000);
 
@@ -332,7 +321,6 @@ const AppContent = () => {
 			window.removeEventListener("pointerdown", enableChat);
 			window.removeEventListener("keydown", enableChat);
 			window.removeEventListener("touchstart", enableChat);
-			window.removeEventListener("scroll", enableChat);
 		};
 	}, [shouldRenderChat]);
 
@@ -362,7 +350,6 @@ const AppContent = () => {
 			window.removeEventListener("pointerdown", loadOnce);
 			window.removeEventListener("keydown", loadOnce);
 			window.removeEventListener("touchstart", loadOnce);
-			window.removeEventListener("scroll", loadOnce);
 		};
 
 		window.addEventListener("pointerdown", loadOnce, {
@@ -377,10 +364,6 @@ const AppContent = () => {
 			once: true,
 			passive: true,
 		});
-		window.addEventListener("scroll", loadOnce, {
-			once: true,
-			passive: true,
-		});
 
 		const timeoutId = window.setTimeout(loadOnce, 20000);
 		return () => {
@@ -388,7 +371,6 @@ const AppContent = () => {
 			window.removeEventListener("pointerdown", loadOnce);
 			window.removeEventListener("keydown", loadOnce);
 			window.removeEventListener("touchstart", loadOnce);
-			window.removeEventListener("scroll", loadOnce);
 		};
 	}, [location.pathname]);
 

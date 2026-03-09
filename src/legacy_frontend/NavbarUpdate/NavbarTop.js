@@ -1,4 +1,12 @@
-import React, { useState, useCallback, useMemo, lazy, memo } from "react";
+import React, {
+	useState,
+	useCallback,
+	useMemo,
+	lazy,
+	memo,
+	useEffect,
+	useRef,
+} from "react";
 import styled from "styled-components";
 
 import { FaBars, FaUserPlus } from "react-icons/fa";
@@ -30,6 +38,8 @@ const NavbarTop = memo(() => {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [isCartOpen, setIsCartOpen] = useState(false);
 	const [activeLink, setActiveLink] = useState("");
+	const [mobileNavHeight, setMobileNavHeight] = useState(66);
+	const navRef = useRef(null);
 
 	const { user } = isAuthenticated();
 	const { openSidebar2, total_items, websiteSetup } = useCartContext();
@@ -72,11 +82,26 @@ const NavbarTop = memo(() => {
 		);
 	}
 
+	// Keep a stable spacer for fixed mobile top-nav.
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const measure = () => {
+			const nextHeight = Number(navRef.current?.offsetHeight || 0);
+			if (nextHeight > 0) setMobileNavHeight(nextHeight);
+		};
+		measure();
+		window.addEventListener("resize", measure, { passive: true });
+		return () => {
+			window.removeEventListener("resize", measure);
+		};
+	}, []);
+
 	return (
 		<>
 			{isSidebarOpen && <Overlay onClick={() => setIsSidebarOpen(false)} />}
+			<MobileTopSpacer $height={mobileNavHeight} />
 
-			<NavbarTopWrapper>
+			<NavbarTopWrapper ref={navRef} id='serene-navbar-top'>
 				{/* Hamburger menu icon (mobile) */}
 				<MenuIcon onClick={() => setIsSidebarOpen(true)} />
 
@@ -249,15 +274,16 @@ const NavbarTopWrapper = styled.nav`
 	will-change: background-color, box-shadow;
 	transform: translateZ(0);
 
-	@media (max-width: 600px) {
-		position: sticky;
-		top: 0;
-		z-index: 1250;
-		background-color: rgba(255, 255, 255, 0.95);
-		backdrop-filter: saturate(145%) blur(8px);
-		-webkit-backdrop-filter: saturate(145%) blur(8px);
-	}
 	@media (max-width: 768px) {
+		position: fixed;
+		top: 0;
+		left: 0;
+		right: 0;
+		width: 100%;
+		z-index: 1250;
+		background-color: rgba(255, 255, 255, 0.98);
+		backdrop-filter: saturate(140%) blur(8px);
+		-webkit-backdrop-filter: saturate(140%) blur(8px);
 		padding: 0.5rem 0.5rem;
 		.nav-links {
 			display: none;
@@ -274,6 +300,15 @@ const NavbarTopWrapper = styled.nav`
 		.logo {
 			flex-grow: 0;
 		}
+	}
+`;
+
+const MobileTopSpacer = styled.div`
+	display: none;
+
+	@media (max-width: 768px) {
+		display: block;
+		height: ${(props) => `${Math.max(0, Number(props.$height || 0))}px`};
 	}
 `;
 
