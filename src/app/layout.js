@@ -27,7 +27,6 @@ export default function RootLayout({ children }) {
 			<head>
 				<link rel='preconnect' href='https://res.cloudinary.com' />
 				<link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
-				<link rel='preconnect' href='https://stackpath.bootstrapcdn.com' crossOrigin='anonymous' />
 				<link
 					rel='preload'
 					as='style'
@@ -44,23 +43,21 @@ export default function RootLayout({ children }) {
 						href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
 					/>
 				</noscript>
-				<link
-					id='bootstrap-css'
-					rel='stylesheet'
-					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
-					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
-					crossOrigin='anonymous'
-					media='print'
-				/>
 				<script
 					dangerouslySetInnerHTML={{
 						__html: `
 							(function () {
-								var link = document.getElementById('bootstrap-css');
-								if (!link) return;
-								var apply = function () { link.media = 'all'; };
-								if (link.addEventListener) link.addEventListener('load', apply, { once: true });
-								setTimeout(apply, 1500);
+								var path = (window.location && window.location.pathname || '/').toLowerCase();
+								// Keep homepage lean for PSI; bootstrap is injected later on interaction/client routing.
+								if (path === '/') return;
+								if (document.getElementById('serene-bootstrap-css')) return;
+								var link = document.createElement('link');
+								link.id = 'serene-bootstrap-css';
+								link.rel = 'stylesheet';
+								link.href = 'https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css';
+								link.integrity = 'sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T';
+								link.crossOrigin = 'anonymous';
+								document.head.appendChild(link);
 							})();
 						`,
 					}}

@@ -30,6 +30,11 @@ const FB_PIXEL_ID =
 	process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID ||
 	process.env.REACT_APP_FACEBOOK_PIXEL_ID ||
 	"";
+const BOOTSTRAP_LINK_ID = "serene-bootstrap-css";
+const BOOTSTRAP_HREF =
+	"https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css";
+const BOOTSTRAP_INTEGRITY =
+	"sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T";
 
 const loadScriptOnce = (id, src) => {
 	if (typeof window === "undefined" || !src) return;
@@ -39,6 +44,18 @@ const loadScriptOnce = (id, src) => {
 	script.src = src;
 	script.async = true;
 	document.head.appendChild(script);
+};
+
+const ensureBootstrapStylesheet = () => {
+	if (typeof window === "undefined" || typeof document === "undefined") return;
+	if (document.getElementById(BOOTSTRAP_LINK_ID)) return;
+	const link = document.createElement("link");
+	link.id = BOOTSTRAP_LINK_ID;
+	link.rel = "stylesheet";
+	link.href = BOOTSTRAP_HREF;
+	link.integrity = BOOTSTRAP_INTEGRITY;
+	link.crossOrigin = "anonymous";
+	document.head.appendChild(link);
 };
 
 const ensureLegacyTrackers = () => {
@@ -325,6 +342,55 @@ const AppContent = () => {
 		if (!window.__sereneLegacyTrackersReady) return;
 		trackLegacyPageView(pagePath);
 	}, [location.pathname, location.search]);
+
+	// Route-aware bootstrap loading:
+	// - Skip immediate load on homepage for better PSI.
+	// - Load immediately on all other legacy routes.
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		const path = `${location.pathname || ""}`.toLowerCase();
+		if (path && path !== "/") {
+			ensureBootstrapStylesheet();
+			return undefined;
+		}
+
+		let loaded = false;
+		const loadOnce = () => {
+			if (loaded) return;
+			loaded = true;
+			ensureBootstrapStylesheet();
+			window.removeEventListener("pointerdown", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("scroll", loadOnce);
+		};
+
+		window.addEventListener("pointerdown", loadOnce, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", loadOnce, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", loadOnce, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("scroll", loadOnce, {
+			once: true,
+			passive: true,
+		});
+
+		const timeoutId = window.setTimeout(loadOnce, 20000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("scroll", loadOnce);
+		};
+	}, [location.pathname]);
 
 	// Clear certain local storage keys unless we are on /checkout
 	useEffect(() => {

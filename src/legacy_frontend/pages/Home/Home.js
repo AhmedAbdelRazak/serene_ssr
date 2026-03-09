@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
@@ -6,9 +6,6 @@ import { useCartContext } from "../../cart_context";
 // Components
 import ZCategories from "./ZCategories";
 import Hero from "./Hero";
-import ZFeaturedProducts from "./ZFeaturedProducts";
-import ZNewArrival from "./ZNewArrival";
-import ZCustomDesigns from "./ZCustomDesigns";
 import {
 	gettingCategoriesAndSubcategories,
 	gettingSpecificProducts,
@@ -18,6 +15,10 @@ import {
 	getCloudinaryOptimizedUrl,
 	resolveImageUrl,
 } from "../../utils/image";
+
+const ZFeaturedProducts = lazy(() => import("./ZFeaturedProducts"));
+const ZCustomDesigns = lazy(() => import("./ZCustomDesigns"));
+const ZNewArrival = lazy(() => import("./ZNewArrival"));
 
 /* Keyframes for the fade-up animation */
 const fadeUp = keyframes`
@@ -312,7 +313,13 @@ const Home = () => {
 					setSubcategories(categoriesData.subcategories || []);
 				}
 
-				const featuredData = await gettingSpecificProducts(1, 0, 0, 0, 0, 6);
+				const [featuredData, newArrivalData, customDesignData] =
+					await Promise.all([
+						gettingSpecificProducts(1, 0, 0, 0, 0, 6),
+						gettingSpecificProducts(0, 1, 0, 0, 0, 6),
+						gettingSpecificProducts(0, 0, 1, 0, 0, 6),
+					]);
+
 				if (featuredData?.error) {
 					console.log(featuredData.error);
 				} else {
@@ -322,14 +329,12 @@ const Home = () => {
 					setFeaturedProducts(sortedFeatured);
 				}
 
-				const newArrivalData = await gettingSpecificProducts(0, 1, 0, 0, 0, 6);
 				if (newArrivalData?.error) {
 					console.log(newArrivalData.error);
 				} else {
 					setNewArrivalProducts(newArrivalData);
 				}
 
-				const customDesignData = await gettingSpecificProducts(0, 0, 1, 0, 0, 6);
 				if (customDesignData?.error) {
 					console.log(customDesignData.error);
 				} else {
@@ -380,27 +385,33 @@ const Home = () => {
 
 			{/* Featured Products */}
 			{featuredProducts.length > 0 ? (
-				<FadeUpDiv>
-					<ZFeaturedProducts featuredProducts={featuredProducts} />
-				</FadeUpDiv>
+				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+					<FadeUpDiv>
+						<ZFeaturedProducts featuredProducts={featuredProducts} />
+					</FadeUpDiv>
+				</Suspense>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* Custom Designs */}
 			{customDesignProducts.length > 0 ? (
-				<FadeUpDiv>
-					<ZCustomDesigns customDesignProducts={customDesignProducts} />
-				</FadeUpDiv>
+				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+					<FadeUpDiv>
+						<ZCustomDesigns customDesignProducts={customDesignProducts} />
+					</FadeUpDiv>
+				</Suspense>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* New Arrivals */}
 			{newArrivalProducts.length > 0 ? (
-				<FadeUpDiv>
-					<ZNewArrival newArrivalProducts={newArrivalProducts} />
-				</FadeUpDiv>
+				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+					<FadeUpDiv>
+						<ZNewArrival newArrivalProducts={newArrivalProducts} />
+					</FadeUpDiv>
+				</Suspense>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}

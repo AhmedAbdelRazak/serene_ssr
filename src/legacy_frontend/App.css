@@ -256,3 +256,9 @@ html {
 g > path {
 	z-index: -1 !important;
 }
+
+/* Bootstrap utility fallback used on homepage when bootstrap CSS is intentionally deferred. */
+.mx-1 {
+	margin-left: 0.25rem !important;
+	margin-right: 0.25rem !important;
+}
