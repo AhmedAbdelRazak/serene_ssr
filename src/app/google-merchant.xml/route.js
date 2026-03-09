@@ -13,6 +13,11 @@ import { absoluteXmlUrl, escapeXml, xmlResponse } from "@/lib/xml";
 export const revalidate = 1800;
 export const dynamic = "force-dynamic";
 
+const FEED_CURRENCY = "USD";
+const FEED_SHIPPING_COUNTRY = "US";
+const FEED_SHIPPING_SERVICE = "Standard";
+const DEFAULT_SHIPPING_PRICE_USD = 0;
+
 function inferGoogleProductCategory(product = {}) {
 	const text = `${product?.category?.categoryName || product?.productName || ""}`
 		.toLowerCase()
@@ -37,13 +42,6 @@ function inferGoogleProductCategory(product = {}) {
 		return "Home & Garden > Decor > Magnets";
 	}
 	return "Home & Garden > Decor";
-}
-
-function inferCurrency(product = {}) {
-	const unit = `${product?.price_unit || ""}`.toUpperCase();
-	if (unit === "LE" || unit === "EGP") return "EGP";
-	if (unit === "USD") return "USD";
-	return "USD";
 }
 
 function toSafeQueryValue(value = "") {
@@ -104,6 +102,44 @@ function buildFeedImageSet(product = {}, attr = null) {
 	return images;
 }
 
+function toNonNegativeNumber(value, fallback = 0) {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed < 0) {
+		return Number(fallback) >= 0 ? Number(fallback) : 0;
+	}
+	return parsed;
+}
+
+function resolveShippingPriceUsd(product = {}, attr = null) {
+	const candidates = [
+		attr?.shippingPrice,
+		attr?.shipping_price,
+		product?.shippingPrice,
+		product?.shipping_price,
+		product?.shippingFees,
+	];
+	for (const candidate of candidates) {
+		const parsed = Number(candidate);
+		if (Number.isFinite(parsed) && parsed >= 0) {
+			return parsed;
+		}
+	}
+	return DEFAULT_SHIPPING_PRICE_USD;
+}
+
+function buildShippingXml(product = {}, attr = null) {
+	if (product?.shipping === false) return "";
+	const shippingPrice = toNonNegativeNumber(
+		resolveShippingPriceUsd(product, attr),
+		DEFAULT_SHIPPING_PRICE_USD
+	);
+	return `<g:shipping>
+		<g:country>${escapeXml(FEED_SHIPPING_COUNTRY)}</g:country>
+		<g:service>${escapeXml(FEED_SHIPPING_SERVICE)}</g:service>
+		<g:price>${escapeXml(formatPrice(shippingPrice, FEED_CURRENCY))}</g:price>
+	</g:shipping>`;
+}
+
 function buildVariantLink(baseLink = "", product = {}, attr = {}) {
 	const params = new URLSearchParams();
 	const safeSize = toSafeQueryValue(attr?.size);
@@ -147,7 +183,6 @@ export async function GET(request) {
 			const name = getProductDisplayName(product);
 			const description = getProductDescription(product);
 			const link = toAbsoluteUrl(buildProductPath(product));
-			const currency = inferCurrency(product);
 			const brand = product?.brandName || "Serene Jannat";
 			const categoryName = product?.category?.categoryName || "Gifts";
 			const googleCategory = inferGoogleProductCategory(product);
@@ -167,6 +202,7 @@ export async function GET(request) {
 					Number(product?.quantity || 0) > 0 ? "in stock" : "out of stock";
 				const imageSet = buildFeedImageSet(product, null);
 				const primaryImage = imageSet[0] || fallbackImage;
+				const shippingXml = buildShippingXml(product, null);
 				const additionalImageLinks = imageSet
 					.slice(1, 11)
 					.map(
@@ -184,14 +220,15 @@ export async function GET(request) {
 	${additionalImageLinks}
 	<g:availability>${escapeXml(inStock)}</g:availability>
 	<g:condition>new</g:condition>
-	<g:price>${escapeXml(formatPrice(originalPrice, currency))}</g:price>
+	<g:price>${escapeXml(formatPrice(originalPrice, FEED_CURRENCY))}</g:price>
 	${
 		originalPrice > effectivePrice
 			? `<g:sale_price>${escapeXml(
-					formatPrice(effectivePrice, currency)
+					formatPrice(effectivePrice, FEED_CURRENCY)
 				)}</g:sale_price>`
 			: ""
 	}
+	${shippingXml}
 	<g:brand>${escapeXml(brand)}</g:brand>
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
@@ -205,6 +242,7 @@ export async function GET(request) {
 			return attributes.map((attr, index) => {
 				const imageSet = buildFeedImageSet(product, attr);
 				const variantImage = imageSet[0] || fallbackImage;
+				const shippingXml = buildShippingXml(product, attr);
 				const additionalImageLinks = imageSet
 					.slice(1, 11)
 					.map(
@@ -250,15 +288,16 @@ export async function GET(request) {
 	<g:availability>${escapeXml(variantInStock)}</g:availability>
 	<g:condition>new</g:condition>
 	<g:price>${escapeXml(
-		formatPrice(originalVariantPrice || effectiveVariantPrice, currency)
+		formatPrice(originalVariantPrice || effectiveVariantPrice, FEED_CURRENCY)
 	)}</g:price>
 	${
 		originalVariantPrice > effectiveVariantPrice
 			? `<g:sale_price>${escapeXml(
-					formatPrice(effectiveVariantPrice, currency)
+					formatPrice(effectiveVariantPrice, FEED_CURRENCY)
 				)}</g:sale_price>`
 			: ""
 	}
+	${shippingXml}
 	<g:brand>${escapeXml(brand)}</g:brand>
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>

@@ -50,7 +50,10 @@ const buildCloudinaryUrl = (url, width, format) => {
 	};
 
 	setOrAppendToken(`w_${width}`, (token) => token.startsWith("w_"));
-	setOrAppendToken("q_auto", (token) => token.startsWith("q_"));
+	// Preserve any existing quality directive; otherwise prefer eco mode.
+	if (!tokens.some((token) => token.startsWith("q_"))) {
+		tokens.push("q_auto:eco");
+	}
 
 	const formatIndex = tokens.findIndex((token) => token.startsWith("f_"));
 	if (format === "webp") {
@@ -73,7 +76,7 @@ const buildCloudinaryUrl = (url, width, format) => {
 const buildFetchUrl = (url, width, format) => {
 	const encodedUrl = encodeURIComponent(url);
 	const formatToken = format === "webp" ? "f_webp" : "f_auto";
-	return `${CLOUDINARY_FETCH_BASE}/${formatToken},q_auto,w_${width}/${encodedUrl}`;
+	return `${CLOUDINARY_FETCH_BASE}/${formatToken},q_auto:eco,w_${width}/${encodedUrl}`;
 };
 
 const buildOptimizedUrl = (url, width, format, { useFetch = true } = {}) => {

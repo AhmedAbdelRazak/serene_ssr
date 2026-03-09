@@ -1,13 +1,10 @@
-import React, { useEffect, Suspense, lazy } from "react";
+import React, { useEffect, Suspense, lazy, useState } from "react";
 import {
 	BrowserRouter as Router,
 	Switch,
 	Route,
 	useLocation,
 } from "react-router-dom";
-import { ToastContainer } from "react-toastify";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
 
 import NavbarTop from "./NavbarUpdate/NavbarTop";
 import NavbarBottom from "./NavbarUpdate/NavbarBottom";
@@ -21,7 +18,91 @@ import Home from "./pages/Home/Home";
 // import AnimationWalkingGreeting from "./pages/MyAnimationComponents/AnimationWalkingGreeting";
 // import AnimationProductPresentation from "./pages/MyAnimationComponents/AnimationProductPresentation";
 
-import ModalApp from "./ModalApp";
+const ToastContainer = lazy(() =>
+	import("react-toastify").then((mod) => ({ default: mod.ToastContainer }))
+);
+
+const GA_MEASUREMENT_ID =
+	process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_MEASUREMENTID ||
+	process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID ||
+	"";
+const FB_PIXEL_ID =
+	process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID ||
+	process.env.REACT_APP_FACEBOOK_PIXEL_ID ||
+	"";
+
+const loadScriptOnce = (id, src) => {
+	if (typeof window === "undefined" || !src) return;
+	if (document.getElementById(id)) return;
+	const script = document.createElement("script");
+	script.id = id;
+	script.src = src;
+	script.async = true;
+	document.head.appendChild(script);
+};
+
+const ensureLegacyTrackers = () => {
+	if (typeof window === "undefined") return;
+	if (window.__sereneLegacyTrackersReady) return;
+
+	if (GA_MEASUREMENT_ID) {
+		window.dataLayer = window.dataLayer || [];
+		window.gtag =
+			window.gtag ||
+			function gtag() {
+				window.dataLayer.push(arguments);
+			};
+		window.gtag("js", new Date());
+		window.gtag("config", GA_MEASUREMENT_ID, { send_page_view: false });
+		loadScriptOnce(
+			"serene-ga-script",
+			`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`
+		);
+	}
+
+	if (FB_PIXEL_ID) {
+		// Keep fbq behavior compatible with Pixel queueing.
+		(function initFacebookPixel(f, b, e, v, n, t, s) {
+			if (f.fbq) return;
+			n = f.fbq = function fbqShim() {
+				if (n.callMethod) {
+					n.callMethod.apply(n, arguments);
+				} else {
+					n.queue.push(arguments);
+				}
+			};
+			if (!f._fbq) f._fbq = n;
+			n.push = n;
+			n.loaded = true;
+			n.version = "2.0";
+			n.queue = [];
+			t = b.createElement(e);
+			t.async = true;
+			t.src = v;
+			t.id = "serene-fb-pixel-script";
+			s = b.getElementsByTagName(e)[0];
+			s.parentNode.insertBefore(t, s);
+		})(
+			window,
+			document,
+			"script",
+			"https://connect.facebook.net/en_US/fbevents.js"
+		);
+		window.fbq("init", FB_PIXEL_ID);
+	}
+
+	window.__sereneLegacyTrackersReady = true;
+};
+
+const trackLegacyPageView = (pagePath = "/") => {
+	if (typeof window === "undefined") return;
+	if (GA_MEASUREMENT_ID && typeof window.gtag === "function") {
+		window.gtag("event", "page_view", { page_path: pagePath });
+	}
+	if (FB_PIXEL_ID && typeof window.fbq === "function") {
+		window.fbq("track", "PageView");
+	}
+};
 
 const SellerDashboardMain = lazy(
 	() => import("./Seller/SellerDashboard/SellerDashboardMain"),
@@ -113,6 +194,8 @@ const App = () => {
 
 const AppContent = () => {
 	const location = useLocation(); // get current route info
+	const [shouldRenderToast, setShouldRenderToast] = useState(false);
+	const [shouldRenderChat, setShouldRenderChat] = useState(false);
 
 	// Determine if path includes 'admin' or 'seller'
 	const shouldHideLayout =
@@ -120,16 +203,36 @@ const AppContent = () => {
 
 	// Initialize trackers once for legacy routes
 	useEffect(() => {
-		try {
-			if (process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID) {
-				ReactGA.initialize(process.env.REACT_APP_GOOGLE_ANALYTICS_MEASUREMENTID);
-			}
-			if (process.env.REACT_APP_FACEBOOK_PIXEL_ID) {
-				ReactPixel.init(process.env.REACT_APP_FACEBOOK_PIXEL_ID);
-			}
-		} catch {
-			// no-op
-		}
+		if (typeof window === "undefined") return undefined;
+		let initialized = false;
+		const initTrackers = () => {
+			if (initialized) return;
+			initialized = true;
+			ensureLegacyTrackers();
+			const pagePath = `${window.location.pathname || "/"}${window.location.search || ""}`;
+			trackLegacyPageView(pagePath);
+		};
+
+		window.addEventListener("pointerdown", initTrackers, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", initTrackers, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", initTrackers, {
+			once: true,
+			passive: true,
+		});
+
+		const timeoutId = window.setTimeout(initTrackers, 8000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", initTrackers);
+			window.removeEventListener("keydown", initTrackers);
+			window.removeEventListener("touchstart", initTrackers);
+		};
 	}, []);
 
 	// Defer Toastify CSS so it does not block initial paint on the homepage.
@@ -140,6 +243,7 @@ const AppContent = () => {
 			if (loaded) return;
 			loaded = true;
 			import("react-toastify/dist/ReactToastify.css").catch(() => {});
+			setShouldRenderToast(true);
 			window.removeEventListener("pointerdown", loadToastStyles);
 			window.removeEventListener("keydown", loadToastStyles);
 			window.removeEventListener("touchstart", loadToastStyles);
@@ -161,7 +265,7 @@ const AppContent = () => {
 			once: true,
 			passive: true,
 		});
-		const timeoutId = window.setTimeout(loadToastStyles, 60000);
+		const timeoutId = window.setTimeout(loadToastStyles, 20000);
 		return () => {
 			window.clearTimeout(timeoutId);
 			window.removeEventListener("pointerdown", loadToastStyles);
@@ -171,15 +275,55 @@ const AppContent = () => {
 		};
 	}, []);
 
+	// Delay chat widget mount so it does not contribute to initial JS execution.
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		if (shouldRenderChat) return undefined;
+
+		let enabled = false;
+		const enableChat = () => {
+			if (enabled) return;
+			enabled = true;
+			setShouldRenderChat(true);
+			window.removeEventListener("pointerdown", enableChat);
+			window.removeEventListener("keydown", enableChat);
+			window.removeEventListener("touchstart", enableChat);
+			window.removeEventListener("scroll", enableChat);
+		};
+
+		window.addEventListener("pointerdown", enableChat, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", enableChat, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", enableChat, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("scroll", enableChat, {
+			once: true,
+			passive: true,
+		});
+
+		const timeoutId = window.setTimeout(enableChat, 15000);
+
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", enableChat);
+			window.removeEventListener("keydown", enableChat);
+			window.removeEventListener("touchstart", enableChat);
+			window.removeEventListener("scroll", enableChat);
+		};
+	}, [shouldRenderChat]);
+
 	// Track page view on route change
 	useEffect(() => {
 		const pagePath = `${location.pathname || "/"}${location.search || ""}`;
-		try {
-			ReactGA.send({ hitType: "pageview", page: pagePath });
-			ReactPixel.pageView();
-		} catch {
-			// no-op
-		}
+		if (!window.__sereneLegacyTrackersReady) return;
+		trackLegacyPageView(pagePath);
 	}, [location.pathname, location.search]);
 
 	// Clear certain local storage keys unless we are on /checkout
@@ -195,7 +339,11 @@ const AppContent = () => {
 
 	return (
 		<>
-			<ToastContainer className='toast-top-center' position='top-center' />
+			{shouldRenderToast ? (
+				<Suspense fallback={null}>
+					<ToastContainer className='toast-top-center' position='top-center' />
+				</Suspense>
+			) : null}
 			{/* Only show Navbars if NOT admin/seller */}
 			{!shouldHideLayout && (
 				<>
@@ -364,12 +512,10 @@ const AppContent = () => {
 					</Switch>
 
 					{/* Chat & Footer only if NOT admin/seller */}
-					{!shouldHideLayout && <ChatIcon />}
+					{!shouldHideLayout && shouldRenderChat ? <ChatIcon /> : null}
 					{!shouldHideLayout && <Footer />}
 				</Suspense>
 			</main>
-
-			<ModalApp shouldHideLayout={shouldHideLayout} location={location} />
 		</>
 	);
 };

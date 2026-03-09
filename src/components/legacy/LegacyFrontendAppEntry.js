@@ -4,7 +4,11 @@ import dynamic from "next/dynamic";
 
 function LegacyShellFallback() {
 	return (
-		<div style={{ width: "100%", minHeight: "2300px", background: "#f4f4f4" }}>
+		<main
+			role='main'
+			aria-busy='true'
+			style={{ width: "100%", minHeight: "2300px", background: "#f4f4f4" }}
+		>
 			<div style={{ height: 70, background: "#ffffff" }} />
 			<div style={{ height: 60, background: "#5d5b59" }} />
 			<div
@@ -16,7 +20,7 @@ function LegacyShellFallback() {
 					backgroundSize: "400% 100%",
 				}}
 			/>
-		</div>
+		</main>
 	);
 }
 

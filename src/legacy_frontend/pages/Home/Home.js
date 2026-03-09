@@ -241,6 +241,7 @@ const Home = () => {
 	const [customDesignProducts, setCustomDesignProducts] = useState([]);
 	const [loading, setLoading] = useState(false);
 	const [belowFoldReady, setBelowFoldReady] = useState(false);
+	const [belowFoldFetched, setBelowFoldFetched] = useState(false);
 	const belowFoldAnchorRef = useRef(null);
 
 	const { websiteSetup } = useCartContext();
@@ -296,22 +297,10 @@ const Home = () => {
 	}, []);
 
 	useEffect(() => {
-		const fetchData = async () => {
+		const fetchCategories = async () => {
 			try {
-				// Turn on loading
 				setLoading(true);
-
-				const [
-					categoriesData,
-					featuredData,
-					newArrivalData,
-					customDesignData,
-				] = await Promise.all([
-					gettingCategoriesAndSubcategories(),
-					gettingSpecificProducts(1, 0, 0, 0, 0, 6, 0, "", { lite: true }),
-					gettingSpecificProducts(0, 1, 0, 0, 0, 6, 0, "", { lite: true }),
-					gettingSpecificProducts(0, 0, 1, 0, 0, 6, 0, "", { lite: true }),
-				]);
+				const categoriesData = await gettingCategoriesAndSubcategories();
 
 				if (categoriesData?.error) {
 					console.log(categoriesData.error);
@@ -319,37 +308,74 @@ const Home = () => {
 					setCategories(categoriesData.categories || []);
 					setSubcategories(categoriesData.subcategories || []);
 				}
-
-				if (featuredData?.error) {
-					console.log(featuredData.error);
-				} else {
-					const sortedFeatured = featuredData.sort(
-						(a, b) => new Date(b.createdAt) - new Date(a.createdAt)
-					);
-					setFeaturedProducts(sortedFeatured);
-				}
-
-				if (newArrivalData?.error) {
-					console.log(newArrivalData.error);
-				} else {
-					setNewArrivalProducts(newArrivalData);
-				}
-
-				if (customDesignData?.error) {
-					console.log(customDesignData.error);
-				} else {
-					setCustomDesignProducts(customDesignData);
-				}
 			} catch (error) {
-				console.error("Error fetching data in CartContext: ", error);
+				console.error("Error fetching categories in Home: ", error);
 			} finally {
-				// Turn off loading
 				setLoading(false);
 			}
 		};
 
-		fetchData();
+		fetchCategories();
 	}, []);
+
+	useEffect(() => {
+		const shouldFetchBelowFoldData = belowFoldReady && !belowFoldFetched;
+		if (!shouldFetchBelowFoldData) return;
+
+		let isCancelled = false;
+		setBelowFoldFetched(true);
+
+		const fetchBelowFoldData = async () => {
+			try {
+				setLoading(true);
+				const [featuredData, newArrivalData, customDesignData] = await Promise.all([
+					gettingSpecificProducts(1, 0, 0, 0, 0, 6, 0, "", { lite: true }),
+					gettingSpecificProducts(0, 1, 0, 0, 0, 6, 0, "", { lite: true }),
+					gettingSpecificProducts(0, 0, 1, 0, 0, 6, 0, "", { lite: true }),
+				]);
+
+				if (!isCancelled) {
+					if (featuredData?.error) {
+						console.log(featuredData.error);
+					} else {
+						const sortedFeatured = featuredData.sort(
+							(a, b) => new Date(b.createdAt) - new Date(a.createdAt)
+						);
+						setFeaturedProducts(sortedFeatured);
+					}
+
+					if (newArrivalData?.error) {
+						console.log(newArrivalData.error);
+					} else {
+						setNewArrivalProducts(newArrivalData);
+					}
+
+					if (customDesignData?.error) {
+						console.log(customDesignData.error);
+					} else {
+						setCustomDesignProducts(customDesignData);
+					}
+				}
+			} catch (error) {
+				if (!isCancelled) {
+					console.error("Error fetching below-fold products in Home: ", error);
+				}
+			} finally {
+				if (!isCancelled) {
+					setLoading(false);
+				}
+			}
+		};
+
+		fetchBelowFoldData();
+
+		return () => {
+			isCancelled = true;
+		};
+	}, [
+		belowFoldReady,
+		belowFoldFetched,
+	]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
@@ -372,10 +398,20 @@ const Home = () => {
 
 		const onFirstInteraction = () => {
 			enableBelowFold();
+			window.removeEventListener("pointerdown", onFirstInteraction);
+			window.removeEventListener("scroll", onFirstInteraction);
 			window.removeEventListener("touchstart", onFirstInteraction);
 			window.removeEventListener("keydown", onFirstInteraction);
 		};
 
+		window.addEventListener("pointerdown", onFirstInteraction, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("scroll", onFirstInteraction, {
+			passive: true,
+			once: true,
+		});
 		window.addEventListener("touchstart", onFirstInteraction, {
 			passive: true,
 			once: true,
@@ -385,11 +421,15 @@ const Home = () => {
 			once: true,
 		});
 
-		const timeoutId = window.setTimeout(enableBelowFold, 9000);
+		// Keep below-the-fold sections deferred long enough to avoid impacting
+		// initial paint metrics if the user has not interacted yet.
+		const timeoutId = window.setTimeout(enableBelowFold, 25000);
 
 		return () => {
 			if (observer) observer.disconnect();
 			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", onFirstInteraction);
+			window.removeEventListener("scroll", onFirstInteraction);
 			window.removeEventListener("touchstart", onFirstInteraction);
 			window.removeEventListener("keydown", onFirstInteraction);
 		};

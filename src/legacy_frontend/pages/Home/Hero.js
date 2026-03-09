@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Slider from "react-slick";
 import styled from "styled-components";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
@@ -8,6 +8,7 @@ const HERO_IMAGE_WIDTH = 1920;
 const HERO_IMAGE_HEIGHT = 997;
 
 const Hero = ({ websiteSetup }) => {
+	const [autoplayEnabled, setAutoplayEnabled] = useState(false);
 	const banners = websiteSetup?.homeMainBanners || [];
 	const bannerItems = banners.length
 		? banners
@@ -22,16 +23,58 @@ const Hero = ({ websiteSetup }) => {
 				},
 			];
 
-	const settings = {
-		dots: true,
-		infinite: bannerItems.length > 1,
-		speed: 500,
-		slidesToShow: 1,
-		slidesToScroll: 1,
-		autoplay: true,
-		autoplaySpeed: 10000,
-		arrows: true,
-	};
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		let enabled = false;
+		const enableAutoplay = () => {
+			if (enabled) return;
+			enabled = true;
+			setAutoplayEnabled(true);
+			window.removeEventListener("pointerdown", enableAutoplay);
+			window.removeEventListener("keydown", enableAutoplay);
+			window.removeEventListener("touchstart", enableAutoplay);
+			window.removeEventListener("scroll", enableAutoplay);
+		};
+
+		window.addEventListener("pointerdown", enableAutoplay, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", enableAutoplay, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", enableAutoplay, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("scroll", enableAutoplay, {
+			once: true,
+			passive: true,
+		});
+		const timeoutId = window.setTimeout(enableAutoplay, 12000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", enableAutoplay);
+			window.removeEventListener("keydown", enableAutoplay);
+			window.removeEventListener("touchstart", enableAutoplay);
+			window.removeEventListener("scroll", enableAutoplay);
+		};
+	}, []);
+
+	const settings = useMemo(
+		() => ({
+			dots: true,
+			infinite: bannerItems.length > 1,
+			speed: 500,
+			slidesToShow: 1,
+			slidesToScroll: 1,
+			autoplay: autoplayEnabled && bannerItems.length > 1,
+			autoplaySpeed: 10000,
+			arrows: true,
+		}),
+		[autoplayEnabled, bannerItems.length]
+	);
 
 	return (
 		<HeroSection>
@@ -48,7 +91,7 @@ const Hero = ({ websiteSetup }) => {
 						} = banner;
 
 						const isFirstSlide = idx === 0;
-						const quality = isFirstSlide ? "auto" : "auto:eco";
+						const quality = isFirstSlide ? "auto" : "auto:low";
 
 						// Cloudinary transforms
 						const base1600 = getCloudinaryOptimizedUrl(url, {

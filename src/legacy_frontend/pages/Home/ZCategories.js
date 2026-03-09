@@ -1,18 +1,56 @@
 import React, { useCallback } from "react";
 import styled from "styled-components";
 import { Link } from "react-router-dom";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
-import axios from "axios";
 import { isAuthenticated } from "../../auth";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
+
+function trackAnalyticsEvent(payload = {}) {
+	if (typeof window === "undefined") return;
+	const gtag = window.gtag;
+	if (typeof gtag !== "function") return;
+	gtag("event", payload?.action || "category_click", {
+		event_category: payload?.category || "Category Clicked Home Page",
+		event_label: payload?.label || "",
+	});
+}
+
+function trackFacebookLead(payload = {}) {
+	if (typeof window === "undefined") return;
+	const fbq = window.fbq;
+	if (typeof fbq !== "function") return;
+	fbq(
+		"track",
+		"Lead",
+		{
+			content_name: payload?.contentName || "",
+			click_type: "Category Clicked",
+		},
+		{
+			eventID: payload?.eventId || undefined,
+		}
+	);
+}
+
+async function sendConversionLead(payload = {}) {
+	if (typeof window === "undefined") return;
+	try {
+		await fetch("/api/track/conversion", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {
+		// Tracking should never block navigation.
+	}
+}
 
 const ZCategories = ({ allCategories }) => {
 	const { user } = isAuthenticated();
 	// Memoize the click handler
 	const handleCategoryClick = useCallback(
 		(categoryName) => {
-			ReactGA.event({
+			trackAnalyticsEvent({
 				category: "Category Clicked Home Page",
 				action: "User Clicked On Category In Home Page",
 				label: `User Clicked on ${categoryName} In The Home Page`,
@@ -20,20 +58,12 @@ const ZCategories = ({ allCategories }) => {
 
 			const eventId = `lead-category-${Date.now()}`;
 
-			ReactPixel.track(
-				"Lead",
-				{
-					content_name: `User Clicked on ${categoryName} In The Home Page`,
-					click_type: "Category Clicked",
-				},
-				{
-					eventID: eventId,
-				}
-			);
+			trackFacebookLead({
+				contentName: `User Clicked on ${categoryName} In The Home Page`,
+				eventId,
+			});
 
-			axios.post(
-				`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-				{
+			sendConversionLead({
 					eventName: "Lead",
 					eventId,
 					email: user?.email || "Unknown", // if you have a user object
@@ -41,9 +71,11 @@ const ZCategories = ({ allCategories }) => {
 					currency: "USD", // not essential for "Lead," but you can pass
 					value: 0,
 					contentIds: [`cat-${categoryName}`], // or any ID you want
-					userAgent: window.navigator.userAgent,
-				}
-			).catch(() => {});
+					userAgent:
+						typeof window !== "undefined"
+							? window.navigator.userAgent
+							: undefined,
+				});
 
 			window.scrollTo({ top: 0, behavior: "smooth" });
 		},
@@ -80,13 +112,13 @@ const ZCategories = ({ allCategories }) => {
 						// Base (JPEG/PNG/etc.) - tuned smaller to reduce homepage payload
 						const baseJpg = getCloudinaryOptimizedUrl(originalUrl, {
 							width: 640,
-							quality: "auto:eco",
+							quality: "auto:low",
 						});
 						// WebP version
 						const baseWebp = getCloudinaryOptimizedUrl(originalUrl, {
 							width: 640,
 							format: "webp",
-							quality: "auto:eco",
+							quality: "auto:low",
 						});
 
 						// Now let's do *responsive* widths via string replace:
