@@ -204,8 +204,9 @@ const AppContent = () => {
 				</>
 			)}
 
-			<Suspense fallback={<div style={{ minHeight: "60vh" }} />}>
-				<Switch>
+			<main id='main-content' role='main'>
+				<Suspense fallback={<div style={{ minHeight: "60vh" }} />}>
+					<Switch>
 					<Route path='/' exact component={Home} />
 					<Route path='/about' exact component={() => <About />} />
 					<Route
@@ -360,12 +361,13 @@ const AppContent = () => {
 
 					{/* User (Private) Routes */}
 					<PrivateRoute path='/dashboard' exact component={UserDashboard} />
-				</Switch>
+					</Switch>
 
-				{/* Chat & Footer only if NOT admin/seller */}
-				{!shouldHideLayout && <ChatIcon />}
-				{!shouldHideLayout && <Footer />}
-			</Suspense>
+					{/* Chat & Footer only if NOT admin/seller */}
+					{!shouldHideLayout && <ChatIcon />}
+					{!shouldHideLayout && <Footer />}
+				</Suspense>
+			</main>
 
 			<ModalApp shouldHideLayout={shouldHideLayout} location={location} />
 		</>

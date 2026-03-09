@@ -348,7 +348,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 																fallbackSrc={fallbackSrc}
 																alt={`${product.productName} - view ${index + 1}`}
 																sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
-																widths={[240, 360, 480, 600, 800]}
+																widths={[220, 320, 420, 540, 640]}
 																loading='lazy'
 															/>
 														</ImageWrapper>
@@ -362,7 +362,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 														fallbackSrc={singleFallbackSrc}
 														alt={`${product.productName} - single view`}
 														sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
-														widths={[240, 360, 480, 600, 800]}
+														widths={[220, 320, 420, 540, 640]}
 														loading='lazy'
 													/>
 												</ImageWrapper>
@@ -561,8 +561,9 @@ const PodBadge = styled.div`
 	position: absolute;
 	top: 45px; /* below the discount badge so they don't overlap */
 	left: 15px;
-	background-color: #ffafc5; /* pinkish color */
-	color: #ffffff;
+	background-color: #ffd4e2;
+	color: #5b2337;
+	border: 1px solid #d79ab0;
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-weight: bold;

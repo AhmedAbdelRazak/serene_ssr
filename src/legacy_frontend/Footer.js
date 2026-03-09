@@ -112,7 +112,7 @@ const MenuWrapper = styled.div`
 `;
 
 const MenuItem = styled.div`
-	color: var(--text-color-primary);
+	color: #3f332a;
 	font-family: "SF Pro Display", sans-serif;
 	font-size: 16px;
 	font-weight: 600;
@@ -141,7 +141,7 @@ const Icon = styled.a`
 `;
 
 const ContactInfo = styled.div`
-	color: var(--text-color-secondary);
+	color: #4c3f35;
 	font-family: "SF Pro Display", sans-serif;
 	font-size: 14px;
 	line-height: 1.5;
@@ -155,7 +155,7 @@ const Image = styled.img`
 `;
 
 const Terms = styled.div`
-	color: var(--text-color-primary);
+	color: #3f332a;
 	font-family: "SF Pro Display", sans-serif;
 	font-size: 14px;
 	font-weight: 600;
@@ -169,7 +169,7 @@ const Terms = styled.div`
 `;
 
 const Copyright = styled.div`
-	color: var(--text-color-secondary);
+	color: #5a4c42;
 	font-family: "SF Pro Display", sans-serif;
 	font-size: 12px;
 `;

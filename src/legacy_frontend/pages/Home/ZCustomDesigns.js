@@ -222,7 +222,7 @@ const ZCustomDesigns = ({ customDesignProducts }) => {
 														alt={`${product.productName} - single view`}
 														loading='lazy'
 														sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
-														widths={[240, 360, 480, 600, 800]}
+														widths={[220, 320, 420, 540, 640]}
 													/>
 												) : (
 													<NoImagePlaceholder>No Image</NoImagePlaceholder>
@@ -285,7 +285,7 @@ const ZCustomDesignsWrapper = styled.div`
 	h2 {
 		strong {
 			font-weight: bold !important;
-			color: darkgoldenrod !important;
+			color: #8a5a00 !important;
 			font-style: italic !important;
 			text-decoration: underline;
 		}
@@ -407,8 +407,9 @@ const PodBadge = styled.div`
 	position: absolute;
 	top: 12px;
 	left: 12px;
-	background-color: #ffafc5;
-	color: #ffffff;
+	background-color: #ffd4e2;
+	color: #5b2337;
+	border: 1px solid #d79ab0;
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-weight: bold;

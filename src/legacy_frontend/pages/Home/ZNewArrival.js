@@ -300,7 +300,7 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 													fallbackSrc={fallbackSrc}
 													alt={`${product.productName} - single view`}
 													sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
-													widths={[240, 360, 480, 600, 800]}
+													widths={[220, 320, 420, 540, 640]}
 												/>
 											</ImageWrapper>
 										</ImageContainer>
@@ -445,8 +445,9 @@ const PodBadge = styled.div`
 	position: absolute;
 	top: 12px;
 	left: 12px;
-	background-color: #ffafc5;
-	color: #ffffff;
+	background-color: #ffd4e2;
+	color: #5b2337;
+	border: 1px solid #d79ab0;
 	padding: 4px 8px;
 	border-radius: 4px;
 	font-weight: bold;
