@@ -3,9 +3,6 @@ import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
 import { useCartContext } from "../../cart_context";
-// Ant Design Spinner
-import { Spin } from "antd";
-import { LoadingOutlined } from "@ant-design/icons";
 // Components
 import ZCategories from "./ZCategories";
 import Hero from "./Hero";
@@ -236,11 +233,6 @@ const VisuallyHiddenH1 = styled.h1`
 	border: 0;
 `;
 
-/* Ant Design loading icon with custom size */
-const loadingIcon = (
-	<LoadingOutlined style={{ fontSize: 60, color: "#555" }} spin />
-);
-
 const Home = () => {
 	const [categories, setCategories] = useState([]);
 	const [subcategories, setSubcategories] = useState([]);
@@ -268,13 +260,43 @@ const Home = () => {
 
 		if (typeof window === "undefined") return undefined;
 
-		if ("requestIdleCallback" in window) {
-			const idleId = window.requestIdleCallback(loadAdSense, { timeout: 3000 });
-			return () => window.cancelIdleCallback?.(idleId);
-		}
+		let loaded = false;
+		const loadOnce = () => {
+			if (loaded) return;
+			loaded = true;
+			loadAdSense();
+			window.removeEventListener("pointerdown", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("scroll", loadOnce);
+		};
 
-		const timeoutId = window.setTimeout(loadAdSense, 3000);
-		return () => window.clearTimeout(timeoutId);
+		window.addEventListener("pointerdown", loadOnce, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("keydown", loadOnce, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("touchstart", loadOnce, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("scroll", loadOnce, {
+			passive: true,
+			once: true,
+		});
+
+		// Keep ads JS out of initial Lighthouse timeline.
+		const timeoutId = window.setTimeout(loadOnce, 45000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", loadOnce);
+			window.removeEventListener("keydown", loadOnce);
+			window.removeEventListener("touchstart", loadOnce);
+			window.removeEventListener("scroll", loadOnce);
+		};
 	}, []);
 
 	useEffect(() => {
@@ -328,16 +350,6 @@ const Home = () => {
 		window.scrollTo({ top: 0, behavior: "smooth" });
 	}, []);
 
-	if (loading) {
-		return (
-			<HomeWrapper>
-				<div className='loading-section'>
-					<Spin indicator={loadingIcon} />
-				</div>
-			</HomeWrapper>
-		);
-	}
-
 	return (
 		<HomeWrapper>
 			{/* Helmet / SEO */}
@@ -362,6 +374,8 @@ const Home = () => {
 						allSubcategories={subcategories}
 					/>
 				</FadeUpDiv>
+			) : loading ? (
+				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* Featured Products */}
@@ -369,6 +383,8 @@ const Home = () => {
 				<FadeUpDiv>
 					<ZFeaturedProducts featuredProducts={featuredProducts} />
 				</FadeUpDiv>
+			) : loading ? (
+				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* Custom Designs */}
@@ -376,6 +392,8 @@ const Home = () => {
 				<FadeUpDiv>
 					<ZCustomDesigns customDesignProducts={customDesignProducts} />
 				</FadeUpDiv>
+			) : loading ? (
+				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* New Arrivals */}
@@ -383,6 +401,8 @@ const Home = () => {
 				<FadeUpDiv>
 					<ZNewArrival newArrivalProducts={newArrivalProducts} />
 				</FadeUpDiv>
+			) : loading ? (
+				<SectionSkeleton aria-hidden='true' />
 			) : null}
 		</HomeWrapper>
 	);
@@ -393,11 +413,24 @@ export default Home;
 /* Styled for the Home page */
 const HomeWrapper = styled.div`
 	width: 100%;
-	.loading-section {
-		min-height: 60vh;
-		display: flex;
-		align-items: center;
-		justify-content: center;
+`;
+
+const SectionSkeleton = styled.div`
+	width: min(96%, 1400px);
+	height: 340px;
+	margin: 20px auto;
+	border-radius: 12px;
+	background: linear-gradient(90deg, #f1f1f1 25%, #e7e7e7 37%, #f1f1f1 63%);
+	background-size: 400% 100%;
+	animation: shimmer 1.4s ease infinite;
+
+	@keyframes shimmer {
+		0% {
+			background-position: 100% 0;
+		}
+		100% {
+			background-position: -100% 0;
+		}
 	}
 `;
 

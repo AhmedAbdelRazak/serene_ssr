@@ -45,17 +45,34 @@ export default function RootLayout({ children }) {
 					/>
 				</noscript>
 				<link
-					rel='preload'
-					as='style'
-					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
-					crossOrigin='anonymous'
-				/>
-				<link
+					id='bootstrap-css'
 					rel='stylesheet'
 					href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
 					integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
 					crossOrigin='anonymous'
+					media='print'
 				/>
+				<script
+					dangerouslySetInnerHTML={{
+						__html: `
+							(function () {
+								var link = document.getElementById('bootstrap-css');
+								if (!link) return;
+								var apply = function () { link.media = 'all'; };
+								if (link.addEventListener) link.addEventListener('load', apply, { once: true });
+								setTimeout(apply, 1500);
+							})();
+						`,
+					}}
+				/>
+				<noscript>
+					<link
+						rel='stylesheet'
+						href='https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css'
+						integrity='sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T'
+						crossOrigin='anonymous'
+					/>
+				</noscript>
 				<meta
 					name='facebook-domain-verification'
 					content='ctdvedogjmpukl4fixfi03qzeax4w0'
