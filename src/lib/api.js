@@ -1,55 +1,116 @@
 import { cache } from "react";
-import { API_BASE_URL } from "./config";
+import { API_BASE_URL, SITE_URL } from "./config";
 
 function toApiPath(path = "") {
 	const safePath = `${path || ""}`;
 	return safePath.startsWith("/") ? safePath : `/${safePath}`;
 }
 
+function isLoopbackHostname(hostname = "") {
+	const safeHost = `${hostname || ""}`.trim().toLowerCase();
+	return (
+		safeHost === "localhost" ||
+		safeHost === "127.0.0.1" ||
+		safeHost === "::1" ||
+		safeHost === "0.0.0.0"
+	);
+}
+
+function isLoopbackUrl(url = "") {
+	try {
+		return isLoopbackHostname(new URL(url).hostname);
+	} catch {
+		return false;
+	}
+}
+
+function buildProxyApiUrl(path = "") {
+	const safeSiteUrl = `${SITE_URL || ""}`.replace(/\/+$/, "");
+	if (!safeSiteUrl) return "";
+	return `${safeSiteUrl}/backend-api${toApiPath(path)}`;
+}
+
+function buildApiCandidates(path = "") {
+	const safePath = toApiPath(path);
+	const directUrl = `${API_BASE_URL}${safePath}`;
+	const proxyUrl = buildProxyApiUrl(safePath);
+	const shouldPreferProxy =
+		typeof window === "undefined" &&
+		isLoopbackUrl(directUrl) &&
+		proxyUrl &&
+		!isLoopbackUrl(proxyUrl);
+	const candidates = shouldPreferProxy
+		? [proxyUrl, directUrl]
+		: [directUrl, proxyUrl];
+	return Array.from(new Set(candidates.filter(Boolean)));
+}
+
 async function fetchJson(
 	path,
 	{ revalidate = 300, cacheMode = "force-cache", timeoutMs = 15000 } = {}
 ) {
-	const url = `${API_BASE_URL}${toApiPath(path)}`;
-	const controller = new AbortController();
-	const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+	const candidates = buildApiCandidates(path);
+	const failures = [];
 
-	let response;
-	try {
-		response = await fetch(url, {
-			method: "GET",
-			headers: {
-				Accept: "application/json",
-			},
-			next: { revalidate },
-			cache: cacheMode,
-			signal: controller.signal,
-		});
-	} finally {
-		clearTimeout(timeoutId);
+	for (const url of candidates) {
+		const controller = new AbortController();
+		const effectiveTimeoutMs =
+			candidates.length > 1 && isLoopbackUrl(url)
+				? Math.min(timeoutMs, 2500)
+				: timeoutMs;
+		const timeoutId = setTimeout(() => controller.abort(), effectiveTimeoutMs);
+
+		let response;
+		try {
+			response = await fetch(url, {
+				method: "GET",
+				headers: {
+					Accept: "application/json",
+				},
+				next: { revalidate },
+				cache: cacheMode,
+				signal: controller.signal,
+			});
+		} catch (error) {
+			failures.push(
+				`Request failed for ${url}${
+					error?.message ? ` | ${error.message}` : ""
+				}`,
+			);
+			continue;
+		} finally {
+			clearTimeout(timeoutId);
+		}
+
+		if (!response.ok) {
+			const body = await response.text().catch(() => "");
+			failures.push(
+				`API request failed (${response.status}) for ${url}${
+					body ? ` | ${body.slice(0, 180)}` : ""
+				}`,
+			);
+			continue;
+		}
+
+		const fallbackResponse =
+			typeof response.clone === "function" ? response.clone() : null;
+		try {
+			return await response.json();
+		} catch (error) {
+			const body = await fallbackResponse?.text?.().catch(() => "");
+			failures.push(
+				`Invalid JSON payload for ${url}${
+					body ? ` | ${body.slice(0, 180)}` : ""
+				}${error?.message ? ` | ${error.message}` : ""}`,
+			);
+		}
 	}
 
-	if (!response.ok) {
-		const body = await response.text().catch(() => "");
-		throw new Error(
-			`API request failed (${response.status}) for ${url}${
-				body ? ` | ${body.slice(0, 180)}` : ""
-			}`
-		);
-	}
-
-	const fallbackResponse =
-		typeof response.clone === "function" ? response.clone() : null;
-	try {
-		return await response.json();
-	} catch (error) {
-		const body = await fallbackResponse?.text?.().catch(() => "");
-		throw new Error(
-			`Invalid JSON payload for ${url}${
-				body ? ` | ${body.slice(0, 180)}` : ""
-			}${error?.message ? ` | ${error.message}` : ""}`
-		);
-	}
+	throw new Error(
+		failures.length
+			? failures.join(" || ")
+			: `No API candidates available for ${toApiPath(path)}`,
+	);
 }
 
 export const getSpecificProducts = cache(

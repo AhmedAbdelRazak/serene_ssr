@@ -60,19 +60,28 @@ export default async function HomePage() {
 			? customDesignProductsResult.value
 			: [];
 
-	const initialRouteData = {
-		type: "home",
-		websiteSetup,
-		categories: Array.isArray(categoriesPayload?.categories)
-			? categoriesPayload.categories
-			: [],
-		subcategories: Array.isArray(categoriesPayload?.subcategories)
-			? categoriesPayload.subcategories
-			: [],
-		featuredProducts,
-		newArrivalProducts,
-		customDesignProducts,
-	};
+	const hasHomeBootstrap =
+		Boolean(websiteSetup) ||
+		Boolean(Array.isArray(categoriesPayload?.categories) && categoriesPayload.categories.length) ||
+		Boolean(featuredProducts.length) ||
+		Boolean(newArrivalProducts.length) ||
+		Boolean(customDesignProducts.length);
+
+	const initialRouteData = hasHomeBootstrap
+		? {
+				type: "home",
+				websiteSetup,
+				categories: Array.isArray(categoriesPayload?.categories)
+					? categoriesPayload.categories
+					: [],
+				subcategories: Array.isArray(categoriesPayload?.subcategories)
+					? categoriesPayload.subcategories
+					: [],
+				featuredProducts,
+				newArrivalProducts,
+				customDesignProducts,
+			}
+		: null;
 
 	return <HomeRouteClient initialRouteData={initialRouteData} />;
 }

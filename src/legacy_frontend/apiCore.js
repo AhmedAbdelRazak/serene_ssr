@@ -543,21 +543,13 @@ export const getAbouts = (token) => {
 };
 
 export const gettingCategoriesAndSubcategories = () => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/product/categories/subcategories`,
-		{
-			method: "GET",
-			headers: {
-				// content type?
-				"Content-Type": "application/json",
-				Accept: "application/json",
-			},
-		}
-	)
-		.then((response) => {
-			return response.json();
-		})
-		.catch((err) => console.log(err));
+	return fetchJson("/product/categories/subcategories", {
+		method: "GET",
+		headers: {
+			"Content-Type": "application/json",
+			Accept: "application/json",
+		},
+	});
 };
 
 // apiCore.js (or wherever this lives)
@@ -583,59 +575,32 @@ export const gettingSpecificProducts = (
 
 	// Construct the URL with path params and optional query
 	const query = params.toString();
-	const url = `${process.env.REACT_APP_API_URL}/specific/products/${featured}/${newArrivals}/${customDesigns}/${sortByRate}/${offers}/${records}${query ? `?${query}` : ""}`;
-
-	return fetch(url, {
+	return fetchJson(
+		`/specific/products/${featured}/${newArrivals}/${customDesigns}/${sortByRate}/${offers}/${records}${query ? `?${query}` : ""}`,
+		{
 		method: "GET",
 		headers: {
 			Accept: "application/json",
 		},
-	})
-		.then((response) => {
-			if (!response.ok) {
-				throw new Error("Network response was not ok");
-			}
-			return response.json();
-		})
-		.catch((err) => {
-			console.log(err);
-			return { error: err.message };
-		});
+		},
+	);
 };
 
 export const gettingSingleProduct = (slug, categorySlug, productId) => {
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/single-product/${slug}/${categorySlug}/${productId}`,
-		{
-			method: "GET",
-			headers: {
-				Accept: "application/json",
-			},
-		}
-	)
-		.then((response) => {
-			if (!response.ok) throw new Error("Network response was not ok");
-			return response.json();
-		})
-		.catch((err) => console.log(err));
+	return fetchJson(`/single-product/${slug}/${categorySlug}/${productId}`, {
+		method: "GET",
+		headers: {
+			Accept: "application/json",
+		},
+	});
 };
 
 export const gettingFilteredProducts = (filters, page, records) => {
 	const normalizedFilters = `${filters || ""}`.trim() || "all";
-	return fetch(
-		`${process.env.REACT_APP_API_URL}/products/${normalizedFilters}/${page}/${records}`,
-		{
-			method: "GET",
-			cache: "no-store",
-		}
-	)
-		.then((response) => {
-			if (!response.ok) {
-				throw new Error(`Filtered products request failed (${response.status})`);
-			}
-			return response.json();
-		})
-		.catch((err) => console.log(err));
+	return fetchJson(`/products/${normalizedFilters}/${page}/${records}`, {
+		method: "GET",
+		cache: "no-store",
+	});
 };
 
 export const readSingleUserHistory = (userId, token) => {
@@ -654,20 +619,13 @@ export const readSingleUserHistory = (userId, token) => {
 };
 
 export const getWebsiteSetup = (userId, token) => {
-	return fetch(`${process.env.REACT_APP_API_URL}/website-basic-setup`, {
+	return fetchJson("/website-basic-setup", {
 		method: "GET",
 		headers: {
 			Accept: "application/json",
 			Authorization: `Bearer ${token}`,
 		},
 	})
-		.then((res) => {
-			if (!res.ok) {
-				// If 404, doc not found
-				throw new Error(`HTTP error! Status: ${res.status}`);
-			}
-			return res.json();
-		})
 		.catch((err) => console.error("Error getting single setup:", err));
 };
 

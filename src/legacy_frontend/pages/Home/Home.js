@@ -280,6 +280,16 @@ const Home = () => {
 	const routeBootstrap = useLegacyRouteBootstrap();
 	const initialHomeBootstrap =
 		routeBootstrap?.type === "home" ? routeBootstrap : null;
+	const shouldRefetchHomeData =
+		!initialHomeBootstrap ||
+		!initialHomeBootstrap?.websiteSetup ||
+		!Array.isArray(initialHomeBootstrap?.categories) ||
+		initialHomeBootstrap.categories.length === 0 ||
+		([
+			initialHomeBootstrap?.featuredProducts?.length || 0,
+			initialHomeBootstrap?.newArrivalProducts?.length || 0,
+			initialHomeBootstrap?.customDesignProducts?.length || 0,
+		].every((count) => count === 0));
 	const [categories, setCategories] = useState(
 		() => initialHomeBootstrap?.categories || []
 	);
@@ -295,7 +305,7 @@ const Home = () => {
 	const [customDesignProducts, setCustomDesignProducts] = useState(
 		() => initialHomeBootstrap?.customDesignProducts || []
 	);
-	const [loading, setLoading] = useState(() => !initialHomeBootstrap);
+	const [loading, setLoading] = useState(() => shouldRefetchHomeData);
 
 	const { websiteSetup } = useCartContext();
 	const effectiveWebsiteSetup =
@@ -358,7 +368,7 @@ const Home = () => {
 	}, []);
 
 	useEffect(() => {
-		if (initialHomeBootstrap) {
+		if (!shouldRefetchHomeData) {
 			setLoading(false);
 			return undefined;
 		}
@@ -416,7 +426,7 @@ const Home = () => {
 		};
 
 		fetchData();
-	}, [initialHomeBootstrap]);
+	}, [shouldRefetchHomeData]);
 
 	return (
 		<HomeWrapper>

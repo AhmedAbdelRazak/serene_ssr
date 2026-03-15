@@ -6,17 +6,61 @@ const ensureApiSuffix = (value = "") => {
 	return /\/api$/i.test(normalized) ? normalized : `${normalized}/api`;
 };
 
-const API_BASE_URL = ensureApiSuffix(
+const CONFIGURED_API_BASE_URL = ensureApiSuffix(
 	process.env.REACT_APP_API_URL || process.env.NEXT_PUBLIC_API_URL || "",
 );
 
+const isLoopbackHostname = (hostname = "") => {
+	const safeHost = `${hostname || ""}`.trim().toLowerCase();
+	return (
+		safeHost === "localhost" ||
+		safeHost === "127.0.0.1" ||
+		safeHost === "::1" ||
+		safeHost === "0.0.0.0"
+	);
+};
+
+const getHostname = (url = "") => {
+	try {
+		return new URL(url).hostname;
+	} catch {
+		return "";
+	}
+};
+
+const getClientProxyApiBase = () => {
+	if (typeof window === "undefined") return "";
+	const origin = trimTrailingSlash(window.location?.origin || "");
+	return origin ? `${origin}/backend-api` : "";
+};
+
+const resolveApiBaseUrl = () => {
+	const configuredHost = getHostname(CONFIGURED_API_BASE_URL);
+	if (typeof window === "undefined") {
+		return CONFIGURED_API_BASE_URL;
+	}
+
+	const currentHost = `${window.location?.hostname || ""}`.trim().toLowerCase();
+	const proxyApiBase = getClientProxyApiBase();
+	const shouldUseProxy =
+		!CONFIGURED_API_BASE_URL ||
+		(isLoopbackHostname(configuredHost) && !isLoopbackHostname(currentHost));
+
+	if (shouldUseProxy && proxyApiBase) {
+		return proxyApiBase;
+	}
+
+	return CONFIGURED_API_BASE_URL || proxyApiBase;
+};
+
 export const apiUrl = (path = "") => {
 	const safePath = `${path || ""}`.trim();
-	if (!safePath) return API_BASE_URL;
+	const apiBaseUrl = resolveApiBaseUrl();
+	if (!safePath) return apiBaseUrl;
 	if (/^https?:\/\//i.test(safePath)) return safePath;
-	if (!API_BASE_URL) return safePath;
+	if (!apiBaseUrl) return safePath;
 	const prefixedPath = safePath.startsWith("/") ? safePath : `/${safePath}`;
-	return `${API_BASE_URL}${prefixedPath}`;
+	return `${apiBaseUrl}${prefixedPath}`;
 };
 
 const buildErrorFromResponse = (requestUrl, response, bodySnippet = "") => ({
