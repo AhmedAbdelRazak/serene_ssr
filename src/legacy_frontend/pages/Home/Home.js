@@ -11,7 +11,6 @@ import {
 	gettingSpecificProducts,
 } from "../../apiCore";
 import {
-	getCloudinaryOptimizedUrl,
 	resolveImageUrl,
 } from "../../utils/image";
 
@@ -159,36 +158,6 @@ const HomePageHelmet = ({
 		...customDesignProducts,
 	]);
 
-	const heroUrl = heroBanner?.url || "";
-	const isCloudinaryHero =
-		heroUrl && heroUrl.includes("res.cloudinary.com");
-	const heroSrcSet = isCloudinaryHero
-		? [
-				`${getCloudinaryOptimizedUrl(heroUrl, {
-					width: 480,
-					quality: "auto:eco",
-				})} 480w`,
-				`${getCloudinaryOptimizedUrl(heroUrl, {
-					width: 768,
-					quality: "auto:eco",
-				})} 768w`,
-				`${getCloudinaryOptimizedUrl(heroUrl, {
-					width: 1200,
-					quality: "auto",
-				})} 1200w`,
-				`${getCloudinaryOptimizedUrl(heroUrl, {
-					width: 1600,
-					quality: "auto",
-				})} 1600w`,
-			].join(", ")
-		: "";
-	const heroHref = heroUrl
-		? isCloudinaryHero
-			? getCloudinaryOptimizedUrl(heroUrl, { width: 1200 })
-			: heroUrl
-		: "";
-	const heroSizes = "100vw";
-
 	return (
 		<Helmet>
 			<title>{title}</title>
@@ -205,17 +174,6 @@ const HomePageHelmet = ({
 			<meta property='og:url' content='https://serenejannat.com' />
 			<meta property='og:type' content='website' />
 			<link rel='canonical' href='https://serenejannat.com' />
-			{heroHref && (
-				<link
-					rel='preload'
-					as='image'
-					href={heroHref}
-					{...(heroSrcSet
-						? { imageSrcSet: heroSrcSet, imageSizes: heroSizes }
-						: {})}
-					fetchPriority='high'
-				/>
-			)}
 			<script type='application/ld+json'>
 				{JSON.stringify(productSchema)}
 			</script>

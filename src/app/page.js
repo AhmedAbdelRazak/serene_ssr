@@ -4,7 +4,11 @@ import {
 	getSpecificProducts,
 	getWebsiteSetupData,
 } from "@/lib/api";
+import { preload } from "react-dom";
 import { createMetadata } from "@/lib/seo";
+import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
+
+export const dynamic = "force-dynamic";
 
 export const metadata = createMetadata({
 	title: "Serene Jannat | Personalized Gifts, Print On Demand, and Home Decor",
@@ -12,6 +16,64 @@ export const metadata = createMetadata({
 		"Discover featured products, new arrivals, and custom design gifts. Personalize in seconds and shop with confidence.",
 	pathname: "/",
 });
+
+function getHomeHeroAsset(websiteSetup = null) {
+	const heroUrl = `${websiteSetup?.homeMainBanners?.[0]?.url || ""}`.trim();
+	if (!heroUrl) return null;
+
+	if (heroUrl.includes("res.cloudinary.com")) {
+		const hero480 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 480,
+			quality: "auto:eco",
+		});
+		const hero768 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 768,
+			quality: "auto:eco",
+		});
+		const hero1200 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 1200,
+			quality: "auto",
+		});
+		const hero1600 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 1600,
+			quality: "auto",
+		});
+
+		return {
+			preloadHref: hero1200,
+			src: hero480,
+			srcSet: [
+				`${hero480} 480w`,
+				`${hero768} 768w`,
+				`${hero1200} 1200w`,
+				`${hero1600} 1600w`,
+			].join(", "),
+			sizes: "100vw",
+		};
+	}
+
+	return {
+		preloadHref: heroUrl,
+		src: heroUrl,
+		srcSet: "",
+		sizes: "100vw",
+	};
+}
+
+function preloadHomeHero(heroAsset = null) {
+	if (!heroAsset?.preloadHref) return;
+
+	preload(heroAsset.preloadHref, {
+		as: "image",
+		...(heroAsset.srcSet
+			? {
+					imageSrcSet: heroAsset.srcSet,
+					imageSizes: heroAsset.sizes || "100vw",
+				}
+			: {}),
+		fetchPriority: "high",
+	});
+}
 
 export default async function HomePage() {
 	const [
@@ -40,6 +102,8 @@ export default async function HomePage() {
 
 	const websiteSetup =
 		websiteSetupResult.status === "fulfilled" ? websiteSetupResult.value : null;
+	const heroAsset = getHomeHeroAsset(websiteSetup);
+	preloadHomeHero(heroAsset);
 	const categoriesPayload =
 		categoriesResult.status === "fulfilled" ? categoriesResult.value : null;
 	const featuredProducts =
@@ -83,5 +147,32 @@ export default async function HomePage() {
 			}
 		: null;
 
-	return <HomeRouteClient initialRouteData={initialRouteData} />;
+	return (
+		<>
+			{heroAsset?.src ? (
+				<img
+					src={heroAsset.src}
+					srcSet={heroAsset.srcSet || undefined}
+					sizes={heroAsset.sizes || "100vw"}
+					alt=''
+					aria-hidden='true'
+					width='1920'
+					height='997'
+					loading='eager'
+					fetchPriority='high'
+					decoding='async'
+					style={{
+						position: "absolute",
+						width: 1,
+						height: 1,
+						opacity: 0,
+						pointerEvents: "none",
+						inset: 0,
+						zIndex: -1,
+					}}
+				/>
+			) : null}
+			<HomeRouteClient initialRouteData={initialRouteData} />
+		</>
+	);
 }
