@@ -16,7 +16,6 @@ export default function AnalyticsScripts() {
 	const normalizedPath = `${pathname || ""}`.toLowerCase();
 	const shouldSkipForLegacyRoute =
 		!normalizedPath ||
-		normalizedPath === "/" ||
 		normalizedPath.startsWith("/admin") ||
 		normalizedPath.startsWith("/seller") ||
 		normalizedPath.startsWith("/dashboard") ||
@@ -24,14 +23,6 @@ export default function AnalyticsScripts() {
 		normalizedPath.startsWith("/signin") ||
 		normalizedPath.startsWith("/signup") ||
 		normalizedPath.startsWith("/sellingagent") ||
-		normalizedPath.startsWith("/about") ||
-		normalizedPath.startsWith("/contact") ||
-		normalizedPath.startsWith("/our-products") ||
-		normalizedPath.startsWith("/custom-gifts") ||
-		normalizedPath.startsWith("/single-product") ||
-		normalizedPath.startsWith("/privacy-policy-terms-conditions") ||
-		normalizedPath.startsWith("/cookie-policy") ||
-		normalizedPath.startsWith("/return-refund-policy") ||
 		normalizedPath.startsWith("/payment-link");
 
 	if (shouldSkipForLegacyRoute) {

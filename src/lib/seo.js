@@ -97,6 +97,58 @@ export function productSchema({
 	};
 }
 
+export function itemListSchema({ name, url, items = [] } = {}) {
+	const listItems = (Array.isArray(items) ? items : [])
+		.map((item, index) => {
+			const itemUrl = item?.url || "";
+			const itemName = item?.name || "";
+			if (!itemUrl || !itemName) return null;
+			return {
+				"@type": "ListItem",
+				position: index + 1,
+				url: itemUrl,
+				name: itemName,
+				image: item?.image || undefined,
+			};
+		})
+		.filter(Boolean);
+
+	if (!listItems.length) return null;
+
+	return {
+		"@context": "https://schema.org",
+		"@type": "ItemList",
+		name,
+		url,
+		numberOfItems: listItems.length,
+		itemListElement: listItems,
+	};
+}
+
+export function breadcrumbSchema(items = []) {
+	const listItems = (Array.isArray(items) ? items : [])
+		.map((item, index) => {
+			const itemName = item?.name || "";
+			const itemUrl = item?.url || "";
+			if (!itemName || !itemUrl) return null;
+			return {
+				"@type": "ListItem",
+				position: index + 1,
+				name: itemName,
+				item: itemUrl,
+			};
+		})
+		.filter(Boolean);
+
+	if (!listItems.length) return null;
+
+	return {
+		"@context": "https://schema.org",
+		"@type": "BreadcrumbList",
+		itemListElement: listItems,
+	};
+}
+
 export function organizationSchema() {
 	return {
 		"@context": "https://schema.org",

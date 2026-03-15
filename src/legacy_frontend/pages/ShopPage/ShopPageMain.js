@@ -303,19 +303,8 @@ function ShopPageMain() {
 	const records = 30;
 
 	const { openSidebar2, addToCart } = useCartContext();
-
-	const { user } = isAuthenticated();
-
-
-	// Initialize GA and track page views
-	useEffect(() => {
-		// Fix: Pass an object to avoid the "Send command doesn't exist" error
-		ReactGA.send({
-			hitType: "pageview",
-			page: window.location.pathname + window.location.search,
-		});
-		// eslint-disable-next-line
-	}, [window.location.pathname, window.location.search]);
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
 
 	// Fetch master color list
 	useEffect(() => {

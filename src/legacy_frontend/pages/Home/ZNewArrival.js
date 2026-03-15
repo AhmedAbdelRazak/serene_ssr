@@ -35,7 +35,8 @@ const emitFbTrack = async (eventName, payload, options) => {
 
 const ZNewArrival = ({ newArrivalProducts }) => {
 	const { openSidebar2, addToCart } = useCartContext();
-	const { user } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
 	const history = useHistory();
 
 	// -----------------------------

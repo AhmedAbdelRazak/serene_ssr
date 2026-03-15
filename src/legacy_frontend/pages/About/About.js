@@ -1,7 +1,6 @@
 ﻿import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { useLocation } from "react-router-dom";
-import ReactGA from "react-ga4";
 import { Helmet } from "react-helmet-async";
 import { useCartContext } from "../../cart_context";
 
@@ -38,17 +37,9 @@ const About = () => {
 		return `${parts[0]}/upload/${transform}/${parts[1]}`;
 	};
 
-	// GA4 pageview tracking
-	useEffect(() => {
-		ReactGA.send({
-			hitType: "pageview",
-			page: location.pathname + location.search,
-		});
-	}, [location.pathname, location.search]);
-
 	// On mount, clean the aboutUsBanner paragraph
 	useEffect(() => {
-		if (websiteSetup.aboutUsBanner?.paragraph) {
+		if (websiteSetup?.aboutUsBanner?.paragraph) {
 			const cleanedDesc = websiteSetup.aboutUsBanner.paragraph.replace(
 				/<br>/g,
 				""
@@ -59,8 +50,7 @@ const About = () => {
 			const plainTextDescription = cleanedDesc.replace(/<[^>]+>/g, "");
 			setPlainDescription(plainTextDescription);
 		}
-		// eslint-disable-next-line
-	}, []);
+	}, [websiteSetup]);
 
 	return (
 		<AboutPageWrapper className='container'>

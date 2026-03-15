@@ -1,4 +1,5 @@
-﻿import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import ReturnRefundRouteClient from "@/components/public/routes/ReturnRefundRouteClient";
+import { getWebsiteSetupData } from "@/lib/api";
 import { createMetadata } from "@/lib/seo";
 
 export const metadata = createMetadata({
@@ -7,6 +8,11 @@ export const metadata = createMetadata({
 	pathname: "/return-refund-policy",
 });
 
-export default function ReturnRefundPolicyPage() {
-	return <LegacyFrontendAppEntry />;
+export default async function ReturnRefundPolicyPage() {
+	let websiteSetup = null;
+	try {
+		websiteSetup = await getWebsiteSetupData({ revalidate: 1800 });
+	} catch {}
+
+	return <ReturnRefundRouteClient initialRouteData={{ websiteSetup }} />;
 }

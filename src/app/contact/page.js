@@ -1,4 +1,5 @@
-﻿import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import ContactRouteClient from "@/components/public/routes/ContactRouteClient";
+import { getWebsiteSetupData } from "@/lib/api";
 import { createMetadata } from "@/lib/seo";
 
 export const metadata = createMetadata({
@@ -8,6 +9,11 @@ export const metadata = createMetadata({
 	pathname: "/contact",
 });
 
-export default function ContactPage() {
-	return <LegacyFrontendAppEntry />;
+export default async function ContactPage() {
+	let websiteSetup = null;
+	try {
+		websiteSetup = await getWebsiteSetupData({ revalidate: 1800 });
+	} catch {}
+
+	return <ContactRouteClient initialRouteData={{ websiteSetup }} />;
 }

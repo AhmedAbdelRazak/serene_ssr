@@ -3,6 +3,8 @@ import "@/legacy_frontend/App.css";
 import "@/legacy_frontend/slick-lite.css";
 import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
+import StyledComponentsRegistry from "@/components/layout/StyledComponentsRegistry";
+import WebVitalsReporter from "@/components/perf/WebVitalsReporter";
 import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
@@ -82,9 +84,12 @@ export default function RootLayout({ children }) {
 				/>
 			</head>
 			<body>
-				<AnalyticsScripts />
-				<JsonLd data={organizationSchema()} />
-				<ChromeShell>{children}</ChromeShell>
+				<StyledComponentsRegistry>
+					<AnalyticsScripts />
+					<WebVitalsReporter />
+					<JsonLd data={organizationSchema()} />
+					<ChromeShell>{children}</ChromeShell>
+				</StyledComponentsRegistry>
 			</body>
 		</html>
 	);

@@ -46,7 +46,8 @@ async function sendConversionLead(payload = {}) {
 }
 
 const ZCategories = ({ allCategories }) => {
-	const { user } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
 	// Memoize the click handler
 	const handleCategoryClick = useCallback(
 		(categoryName) => {

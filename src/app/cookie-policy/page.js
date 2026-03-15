@@ -1,4 +1,4 @@
-﻿import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import CookieRouteClient from "@/components/public/routes/CookieRouteClient";
 import { createMetadata } from "@/lib/seo";
 
 export const metadata = createMetadata({
@@ -8,5 +8,5 @@ export const metadata = createMetadata({
 });
 
 export default function CookiePolicyPage() {
-	return <LegacyFrontendAppEntry />;
+	return <CookieRouteClient />;
 }

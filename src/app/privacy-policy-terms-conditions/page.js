@@ -1,4 +1,5 @@
-﻿import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import PrivacyRouteClient from "@/components/public/routes/PrivacyRouteClient";
+import { getWebsiteSetupData } from "@/lib/api";
 import { createMetadata } from "@/lib/seo";
 
 export const metadata = createMetadata({
@@ -7,6 +8,11 @@ export const metadata = createMetadata({
 	pathname: "/privacy-policy-terms-conditions",
 });
 
-export default function PrivacyPolicyPage() {
-	return <LegacyFrontendAppEntry />;
+export default async function PrivacyPolicyPage() {
+	let websiteSetup = null;
+	try {
+		websiteSetup = await getWebsiteSetupData({ revalidate: 1800 });
+	} catch {}
+
+	return <PrivacyRouteClient initialRouteData={{ websiteSetup }} />;
 }

@@ -1,10 +1,11 @@
-import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import PodProductRouteClient from "@/components/public/routes/PodProductRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
 import { getProductById } from "@/lib/api";
 import {
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
+	getProductInventoryCount,
 	getProductPrice,
 	getProductSlug,
 } from "@/lib/product-helpers";
@@ -12,7 +13,7 @@ import {
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
 } from "@/lib/pod-product";
-import { createMetadata, productSchema } from "@/lib/seo";
+import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
 import { notFound, permanentRedirect } from "next/navigation";
 
@@ -152,6 +153,7 @@ export default async function PodProductPage({ params, searchParams }) {
 		selection
 	);
 	const price = getProductPrice(product);
+	const inventoryCount = getProductInventoryCount(product);
 	const slug = getProductSlug(product);
 	const normalizedProduct = normalizePodProduct(product);
 	const initialVariantSelection = resolveInitialPodVariantSelection(
@@ -182,7 +184,7 @@ export default async function PodProductPage({ params, searchParams }) {
 		price,
 		url: canonicalUrl,
 		availability:
-			Number(product?.quantity || 0) > 0
+			inventoryCount > 0
 				? "https://schema.org/InStock"
 				: "https://schema.org/OutOfStock",
 	});
@@ -208,13 +210,19 @@ export default async function PodProductPage({ params, searchParams }) {
 			name: "Scent",
 			value: selection.scent,
 		},
-		{
-			"@type": "PropertyValue",
-			name: "Customization",
-			value:
-				"Customers can further personalize the final product on the product page.",
-		},
-	].filter(Boolean);
+			{
+				"@type": "PropertyValue",
+				name: "Customization",
+				value:
+					"Customers can further personalize the final product on the product page.",
+			},
+		].filter(Boolean);
+
+	const breadcrumbs = breadcrumbSchema([
+		{ name: "Home", url: absoluteUrl("/") },
+		{ name: "Custom Gifts", url: absoluteUrl("/custom-gifts") },
+		{ name: title, url: canonicalUrl },
+	]);
 
 	const initialRouteData = {
 		type: "pod-product",
@@ -236,7 +244,8 @@ export default async function PodProductPage({ params, searchParams }) {
 	return (
 		<>
 			<JsonLd data={schema} />
-			<LegacyFrontendAppEntry initialRouteData={initialRouteData} />
+			<JsonLd data={breadcrumbs} />
+			<PodProductRouteClient initialRouteData={initialRouteData} />
 		</>
 	);
 }

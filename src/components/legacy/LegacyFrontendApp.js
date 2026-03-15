@@ -4,8 +4,6 @@ import "@ant-design/v5-patch-for-react-19";
 import { useEffect, useMemo } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { HelmetProvider } from "react-helmet-async";
-import { StyleSheetManager } from "styled-components";
-import isPropValid from "@emotion/is-prop-valid";
 import { CartProvider } from "@/legacy_frontend/cart_context";
 import { LegacyRouteBootstrapProvider } from "@/legacy_frontend/bootstrap/LegacyRouteBootstrapContext";
 import LegacyApp from "@/legacy_frontend/App";
@@ -78,26 +76,19 @@ export default function LegacyFrontendApp({ initialRouteData = null }) {
 		window.__serenePatchedJsonParser = true;
 	}, []);
 
-	const shouldForwardProp = (propName, target) => {
-		if (typeof target === "string") return isPropValid(propName);
-		return true;
-	};
-
 	return (
-		<StyleSheetManager shouldForwardProp={shouldForwardProp}>
-			<HelmetProvider>
-				<LegacyRouteBootstrapProvider initialRouteData={initialRouteData}>
-					<CartProvider>
-						{requiresGoogleProvider ? (
-							<GoogleOAuthProvider clientId={clientId}>
-								<LegacyApp />
-							</GoogleOAuthProvider>
-						) : (
+		<HelmetProvider>
+			<LegacyRouteBootstrapProvider initialRouteData={initialRouteData}>
+				<CartProvider>
+					{requiresGoogleProvider ? (
+						<GoogleOAuthProvider clientId={clientId}>
 							<LegacyApp />
-						)}
-					</CartProvider>
-				</LegacyRouteBootstrapProvider>
-			</HelmetProvider>
-		</StyleSheetManager>
+						</GoogleOAuthProvider>
+					) : (
+						<LegacyApp />
+					)}
+				</CartProvider>
+			</LegacyRouteBootstrapProvider>
+		</HelmetProvider>
 	);
 }

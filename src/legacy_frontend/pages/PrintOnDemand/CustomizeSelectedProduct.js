@@ -917,7 +917,9 @@ export default function CustomizeSelectedProduct() {
 	}, [effectiveOccasionStylePreset]);
 
 	const { addToCart, openSidebar2 } = useCartContext();
-	const { user, token } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
+	const token = auth.token || "";
 
 	// fallback user ID / token
 	const fallbackUserId = user?._id || "663539b4eb1a090ebd349d65";

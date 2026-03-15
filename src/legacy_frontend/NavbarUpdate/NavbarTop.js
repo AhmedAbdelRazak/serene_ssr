@@ -38,11 +38,12 @@ const NavbarTop = memo(() => {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 	const [activeLink, setActiveLink] = useState("");
 	const [isMobileViewport, setIsMobileViewport] = useState(false);
+	const [authState, setAuthState] = useState(null);
 
-	const { user } = isAuthenticated();
 	const { openSidebar2, isSidebarOpen2, total_items, websiteSetup } =
 		useCartContext();
 	const navigate = useHistory();
+	const user = authState?.user || null;
 
 	// Memoize the first name
 	const firstName = useMemo(() => {
@@ -80,6 +81,10 @@ const NavbarTop = memo(() => {
 			"/f_auto,q_auto,f_webp"
 		);
 	}
+
+	useEffect(() => {
+		setAuthState(isAuthenticated() || null);
+	}, []);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;

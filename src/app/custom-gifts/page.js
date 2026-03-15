@@ -1,11 +1,33 @@
-﻿import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
-import { createMetadata } from "@/lib/seo";
+import PodListRouteClient from "@/components/public/routes/PodListRouteClient";
+import JsonLd from "@/components/seo/JsonLd";
+import { absoluteUrl } from "@/lib/config";
+import { getPodProducts } from "@/lib/api";
+import {
+	buildProductPath,
+	getPrimaryProductImage,
+	getProductDisplayName,
+	getProductPrice,
+} from "@/lib/product-helpers";
+import { createMetadata, itemListSchema } from "@/lib/seo";
 
 function getSafeSearchParamValue(source, key) {
 	const raw = source?.[key];
 	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();
 	if (typeof raw === "symbol") return "";
 	return `${raw ?? ""}`.trim();
+}
+
+function createSeoCard(product = {}) {
+	const title = getProductDisplayName(product);
+	const href = buildProductPath(product);
+	return {
+		productId: product?._id || "",
+		title,
+		priceText: `$${getProductPrice(product).toFixed(2)}`,
+		href,
+		imageUrl: getPrimaryProductImage(product),
+		isPod: true,
+	};
 }
 
 export async function generateMetadata({ searchParams }) {
@@ -18,7 +40,12 @@ export async function generateMetadata({ searchParams }) {
 	const page = getSafeSearchParamValue(resolvedSearchParams, "page");
 	const hasActiveFilters = [occasion, name, color, size, scent, page].some(Boolean);
 	const personalization = [occasion, name].filter(Boolean).join(" - ");
-	const filtersSummary = [color && `color: ${color}`, size && `size: ${size}`, scent && `scent: ${scent}`, page && `page: ${page}`]
+	const filtersSummary = [
+		color && `color: ${color}`,
+		size && `size: ${size}`,
+		scent && `scent: ${scent}`,
+		page && `page: ${page}`,
+	]
 		.filter(Boolean)
 		.join(" | ");
 	const titleSuffix = [personalization, filtersSummary].filter(Boolean).join(" | ");
@@ -42,6 +69,29 @@ export async function generateMetadata({ searchParams }) {
 	});
 }
 
-export default function CustomGiftsPage() {
-	return <LegacyFrontendAppEntry initialRouteData={{ type: "pod-list" }} />;
+export default async function CustomGiftsPage() {
+	let seoCards = [];
+	try {
+		const products = await getPodProducts({ revalidate: 180, limit: 12, lite: true });
+		seoCards = Array.isArray(products)
+			? products.slice(0, 12).map(createSeoCard).filter((card) => card.href)
+			: [];
+	} catch {}
+
+	const schema = itemListSchema({
+		name: "Serene Jannat Custom Gifts",
+		url: absoluteUrl("/custom-gifts"),
+		items: seoCards.map((card) => ({
+			name: card.title,
+			url: absoluteUrl(card.href),
+			image: card.imageUrl,
+		})),
+	});
+
+	return (
+		<>
+			<JsonLd data={schema} />
+			<PodListRouteClient />
+		</>
+	);
 }

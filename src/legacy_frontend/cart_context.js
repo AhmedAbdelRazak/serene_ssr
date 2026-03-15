@@ -1,5 +1,5 @@
 // cart_context.js
-import React, { useEffect, useContext, useReducer } from "react";
+import React, { useEffect, useContext, useReducer, useState } from "react";
 import reducer from "./cart_reducer";
 import {
 	ADD_TO_CART,
@@ -19,6 +19,7 @@ import {
 	SIDEFILTERS_OPEN,
 	SET_WEBSITE_SETUP,
 	SET_LOADING,
+	HYDRATE_CART,
 } from "./actions";
 
 import {
@@ -33,7 +34,10 @@ import {
 import { useLegacyRouteBootstrap } from "./bootstrap/LegacyRouteBootstrapContext";
 
 // Utility to load cart from localStorage
-const getLocalStorage = () => {
+const getStoredCart = () => {
+	if (typeof window === "undefined") {
+		return [];
+	}
 	let cart = localStorage.getItem("cart");
 	if (cart) {
 		return JSON.parse(localStorage.getItem("cart"));
@@ -48,7 +52,7 @@ const initialState = {
 	isSidebarOpen: false,
 	isSidebarOpen2: false,
 	isSideFilterOpen: false,
-	cart: getLocalStorage(),
+	cart: [],
 	total_items: 0,
 	total_amount: 0,
 	shipping_fee: 0,
@@ -69,6 +73,7 @@ const CartContext = React.createContext();
 export const CartProvider = ({ children }) => {
 	const routeBootstrap = useLegacyRouteBootstrap();
 	const initialWebsiteSetup = routeBootstrap?.websiteSetup || null;
+	const [hasHydratedCart, setHasHydratedCart] = useState(false);
 	const [state, dispatch] = useReducer(
 		reducer,
 		initialWebsiteSetup,
@@ -205,11 +210,19 @@ export const CartProvider = ({ children }) => {
 		dispatch({ type: SHIPPING_DETAILS, payload: { chosenShipmentDetails } });
 	};
 
+	useEffect(() => {
+		dispatch({ type: HYDRATE_CART, payload: getStoredCart() });
+		setHasHydratedCart(true);
+	}, []);
+
 	// Keep totals in sync with localStorage
 	useEffect(() => {
 		dispatch({ type: COUNT_CART_TOTALS });
+		if (!hasHydratedCart) {
+			return;
+		}
 		localStorage.setItem("cart", JSON.stringify(state.cart));
-	}, [state.cart]);
+	}, [hasHydratedCart, state.cart]);
 
 	// ------------------------------------
 	// 2) Fetch Once on Mount

@@ -93,8 +93,23 @@ export const getFilteredProducts = cache(
 	}
 );
 
-export async function getPodProducts({ revalidate = 180 } = {}) {
-	return fetchJson("/products/pod/print-on-demand-products", { revalidate });
+export async function getPodProducts({
+	revalidate = 180,
+	limit = 0,
+	sortBy = "",
+	order = "",
+	lite = false,
+} = {}) {
+	const params = new URLSearchParams();
+	if (Number(limit) > 0) params.set("limit", String(limit));
+	if (sortBy) params.set("sortBy", sortBy);
+	if (order) params.set("order", order);
+	if (lite) params.set("lite", "1");
+	const query = params.toString();
+	return fetchJson(
+		`/products/pod/print-on-demand-products${query ? `?${query}` : ""}`,
+		{ revalidate }
+	);
 }
 
 export const getProductById = cache(async (productId, { revalidate = 300 } = {}) => {

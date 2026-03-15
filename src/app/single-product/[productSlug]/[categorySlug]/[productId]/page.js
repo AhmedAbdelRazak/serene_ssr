@@ -1,4 +1,4 @@
-import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import ProductRouteClient from "@/components/public/routes/ProductRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
 import { getProductById } from "@/lib/api";
 import {
@@ -6,9 +6,10 @@ import {
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
+	getProductInventoryCount,
 	getProductPrice,
 } from "@/lib/product-helpers";
-import { createMetadata, productSchema } from "@/lib/seo";
+import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
 import { notFound, permanentRedirect } from "next/navigation";
 
@@ -103,6 +104,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 	const variationLabel = buildVariantLabel(selection);
 	const image = getPrimaryProductImage(product, selection);
 	const price = getProductPrice(product);
+	const inventoryCount = getProductInventoryCount(product);
 	const canonicalPath = buildProductPath(product);
 	const redirectParams = buildVariantSearchParams(resolvedSearchParams);
 	const redirectQuery = redirectParams.toString();
@@ -128,7 +130,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 		price,
 		url: canonicalUrl,
 		availability:
-			Number(product?.quantity || 0) > 0
+			inventoryCount > 0
 				? "https://schema.org/InStock"
 				: "https://schema.org/OutOfStock",
 	});
@@ -149,12 +151,33 @@ export default async function SingleProductPage({ params, searchParams }) {
 			name: "Scent",
 			value: selection.scent,
 		},
-	].filter(Boolean);
+		].filter(Boolean);
+
+	const breadcrumbs = breadcrumbSchema([
+		{ name: "Home", url: absoluteUrl("/") },
+		{ name: "Our Products", url: absoluteUrl("/our-products") },
+		{ name: title, url: canonicalUrl },
+	]);
+
+	const initialRouteData = {
+		type: "standard-product",
+		productSlug: resolvedParams?.productSlug || "",
+		categorySlug: resolvedParams?.categorySlug || "",
+		product,
+		title,
+		description,
+		price,
+		image,
+		selection,
+		canonicalPath,
+		availabilityLabel: inventoryCount > 0 ? "In stock" : "Out of stock",
+	};
 
 	return (
 		<>
 			<JsonLd data={schema} />
-			<LegacyFrontendAppEntry initialRouteData={{ type: "standard-product" }} />
+			<JsonLd data={breadcrumbs} />
+			<ProductRouteClient initialRouteData={initialRouteData} />
 		</>
 	);
 }

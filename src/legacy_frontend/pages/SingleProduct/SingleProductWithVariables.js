@@ -61,8 +61,9 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 
 	const history = useHistory();
 	const location = useLocation();
-	const token = isAuthenticated() && isAuthenticated().token;
-	const user = isAuthenticated() && isAuthenticated().user;
+	const auth = isAuthenticated() || {};
+	const token = auth.token || "";
+	const user = auth.user || null;
 
 	useEffect(() => {
 		getColors().then((data) => {

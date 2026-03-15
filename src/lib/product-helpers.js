@@ -341,6 +341,18 @@ export function getProductPrice(product = {}) {
 	return Number.isFinite(priceCandidate) ? priceCandidate : 0;
 }
 
+export function getProductInventoryCount(product = {}) {
+	const topLevelQuantity = Number(product?.quantity || 0);
+	const attributeQuantity = Array.isArray(product?.productAttributes)
+		? product.productAttributes.reduce(
+				(total, attribute) => total + Math.max(0, Number(attribute?.quantity || 0)),
+				0
+			)
+		: 0;
+
+	return Math.max(0, topLevelQuantity, attributeQuantity);
+}
+
 function getPodOccasionEntries(product = {}) {
 	const occasions = [];
 	for (const attr of getProductAttributes(product)) {

@@ -258,7 +258,8 @@ const PrintifyAvailableProducts = () => {
 	const cleanupFlushInFlightRef = useRef(null);
 	const history = useHistory();
 	const location = useLocation();
-	const { user } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
 
 	const initialPersonalization = resolvePodPersonalization(location.search);
 	const [podOccasion, setPodOccasion] = useState(initialPersonalization.occasion);

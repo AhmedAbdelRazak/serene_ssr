@@ -49,8 +49,9 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 	const [likes, setLikes] = useState(0);
 	const history = useHistory();
 
-	const token = isAuthenticated() && isAuthenticated().token;
-	const user = isAuthenticated() && isAuthenticated().user;
+	const auth = isAuthenticated() || {};
+	const token = auth.token || "";
+	const user = auth.user || null;
 
 	useEffect(() => {
 		if (product.thumbnailImage.length > 0) {
@@ -70,7 +71,7 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 
 		// Check if the product is already in the wishlist
 		const isProductLiked = product.likes.some(
-			(like) => like.toString() === user._id
+			(like) => like.toString() === user?._id
 		);
 		setLikee(isProductLiked);
 		setLikes(product.likes.length);

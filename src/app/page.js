@@ -1,4 +1,4 @@
-import LegacyFrontendAppEntry from "@/components/legacy/LegacyFrontendAppEntry";
+import HomeRouteClient from "@/components/public/routes/HomeRouteClient";
 import {
 	getCategoriesAndSubcategories,
 	getSpecificProducts,
@@ -74,5 +74,5 @@ export default async function HomePage() {
 		customDesignProducts,
 	};
 
-	return <LegacyFrontendAppEntry initialRouteData={initialRouteData} />;
+	return <HomeRouteClient initialRouteData={initialRouteData} />;
 }

@@ -9,7 +9,6 @@ import { contactUs } from "../../auth/index";
 import { ToastContainer, toast } from "react-toastify";
 import { Helmet } from "react-helmet-async";
 import styled from "styled-components";
-import ReactGA from "react-ga4";
 import { useCartContext } from "../../cart_context";
 
 const { Title, Paragraph } = Typography;
@@ -26,15 +25,6 @@ const ContactUs = () => {
 	});
 	const { name, email, subject, text, loading } = values;
 	const { websiteSetup } = useCartContext();
-
-	useEffect(() => {
-		// GA4 pageview fix: Instead of passing a string to send(),
-		// we pass an object with hitType & page.
-		ReactGA.send({
-			hitType: "pageview",
-			page: window.location.pathname + window.location.search,
-		});
-	}, []);
 
 	const handleChange = (name) => (event) => {
 		setValues({ ...values, [name]: event.target.value });

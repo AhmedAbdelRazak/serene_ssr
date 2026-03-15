@@ -29,8 +29,12 @@ const apiOrigin = normalizedApiMain || "http://localhost:8101";
 const nextConfig = {
 	reactStrictMode: false,
 	poweredByHeader: false,
+	compiler: {
+		styledComponents: true,
+	},
 	experimental: {
 		externalDir: true,
+		webVitalsAttribution: ["CLS", "LCP", "INP"],
 	},
 	turbopack: {
 		resolveAlias: {

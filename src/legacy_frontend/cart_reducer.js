@@ -13,6 +13,7 @@ import {
 	SHIPPING_DETAILS,
 	CHANGE_COLOR,
 	CHANGE_SIZE,
+	HYDRATE_CART,
 	SIDEFILTERS_OPEN,
 	SIDEFILTERS_CLOSE,
 	// New action types
@@ -417,6 +418,13 @@ const cart_reducer = (state, action) => {
 			return item;
 		});
 		return { ...state, cart: tempCart };
+	}
+
+	if (action.type === HYDRATE_CART) {
+		return {
+			...state,
+			cart: Array.isArray(action.payload) ? action.payload : [],
+		};
 	}
 
 	// ==============================

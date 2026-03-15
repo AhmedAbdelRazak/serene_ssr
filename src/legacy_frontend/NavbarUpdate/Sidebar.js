@@ -80,7 +80,8 @@ const Sidebar = ({
 	activeLink,
 	setActiveLink,
 }) => {
-	const { user } = isAuthenticated();
+	const auth = isAuthenticated() || {};
+	const user = auth.user || null;
 	const { websiteSetup } = useCartContext();
 	const firstName = user?.name ? user.name.split(" ")[0] : "";
 

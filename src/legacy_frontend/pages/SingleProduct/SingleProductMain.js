@@ -4,21 +4,23 @@ import { useParams, useHistory, useLocation } from "react-router-dom";
 import SingleProductNoVariables from "./SingleProductNoVariables";
 import SingleProductWithVariables from "./SingleProductWithVariables";
 import { gettingSingleProduct } from "../../apiCore"; // Adjust the path if needed
-import ReactGA from "react-ga4";
+import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 
 const SingleProductMain = () => {
 	const { productSlug, categorySlug, productId } = useParams();
-	const [product, setProduct] = useState(null);
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const bootstrappedProduct =
+		routeBootstrap?.type === "standard-product" &&
+		`${routeBootstrap?.productSlug || ""}` === `${productSlug || ""}` &&
+		`${routeBootstrap?.categorySlug || ""}` === `${categorySlug || ""}` &&
+		`${routeBootstrap?.product?._id || ""}` === `${productId || ""}`
+			? routeBootstrap.product
+			: null;
+	const [product, setProduct] = useState(() => bootstrappedProduct);
 	const [error, setError] = useState(null);
 	const [likee, setLikee] = useState(false); // State to manage wishlist status
 	const history = useHistory();
 	const location = useLocation();
-
-	useEffect(() => {
-		ReactGA.send(window.location.pathname + window.location.search);
-
-		// eslint-disable-next-line
-	}, [window.location.pathname]);
 
 	useEffect(() => {
 		const currentPath = location.pathname;
@@ -30,15 +32,21 @@ const SingleProductMain = () => {
 				"/single-product/glass-jellyfish-windchime-small-royal-blue/outdoors/669334c85e796e948f7f978f",
 		};
 
-		if (redirectMappings[currentPath]) {
-			history.push(redirectMappings[currentPath]);
-			return;
-		}
+			if (redirectMappings[currentPath]) {
+				history.push(redirectMappings[currentPath]);
+				return;
+			}
 
-		const fetchProduct = async () => {
-			try {
-				const product = await gettingSingleProduct(
-					productSlug,
+			if (bootstrappedProduct && !likee) {
+				setProduct(bootstrappedProduct);
+				setError(null);
+				return;
+			}
+
+			const fetchProduct = async () => {
+				try {
+					const product = await gettingSingleProduct(
+						productSlug,
 					categorySlug,
 					productId
 				);
@@ -48,8 +56,16 @@ const SingleProductMain = () => {
 			}
 		};
 
-		fetchProduct();
-	}, [productSlug, categorySlug, productId, likee, history, location]);
+			fetchProduct();
+		}, [
+			bootstrappedProduct,
+			productSlug,
+			categorySlug,
+			productId,
+			likee,
+			history,
+			location,
+		]);
 
 	if (error) {
 		return <div>{error}</div>;
