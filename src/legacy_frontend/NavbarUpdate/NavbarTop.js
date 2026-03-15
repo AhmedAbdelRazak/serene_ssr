@@ -4,8 +4,8 @@ import React, {
 	useMemo,
 	lazy,
 	memo,
+	Suspense,
 	useEffect,
-	useRef,
 } from "react";
 import styled from "styled-components";
 
@@ -36,13 +36,12 @@ const getCloudinaryOptimizedUrl = (url, { width = 300 } = {}) => {
 
 const NavbarTop = memo(() => {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-	const [isCartOpen, setIsCartOpen] = useState(false);
 	const [activeLink, setActiveLink] = useState("");
-	const [mobileNavHeight, setMobileNavHeight] = useState(66);
-	const navRef = useRef(null);
+	const [isMobileViewport, setIsMobileViewport] = useState(false);
 
 	const { user } = isAuthenticated();
-	const { openSidebar2, total_items, websiteSetup } = useCartContext();
+	const { openSidebar2, isSidebarOpen2, total_items, websiteSetup } =
+		useCartContext();
 	const navigate = useHistory();
 
 	// Memoize the first name
@@ -82,26 +81,33 @@ const NavbarTop = memo(() => {
 		);
 	}
 
-	// Keep a stable spacer for fixed mobile top-nav.
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
-		const measure = () => {
-			const nextHeight = Number(navRef.current?.offsetHeight || 0);
-			if (nextHeight > 0) setMobileNavHeight(nextHeight);
+		const mediaQuery = window.matchMedia("(max-width: 768px)");
+		const syncViewport = () => {
+			setIsMobileViewport(mediaQuery.matches);
 		};
-		measure();
-		window.addEventListener("resize", measure, { passive: true });
+
+		syncViewport();
+		if (typeof mediaQuery.addEventListener === "function") {
+			mediaQuery.addEventListener("change", syncViewport);
+			return () => {
+				mediaQuery.removeEventListener("change", syncViewport);
+			};
+		}
+
+		mediaQuery.addListener(syncViewport);
 		return () => {
-			window.removeEventListener("resize", measure);
+			mediaQuery.removeListener(syncViewport);
 		};
 	}, []);
 
 	return (
 		<>
 			{isSidebarOpen && <Overlay onClick={() => setIsSidebarOpen(false)} />}
-			<MobileTopSpacer $height={mobileNavHeight} />
+			<MobileTopSpacer />
 
-			<NavbarTopWrapper ref={navRef} id='serene-navbar-top'>
+			<NavbarTopWrapper id='serene-navbar-top'>
 				{/* Hamburger menu icon (mobile) */}
 				<MenuIcon onClick={() => setIsSidebarOpen(true)} />
 
@@ -123,9 +129,7 @@ const NavbarTop = memo(() => {
 				)}
 
 				{/* Nav links (desktop) */}
-				<NavLinks
-					onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-				>
+				<NavLinks>
 					{/* Admin user */}
 					{user && user.name && user.role === 1 && (
 						<>
@@ -239,18 +243,22 @@ const NavbarTop = memo(() => {
 			</NavbarTopWrapper>
 
 			{/* Sidebar overlays */}
-			<Sidebar
-				isSidebarOpen={isSidebarOpen}
-				setIsSidebarOpen={setIsSidebarOpen}
-				handleNavLinkClick={handleNavLinkClick}
-				activeLink={activeLink}
-				setActiveLink={setActiveLink}
-			/>
-			<SidebarCart
-				isCartOpen={isCartOpen}
-				setIsCartOpen={setIsCartOpen}
-				from='NavbarTop'
-			/>
+			{isSidebarOpen ? (
+				<Suspense fallback={null}>
+					<Sidebar
+						isSidebarOpen={isSidebarOpen}
+						setIsSidebarOpen={setIsSidebarOpen}
+						handleNavLinkClick={handleNavLinkClick}
+						activeLink={activeLink}
+						setActiveLink={setActiveLink}
+					/>
+				</Suspense>
+			) : null}
+			{isSidebarOpen2 && isMobileViewport ? (
+				<Suspense fallback={null}>
+					<SidebarCart from='NavbarTop' />
+				</Suspense>
+			) : null}
 		</>
 	);
 });
@@ -280,6 +288,7 @@ const NavbarTopWrapper = styled.nav`
 		left: 0;
 		right: 0;
 		width: 100%;
+		min-height: 66px;
 		z-index: 1250;
 		background-color: rgba(255, 255, 255, 0.98);
 		backdrop-filter: saturate(140%) blur(8px);
@@ -308,7 +317,7 @@ const MobileTopSpacer = styled.div`
 
 	@media (max-width: 768px) {
 		display: block;
-		height: ${(props) => `${Math.max(0, Number(props.$height || 0))}px`};
+		height: 66px;
 	}
 `;
 

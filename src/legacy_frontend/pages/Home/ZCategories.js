@@ -76,8 +76,6 @@ const ZCategories = ({ allCategories }) => {
 							? window.navigator.userAgent
 							: undefined,
 				});
-
-			window.scrollTo({ top: 0, behavior: "smooth" });
 		},
 		[user]
 	);

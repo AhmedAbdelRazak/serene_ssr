@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from "react";
-import Slider from "react-slick";
+import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
 import fallbackHeroBanner from "../../GeneralImages/HomePageBanner1.jpg";
 
 const HERO_IMAGE_WIDTH = 1920;
 const HERO_IMAGE_HEIGHT = 997;
+const SlickSlider = lazy(() => import("react-slick"));
 
 const Hero = ({ websiteSetup }) => {
 	const [autoplayEnabled, setAutoplayEnabled] = useState(false);
@@ -76,86 +76,90 @@ const Hero = ({ websiteSetup }) => {
 		[autoplayEnabled, bannerItems.length]
 	);
 
-	return (
-		<HeroSection>
-			<SliderContainer>
-				<Slider {...settings}>
-					{bannerItems.map((banner, idx) => {
-						const {
-							url,
-							title,
-							subTitle,
-							buttonTitle,
-							btnBackgroundColor,
-							pageRedirectURL,
-						} = banner;
+	const renderSlide = (banner, idx) => {
+		const {
+			url,
+			title,
+			subTitle,
+			buttonTitle,
+			btnBackgroundColor,
+			pageRedirectURL,
+		} = banner;
 
-						const isFirstSlide = idx === 0;
-						const quality = isFirstSlide ? "auto" : "auto:eco";
+		const isFirstSlide = idx === 0;
+		const quality = isFirstSlide ? "auto" : "auto:eco";
 
-						// Cloudinary transforms
-						const base1600 = getCloudinaryOptimizedUrl(url, {
-							width: 1600,
-							quality,
-						});
-						const base1200 = getCloudinaryOptimizedUrl(url, {
-							width: 1200,
-							quality,
-						});
-						const base768 = getCloudinaryOptimizedUrl(url, {
-							width: 768,
-							quality,
-						});
-						const base480 = getCloudinaryOptimizedUrl(url, {
-							width: 480,
-							quality,
-						});
+		const base1600 = getCloudinaryOptimizedUrl(url, {
+			width: 1600,
+			quality,
+		});
+		const base1200 = getCloudinaryOptimizedUrl(url, {
+			width: 1200,
+			quality,
+		});
+		const base768 = getCloudinaryOptimizedUrl(url, {
+			width: 768,
+			quality,
+		});
+		const base480 = getCloudinaryOptimizedUrl(url, {
+			width: 480,
+			quality,
+		});
 
-						return (
-							<Slide key={idx}>
-								{base1600 ? (
-									<BannerImageWrapper>
-										<img
-											src={base480}
-											srcSet={`
+		return (
+			<Slide key={idx}>
+				{base1600 ? (
+					<BannerImageWrapper>
+						<img
+							src={base480}
+							srcSet={`
                         ${base480} 480w,
                         ${base768} 768w,
                         ${base1200} 1200w,
                         ${base1600} 1600w
                       `}
-											sizes='100vw'
-											alt={`Banner ${idx + 1}`}
-											loading={isFirstSlide ? "eager" : "lazy"}
-											// We can safely pass fetchPriority to a raw <img>.
-											// styled-components never sees this prop:
-											fetchPriority={isFirstSlide ? "high" : undefined}
-											decoding='async'
-											width={HERO_IMAGE_WIDTH}
-											height={HERO_IMAGE_HEIGHT}
-										/>
-									</BannerImageWrapper>
-								) : (
-									<Placeholder>Banner {idx + 1}</Placeholder>
-								)}
+							sizes='100vw'
+							alt={`Banner ${idx + 1}`}
+							loading={isFirstSlide ? "eager" : "lazy"}
+							fetchPriority={isFirstSlide ? "high" : undefined}
+							decoding='async'
+							width={HERO_IMAGE_WIDTH}
+							height={HERO_IMAGE_HEIGHT}
+						/>
+					</BannerImageWrapper>
+				) : (
+					<Placeholder>Banner {idx + 1}</Placeholder>
+				)}
 
-								{/* Overlaid text/content */}
-								<BannerContent>
-									{title && <h2>{title}</h2>}
-									{subTitle && <p>{subTitle}</p>}
-									{buttonTitle && (
-										<a
-											href={pageRedirectURL || "#"}
-											style={{ backgroundColor: btnBackgroundColor || "#000" }}
-											className='banner-btn'
-										>
-											{buttonTitle}
-										</a>
-									)}
-								</BannerContent>
-							</Slide>
-						);
-					})}
-				</Slider>
+				<BannerContent>
+					{title && <h2>{title}</h2>}
+					{subTitle && <p>{subTitle}</p>}
+					{buttonTitle && (
+						<a
+							href={pageRedirectURL || "#"}
+							style={{ backgroundColor: btnBackgroundColor || "#000" }}
+							className='banner-btn'
+						>
+							{buttonTitle}
+						</a>
+					)}
+				</BannerContent>
+			</Slide>
+		);
+	};
+
+	return (
+		<HeroSection>
+			<SliderContainer>
+				{bannerItems.length > 1 ? (
+					<Suspense fallback={renderSlide(bannerItems[0], 0)}>
+						<SlickSlider {...settings}>
+							{bannerItems.map((banner, idx) => renderSlide(banner, idx))}
+						</SlickSlider>
+					</Suspense>
+				) : (
+					renderSlide(bannerItems[0], 0)
+				)}
 			</SliderContainer>
 		</HeroSection>
 	);

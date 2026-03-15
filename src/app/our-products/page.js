@@ -48,5 +48,5 @@ export async function generateMetadata({ searchParams }) {
 }
 
 export default function OurProductsPage() {
-	return <LegacyFrontendAppEntry />;
+	return <LegacyFrontendAppEntry initialRouteData={{ type: "shop-list" }} />;
 }

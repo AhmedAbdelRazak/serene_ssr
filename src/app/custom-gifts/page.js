@@ -43,5 +43,5 @@ export async function generateMetadata({ searchParams }) {
 }
 
 export default function CustomGiftsPage() {
-	return <LegacyFrontendAppEntry />;
+	return <LegacyFrontendAppEntry initialRouteData={{ type: "pod-list" }} />;
 }

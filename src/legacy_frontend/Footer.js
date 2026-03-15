@@ -2,6 +2,7 @@
 
 import React from "react";
 import styled from "styled-components";
+import { useHistory } from "react-router-dom";
 import {
 	FaFacebookF,
 	FaTwitter,
@@ -11,9 +12,9 @@ import {
 } from "react-icons/fa";
 
 const Footer = () => {
+	const history = useHistory();
 	const handleNavigation = (url) => {
-		window.scrollTo({ top: 0, behavior: "smooth" });
-		window.location.href = url;
+		history.push(url);
 	};
 
 	return (

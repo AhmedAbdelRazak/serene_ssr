@@ -154,7 +154,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 	return (
 		<>
 			<JsonLd data={schema} />
-			<LegacyFrontendAppEntry />
+			<LegacyFrontendAppEntry initialRouteData={{ type: "standard-product" }} />
 		</>
 	);
 }

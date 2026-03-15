@@ -30,6 +30,7 @@ import {
 	gettingSpecificProducts,
 	cleanupPreviewCustomDesign,
 } from "./apiCore";
+import { useLegacyRouteBootstrap } from "./bootstrap/LegacyRouteBootstrapContext";
 
 // Utility to load cart from localStorage
 const getLocalStorage = () => {
@@ -66,7 +67,16 @@ const initialState = {
 const CartContext = React.createContext();
 
 export const CartProvider = ({ children }) => {
-	const [state, dispatch] = useReducer(reducer, initialState);
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const initialWebsiteSetup = routeBootstrap?.websiteSetup || null;
+	const [state, dispatch] = useReducer(
+		reducer,
+		initialWebsiteSetup,
+		(websiteSetup) => ({
+			...initialState,
+			websiteSetup: websiteSetup || initialState.websiteSetup,
+		})
+	);
 
 	// ------------------------------------
 	// 1) Existing Cart Logic (unchanged)
@@ -206,6 +216,10 @@ export const CartProvider = ({ children }) => {
 	// ------------------------------------
 	useEffect(() => {
 		const fetchData = async () => {
+			if (state.websiteSetup) {
+				dispatch({ type: SET_LOADING, payload: false });
+				return;
+			}
 			try {
 				// Turn on loading
 				dispatch({ type: SET_LOADING, payload: true });
@@ -277,7 +291,7 @@ export const CartProvider = ({ children }) => {
 		};
 
 		fetchData();
-	}, []);
+	}, [state.websiteSetup]);
 
 	// ------------------------------------
 	// 3) Provide the Context

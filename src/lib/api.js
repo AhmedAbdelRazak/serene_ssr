@@ -62,11 +62,13 @@ export const getSpecificProducts = cache(
 		records = 10,
 		skip = 0,
 		storeId = "",
+		lite = false,
 		revalidate = 300,
 	} = {}) => {
 		const params = new URLSearchParams();
 		if (Number(skip) > 0) params.set("skip", String(skip));
 		if (storeId) params.set("storeId", storeId);
+		if (lite) params.set("lite", "1");
 		const query = params.toString();
 		const suffix = query ? `?${query}` : "";
 		return fetchJson(
@@ -113,6 +115,10 @@ export const getSingleProductBySlug = cache(
 
 export const getCategoriesAndSubcategories = cache(async ({ revalidate = 1800 } = {}) => {
 	return fetchJson("/product/categories/subcategories", { revalidate });
+});
+
+export const getWebsiteSetupData = cache(async ({ revalidate = 1800 } = {}) => {
+	return fetchJson("/website-basic-setup", { revalidate });
 });
 
 export const getColorsCatalog = cache(async ({ revalidate = 1800 } = {}) => {

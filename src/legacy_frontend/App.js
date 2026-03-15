@@ -7,22 +7,7 @@ import {
 } from "react-router-dom";
 
 import NavbarTop from "./NavbarUpdate/NavbarTop";
-import NavbarBottom from "./NavbarUpdate/NavbarBottom";
-import Footer from "./Footer";
 import Home from "./pages/Home/Home";
-import PrintifyAvailableProducts from "./pages/PrintOnDemand/PrintifyAvailableProducts";
-import CustomizeSelectedProduct from "./pages/PrintOnDemand/CustomizeSelectedProduct";
-import Login from "./pages/Login";
-import Register from "./pages/Register";
-import RegisterSeller from "./pages/RegisterSeller";
-import PrivacyPolicy from "./pages/PrivacyPolicy";
-import CookiePolicy from "./pages/CookiePolicy";
-import ReturnRefundPolicy from "./pages/ReturnRefundPolicy";
-import About from "./pages/About/About";
-import Cart from "./pages/Checkout/Cart";
-import SingleProductMain from "./pages/SingleProduct/SingleProductMain";
-import ShopPageMain from "./pages/ShopPage/ShopPageMain";
-import ContactUs from "./pages/Contact/ContactUs";
 // eslint-disable-next-line
 // import AnimationWalkingComponent from "./pages/MyAnimationComponents/AnimationWalkingComponent";
 // eslint-disable-next-line
@@ -34,6 +19,8 @@ import ContactUs from "./pages/Contact/ContactUs";
 const ToastContainer = lazy(() =>
 	import("react-toastify").then((mod) => ({ default: mod.ToastContainer }))
 );
+const NavbarBottom = lazy(() => import("./NavbarUpdate/NavbarBottom"));
+const Footer = lazy(() => import("./Footer"));
 
 const GA_MEASUREMENT_ID =
 	process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_MEASUREMENTID ||
@@ -154,12 +141,26 @@ const CouponManagementMain = lazy(
 	() => import("./Seller/CouponManagement/CouponManagementMain"),
 );
 
+const PrintifyAvailableProducts = lazy(
+	() => import("./pages/PrintOnDemand/PrintifyAvailableProducts"),
+);
+const CustomizeSelectedProduct = lazy(
+	() => import("./pages/PrintOnDemand/CustomizeSelectedProduct"),
+);
 const PrintifyMain = lazy(
 	() => import("./Admin/PrintifyProductManagement/PrintifyMain"),
 );
 const WebsiteMain = lazy(() => import("./Admin/EditingWebsite/WebsiteMain"));
 
 // Lazy load components
+const Login = lazy(() => import("./pages/Login"));
+const Register = lazy(() => import("./pages/Register"));
+const RegisterSeller = lazy(() => import("./pages/RegisterSeller"));
+const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
+const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
+const ReturnRefundPolicy = lazy(() => import("./pages/ReturnRefundPolicy"));
+const About = lazy(() => import("./pages/About/About"));
+const Cart = lazy(() => import("./pages/Checkout/Cart"));
 const AdminDashboard = lazy(
 	() => import("./Admin/AdminMainDashboard/AdminDashboard"),
 );
@@ -179,6 +180,11 @@ const CustomerServiceMainAdmin = lazy(
 );
 const StorePOSMain = lazy(() => import("./Admin/StorePOS/StorePOSMain"));
 const UserDashboard = lazy(() => import("./User/UserDashboard"));
+const SingleProductMain = lazy(
+	() => import("./pages/SingleProduct/SingleProductMain"),
+);
+const ShopPageMain = lazy(() => import("./pages/ShopPage/ShopPageMain"));
+const ContactUs = lazy(() => import("./pages/Contact/ContactUs"));
 const ChatIcon = lazy(() => import("./Chat/ChatIcon"));
 const LinkGenerated = lazy(() => import("./Admin/StorePOS/LinkGenerated"));
 const CouponManagement = lazy(
@@ -207,10 +213,25 @@ const AppContent = () => {
 	const location = useLocation(); // get current route info
 	const [shouldRenderToast, setShouldRenderToast] = useState(false);
 	const [shouldRenderChat, setShouldRenderChat] = useState(false);
+	const [shouldRenderDesktopBottomNav, setShouldRenderDesktopBottomNav] =
+		useState(() =>
+			typeof window !== "undefined"
+				? window.matchMedia("(min-width: 769px)").matches
+				: false
+		);
+	const [shouldRenderFooter, setShouldRenderFooter] = useState(
+		() => location.pathname !== "/"
+	);
 
 	// Determine if path includes 'admin' or 'seller'
 	const shouldHideLayout =
 		location.pathname.includes("admin") || location.pathname.includes("seller");
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+		return undefined;
+	}, [location.pathname]);
 
 	// Initialize trackers once for legacy routes
 	useEffect(() => {
@@ -318,6 +339,97 @@ const AppContent = () => {
 		};
 	}, [shouldRenderChat]);
 
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		if (shouldHideLayout) {
+			setShouldRenderDesktopBottomNav(false);
+			return undefined;
+		}
+
+		const mediaQuery = window.matchMedia("(min-width: 769px)");
+		const syncDesktopBottomNav = () => {
+			setShouldRenderDesktopBottomNav(mediaQuery.matches);
+		};
+
+		syncDesktopBottomNav();
+		if (typeof mediaQuery.addEventListener === "function") {
+			mediaQuery.addEventListener("change", syncDesktopBottomNav);
+			return () => {
+				mediaQuery.removeEventListener("change", syncDesktopBottomNav);
+			};
+		}
+
+		mediaQuery.addListener(syncDesktopBottomNav);
+		return () => {
+			mediaQuery.removeListener(syncDesktopBottomNav);
+		};
+	}, [shouldHideLayout]);
+
+	useEffect(() => {
+		if (typeof window === "undefined") return undefined;
+		if (shouldHideLayout) {
+			setShouldRenderFooter(false);
+			return undefined;
+		}
+
+		if (location.pathname && location.pathname !== "/") {
+			setShouldRenderFooter(true);
+			return undefined;
+		}
+
+		setShouldRenderFooter(false);
+		let idleId = null;
+		let timeoutId = null;
+		let revealed = false;
+
+		const revealFooter = () => {
+			if (revealed) return;
+			revealed = true;
+			setShouldRenderFooter(true);
+			window.removeEventListener("pointerdown", revealFooter);
+			window.removeEventListener("keydown", revealFooter);
+			window.removeEventListener("touchstart", revealFooter);
+			window.removeEventListener("scroll", revealFooter);
+		};
+
+		window.addEventListener("pointerdown", revealFooter, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("keydown", revealFooter, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("touchstart", revealFooter, {
+			passive: true,
+			once: true,
+		});
+		window.addEventListener("scroll", revealFooter, {
+			passive: true,
+			once: true,
+		});
+
+		if (typeof window.requestIdleCallback === "function") {
+			idleId = window.requestIdleCallback(revealFooter, { timeout: 2500 });
+		} else {
+			timeoutId = window.setTimeout(revealFooter, 1800);
+		}
+
+		return () => {
+			revealed = true;
+			if (idleId && typeof window.cancelIdleCallback === "function") {
+				window.cancelIdleCallback(idleId);
+			}
+			if (timeoutId) {
+				window.clearTimeout(timeoutId);
+			}
+			window.removeEventListener("pointerdown", revealFooter);
+			window.removeEventListener("keydown", revealFooter);
+			window.removeEventListener("touchstart", revealFooter);
+			window.removeEventListener("scroll", revealFooter);
+		};
+	}, [location.pathname, shouldHideLayout]);
+
 	// Track page view on route change
 	useEffect(() => {
 		const pagePath = `${location.pathname || "/"}${location.search || ""}`;
@@ -390,7 +502,11 @@ const AppContent = () => {
 			{!shouldHideLayout && (
 				<>
 					<NavbarTop />
-					<NavbarBottom />
+					{shouldRenderDesktopBottomNav ? (
+						<Suspense fallback={null}>
+							<NavbarBottom />
+						</Suspense>
+					) : null}
 				</>
 			)}
 
@@ -552,11 +668,17 @@ const AppContent = () => {
 					{/* User (Private) Routes */}
 					<PrivateRoute path='/dashboard' exact component={UserDashboard} />
 					</Switch>
-
-					{/* Chat & Footer only if NOT admin/seller */}
-					{!shouldHideLayout && shouldRenderChat ? <ChatIcon /> : null}
-					{!shouldHideLayout && <Footer />}
 				</Suspense>
+				{!shouldHideLayout && shouldRenderChat ? (
+					<Suspense fallback={null}>
+						<ChatIcon />
+					</Suspense>
+				) : null}
+				{!shouldHideLayout && shouldRenderFooter ? (
+					<Suspense fallback={<div style={{ minHeight: "160px" }} />}>
+						<Footer />
+					</Suspense>
+				) : null}
 			</main>
 		</>
 	);

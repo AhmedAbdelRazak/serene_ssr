@@ -74,7 +74,6 @@ const ProductCard = ({ product }) => {
 						sizes='(max-width: 480px) 80vw, (max-width: 768px) 45vw, (max-width: 1200px) 30vw, 240px'
 						widths={[240, 360, 480, 600, 800]}
 						onClick={() => {
-							window.scrollTo({ top: 0, behavior: "smooth" });
 							history.push(
 								`/single-product/${product.slug}/${product.category.categorySlug}/${product._id}`
 							);

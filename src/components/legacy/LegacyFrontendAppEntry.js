@@ -3,6 +3,29 @@
 import dynamic from "next/dynamic";
 import { useMemo } from "react";
 
+const routeModulePreloaders = {
+	home: () => import("@/legacy_frontend/pages/Home/Home"),
+	"pod-product": () =>
+		import("@/legacy_frontend/pages/PrintOnDemand/CustomizeSelectedProduct"),
+	"pod-list": () =>
+		import("@/legacy_frontend/pages/PrintOnDemand/PrintifyAvailableProducts"),
+	"shop-list": () => import("@/legacy_frontend/pages/ShopPage/ShopPageMain"),
+	"standard-product": () =>
+		import("@/legacy_frontend/pages/SingleProduct/SingleProductMain"),
+};
+
+const preloadedRouteTypes = new Set();
+
+function preloadRouteModule(routeType = "") {
+	if (!routeType || preloadedRouteTypes.has(routeType)) return;
+	const preload = routeModulePreloaders[routeType];
+	if (typeof preload !== "function") return;
+	preloadedRouteTypes.add(routeType);
+	Promise.resolve(preload()).catch(() => {
+		preloadedRouteTypes.delete(routeType);
+	});
+}
+
 function formatPrice(value) {
 	const numericValue = Number(value);
 	if (!Number.isFinite(numericValue) || numericValue <= 0) return "";
@@ -12,7 +35,7 @@ function formatPrice(value) {
 	}).format(numericValue);
 }
 
-function HeaderShell() {
+function HeaderShell({ logoUrl = "/logo192.png" }) {
 	return (
 		<header
 			style={{
@@ -54,7 +77,7 @@ function HeaderShell() {
 					}}
 				>
 					<img
-						src='/logo192.png'
+						src={logoUrl}
 						alt='Serene Jannat'
 						style={{
 							width: 42,
@@ -104,6 +127,193 @@ function HeaderShell() {
 	);
 }
 
+function HomeFallback({ initialRouteData }) {
+	const websiteSetup = initialRouteData?.websiteSetup || null;
+	const heroBanner = websiteSetup?.homeMainBanners?.[0] || null;
+	const logoUrl =
+		websiteSetup?.sereneJannatLogo?.url || initialRouteData?.logoUrl || "/logo192.png";
+	const categories = Array.isArray(initialRouteData?.categories)
+		? initialRouteData.categories
+		: [];
+	const featuredProducts = Array.isArray(initialRouteData?.featuredProducts)
+		? initialRouteData.featuredProducts
+		: [];
+	const newArrivalProducts = Array.isArray(initialRouteData?.newArrivalProducts)
+		? initialRouteData.newArrivalProducts
+		: [];
+	const customDesignProducts = Array.isArray(initialRouteData?.customDesignProducts)
+		? initialRouteData.customDesignProducts
+		: [];
+	const homeCards = [
+		...featuredProducts,
+		...customDesignProducts,
+		...newArrivalProducts,
+	].filter(Boolean).slice(0, 6);
+
+	return (
+		<main
+			role='main'
+			aria-busy='true'
+			style={{
+				minHeight: "100vh",
+				background: "#f7f3ee",
+			}}
+		>
+			<HeaderShell logoUrl={logoUrl} />
+			<div
+				style={{
+					maxWidth: 1360,
+					margin: "0 auto",
+					padding: "18px 16px 30px",
+				}}
+			>
+				<section
+					style={{
+						position: "relative",
+						minHeight: "clamp(260px, 52vw, 700px)",
+						borderRadius: 18,
+						overflow: "hidden",
+						background: heroBanner?.url
+							? `center / cover no-repeat url(${heroBanner.url})`
+							: "linear-gradient(135deg, #58504a 0%, #b49c83 100%)",
+						boxShadow: "0 18px 32px rgba(0, 0, 0, 0.12)",
+					}}
+				>
+					<div
+						style={{
+							position: "absolute",
+							inset: 0,
+							background:
+								"linear-gradient(90deg, rgba(0,0,0,0.48) 0%, rgba(0,0,0,0.18) 52%, rgba(0,0,0,0.1) 100%)",
+						}}
+					/>
+					<div
+						style={{
+							position: "relative",
+							padding: "clamp(22px, 5vw, 42px)",
+							maxWidth: 720,
+							color: "#ffffff",
+						}}
+					>
+						<div
+							style={{
+								fontSize: "clamp(2rem, 6vw, 4.8rem)",
+								lineHeight: 1,
+								fontWeight: 600,
+								marginBottom: 10,
+								fontFamily: '"Allison", cursive',
+							}}
+						>
+							{heroBanner?.title || "Serene Jannat gifts"}
+						</div>
+						<div
+							style={{
+								fontSize: "clamp(0.98rem, 2vw, 1.25rem)",
+								lineHeight: 1.5,
+								maxWidth: 560,
+							}}
+						>
+							{heroBanner?.subTitle ||
+								"Handpicked decor, custom gifts, and premium print-on-demand products."}
+						</div>
+					</div>
+				</section>
+
+				{categories.length ? (
+					<section
+						style={{
+							display: "grid",
+							gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))",
+							gap: 12,
+							marginTop: 18,
+						}}
+					>
+						{categories.slice(0, 6).map((category) => (
+							<div
+								key={category?._id || category?.categorySlug || category?.categoryName}
+								style={{
+									background: "#ffffff",
+									border: "1px solid #ece0d6",
+									borderRadius: 16,
+									padding: "14px 12px",
+									boxShadow: "0 10px 22px rgba(0, 0, 0, 0.05)",
+									textAlign: "center",
+									fontWeight: 600,
+									color: "#3f332b",
+								}}
+							>
+								{category?.categoryName || "Category"}
+							</div>
+						))}
+					</section>
+				) : null}
+
+				<section
+					style={{
+						display: "grid",
+						gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+						gap: 16,
+						marginTop: 22,
+					}}
+				>
+					{homeCards.length
+						? homeCards.map((product, index) => {
+								const imageUrl =
+									product?.thumbnailImage?.[0]?.images?.[0]?.url ||
+									product?.images?.[0]?.src ||
+									"";
+								return (
+									<div
+										key={product?._id || `${product?.productName || "card"}-${index}`}
+										style={{
+											background: "#ffffff",
+											border: "1px solid #ece0d6",
+											borderRadius: 18,
+											overflow: "hidden",
+											boxShadow: "0 12px 24px rgba(0, 0, 0, 0.06)",
+										}}
+									>
+										<div
+											style={{
+												aspectRatio: "1 / 1",
+												background: imageUrl
+													? `center / cover no-repeat url(${imageUrl})`
+													: "linear-gradient(135deg, #efe8df 0%, #faf7f3 100%)",
+											}}
+										/>
+										<div style={{ padding: 14 }}>
+											<div
+												style={{
+													fontWeight: 600,
+													color: "#332a24",
+													lineHeight: 1.35,
+													minHeight: 42,
+												}}
+											>
+												{product?.productName || product?.title || "Product"}
+											</div>
+										</div>
+									</div>
+								);
+							})
+						: Array.from({ length: 6 }).map((_, index) => (
+								<div
+									key={index}
+									style={{
+										height: 260,
+										borderRadius: 18,
+										background: "#ffffff",
+										border: "1px solid #ece0d6",
+										boxShadow: "0 12px 26px rgba(0, 0, 0, 0.06)",
+									}}
+								/>
+							))}
+				</section>
+			</div>
+		</main>
+	);
+}
+
 function PodProductFallback({ initialRouteData }) {
 	const title = initialRouteData?.title || "Loading custom gift";
 	const priceLabel = formatPrice(initialRouteData?.price);
@@ -124,7 +334,7 @@ function PodProductFallback({ initialRouteData }) {
 				background: "#f7f3ee",
 			}}
 		>
-			<HeaderShell />
+			<HeaderShell logoUrl='/logo192.png' />
 			<div
 				style={{
 					maxWidth: 1280,
@@ -349,7 +559,7 @@ function GenericFallback() {
 				background: "#f7f3ee",
 			}}
 		>
-			<HeaderShell />
+			<HeaderShell logoUrl='/logo192.png' />
 			<div
 				style={{
 					maxWidth: 1280,
@@ -398,6 +608,9 @@ function GenericFallback() {
 }
 
 function LegacyShellFallback({ initialRouteData = null }) {
+	if (initialRouteData?.type === "home") {
+		return <HomeFallback initialRouteData={initialRouteData} />;
+	}
 	if (initialRouteData?.type === "pod-product") {
 		return <PodProductFallback initialRouteData={initialRouteData} />;
 	}
@@ -407,6 +620,8 @@ function LegacyShellFallback({ initialRouteData = null }) {
 export default function LegacyFrontendAppEntry({
 	initialRouteData = null,
 }) {
+	preloadRouteModule(initialRouteData?.type || "");
+
 	const LegacyFrontendApp = useMemo(
 		() =>
 			dynamic(() => import("./LegacyFrontendApp"), {

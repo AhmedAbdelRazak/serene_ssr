@@ -1,9 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import styled from "styled-components";
 import { AiOutlineShoppingCart } from "react-icons/ai"; // Import for cart icon
-import SidebarCart from "./SidebarCart"; // Import SidebarCart
 import { Link, useLocation } from "react-router-dom";
 import { useCartContext } from "../cart_context";
+
+const SidebarCart = lazy(() => import("./SidebarCart"));
 
 const NavbarBottom = () => {
 	const [clickedLink, setClickedLink] = useState("");
@@ -16,7 +17,7 @@ const NavbarBottom = () => {
 	const lastPinnedRef = useRef(false);
 	const lastScrolledStyleRef = useRef(false);
 	const location = useLocation();
-	const { openSidebar2, total_items } = useCartContext();
+	const { openSidebar2, isSidebarOpen2, total_items } = useCartContext();
 
 	// Deterministic sticky behavior with hysteresis to avoid flicker.
 	useEffect(() => {
@@ -109,9 +110,7 @@ const NavbarBottom = () => {
 				$isPinned={isPinned}
 				$isScrolledStyle={isScrolledStyle}
 			>
-				<NavLinks
-					onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-				>
+				<NavLinks>
 					<StyledNavLink
 						$isSticky={isScrolledStyle}
 						to='/'
@@ -160,7 +159,11 @@ const NavbarBottom = () => {
 				</CartIconWrapper>
 			</NavbarBottomWrapper>
 
-			<SidebarCart from='NavbarBottom' />
+			{isSidebarOpen2 ? (
+				<Suspense fallback={null}>
+					<SidebarCart from='NavbarBottom' />
+				</Suspense>
+			) : null}
 		</>
 	);
 };

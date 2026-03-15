@@ -1,10 +1,10 @@
-import React, { Suspense, lazy, useEffect, useState } from "react";
+import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
 import { useCartContext } from "../../cart_context";
+import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 // Components
-import ZCategories from "./ZCategories";
 import Hero from "./Hero";
 import {
 	gettingCategoriesAndSubcategories,
@@ -16,6 +16,7 @@ import {
 	resolveImageUrl,
 } from "../../utils/image";
 
+const ZCategories = lazy(() => import("./ZCategories"));
 const ZFeaturedProducts = lazy(() => import("./ZFeaturedProducts"));
 const ZCustomDesigns = lazy(() => import("./ZCustomDesigns"));
 const ZNewArrival = lazy(() => import("./ZNewArrival"));
@@ -234,16 +235,72 @@ const VisuallyHiddenH1 = styled.h1`
 	border: 0;
 `;
 
+const DeferredSection = ({
+	children,
+	fallback = <SectionSkeleton aria-hidden='true' />,
+	rootMargin = "320px 0px",
+}) => {
+	const [shouldRender, setShouldRender] = useState(false);
+	const triggerRef = useRef(null);
+
+	useEffect(() => {
+		if (shouldRender) return undefined;
+		if (typeof window === "undefined") return undefined;
+		if (!("IntersectionObserver" in window)) {
+			setShouldRender(true);
+			return undefined;
+		}
+
+		const target = triggerRef.current;
+		if (!target) {
+			setShouldRender(true);
+			return undefined;
+		}
+
+		const observer = new IntersectionObserver(
+			(entries) => {
+				if (entries.some((entry) => entry.isIntersecting)) {
+					setShouldRender(true);
+					observer.disconnect();
+				}
+			},
+			{ rootMargin }
+		);
+
+		observer.observe(target);
+		return () => {
+			observer.disconnect();
+		};
+	}, [rootMargin, shouldRender]);
+
+	return <div ref={triggerRef}>{shouldRender ? children : fallback}</div>;
+};
+
 const Home = () => {
-	const [categories, setCategories] = useState([]);
-	const [subcategories, setSubcategories] = useState([]);
-	const [featuredProducts, setFeaturedProducts] = useState([]);
-	const [newArrivalProducts, setNewArrivalProducts] = useState([]);
-	const [customDesignProducts, setCustomDesignProducts] = useState([]);
-	const [loading, setLoading] = useState(false);
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const initialHomeBootstrap =
+		routeBootstrap?.type === "home" ? routeBootstrap : null;
+	const [categories, setCategories] = useState(
+		() => initialHomeBootstrap?.categories || []
+	);
+	const [subcategories, setSubcategories] = useState(
+		() => initialHomeBootstrap?.subcategories || []
+	);
+	const [featuredProducts, setFeaturedProducts] = useState(
+		() => initialHomeBootstrap?.featuredProducts || []
+	);
+	const [newArrivalProducts, setNewArrivalProducts] = useState(
+		() => initialHomeBootstrap?.newArrivalProducts || []
+	);
+	const [customDesignProducts, setCustomDesignProducts] = useState(
+		() => initialHomeBootstrap?.customDesignProducts || []
+	);
+	const [loading, setLoading] = useState(() => !initialHomeBootstrap);
 
 	const { websiteSetup } = useCartContext();
-	const heroBanner = websiteSetup?.homeMainBanners?.[0];
+	const effectiveWebsiteSetup =
+		websiteSetup || initialHomeBootstrap?.websiteSetup || null;
+	const heroBanner = effectiveWebsiteSetup?.homeMainBanners?.[0];
 
 	useEffect(() => {
 		const loadAdSense = () => {
@@ -301,6 +358,11 @@ const Home = () => {
 	}, []);
 
 	useEffect(() => {
+		if (initialHomeBootstrap) {
+			setLoading(false);
+			return undefined;
+		}
+
 		const fetchData = async () => {
 			try {
 				setLoading(true);
@@ -315,9 +377,15 @@ const Home = () => {
 
 				const [featuredData, newArrivalData, customDesignData] =
 					await Promise.all([
-						gettingSpecificProducts(1, 0, 0, 0, 0, 6),
-						gettingSpecificProducts(0, 1, 0, 0, 0, 6),
-						gettingSpecificProducts(0, 0, 1, 0, 0, 6),
+						gettingSpecificProducts(1, 0, 0, 0, 0, 6, 0, "", {
+							lite: true,
+						}),
+						gettingSpecificProducts(0, 1, 0, 0, 0, 6, 0, "", {
+							lite: true,
+						}),
+						gettingSpecificProducts(0, 0, 1, 0, 0, 6, 0, "", {
+							lite: true,
+						}),
 					]);
 
 				if (featuredData?.error) {
@@ -348,12 +416,7 @@ const Home = () => {
 		};
 
 		fetchData();
-	}, []);
-
-	useEffect(() => {
-		if (typeof window === "undefined") return;
-		window.scrollTo({ top: 0, behavior: "smooth" });
-	}, []);
+	}, [initialHomeBootstrap]);
 
 	return (
 		<HomeWrapper>
@@ -369,49 +432,59 @@ const Home = () => {
 			</VisuallyHiddenH1>
 
 			{/* Hero */}
-			<Hero websiteSetup={websiteSetup} />
+			<Hero websiteSetup={effectiveWebsiteSetup} />
 
 			{/* Categories */}
 			{categories.length > 0 ? (
-				<FadeUpDiv>
-					<ZCategories
-						allCategories={categories}
-						allSubcategories={subcategories}
-					/>
-				</FadeUpDiv>
+				<DeferredSection rootMargin='180px 0px'>
+					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+						<FadeUpDiv>
+							<ZCategories
+								allCategories={categories}
+								allSubcategories={subcategories}
+							/>
+						</FadeUpDiv>
+					</Suspense>
+				</DeferredSection>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* Featured Products */}
 			{featuredProducts.length > 0 ? (
-				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
-					<FadeUpDiv>
-						<ZFeaturedProducts featuredProducts={featuredProducts} />
-					</FadeUpDiv>
-				</Suspense>
+				<DeferredSection rootMargin='260px 0px'>
+					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+						<FadeUpDiv>
+							<ZFeaturedProducts featuredProducts={featuredProducts} />
+						</FadeUpDiv>
+					</Suspense>
+				</DeferredSection>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* Custom Designs */}
 			{customDesignProducts.length > 0 ? (
-				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
-					<FadeUpDiv>
-						<ZCustomDesigns customDesignProducts={customDesignProducts} />
-					</FadeUpDiv>
-				</Suspense>
+				<DeferredSection rootMargin='260px 0px'>
+					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+						<FadeUpDiv>
+							<ZCustomDesigns customDesignProducts={customDesignProducts} />
+						</FadeUpDiv>
+					</Suspense>
+				</DeferredSection>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}
 
 			{/* New Arrivals */}
 			{newArrivalProducts.length > 0 ? (
-				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
-					<FadeUpDiv>
-						<ZNewArrival newArrivalProducts={newArrivalProducts} />
-					</FadeUpDiv>
-				</Suspense>
+				<DeferredSection rootMargin='260px 0px'>
+					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+						<FadeUpDiv>
+							<ZNewArrival newArrivalProducts={newArrivalProducts} />
+						</FadeUpDiv>
+					</Suspense>
+				</DeferredSection>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}

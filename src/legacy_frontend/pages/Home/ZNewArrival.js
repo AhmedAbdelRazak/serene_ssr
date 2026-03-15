@@ -247,7 +247,6 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 				}
 			).catch(() => {});
 
-			window.scrollTo({ top: 0, behavior: "smooth" });
 			history.push(
 				`/single-product/${product.slug}/${product.category.categorySlug}/${product._id}`
 			);
