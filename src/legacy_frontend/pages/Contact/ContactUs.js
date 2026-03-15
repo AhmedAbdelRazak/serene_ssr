@@ -10,6 +10,7 @@ import { ToastContainer, toast } from "react-toastify";
 import { Helmet } from "react-helmet-async";
 import styled from "styled-components";
 import { useCartContext } from "../../cart_context";
+import { useLegacySeoEnabled } from "../../bootstrap/legacySeo";
 
 const { Title, Paragraph } = Typography;
 const { TextArea } = Input;
@@ -25,6 +26,7 @@ const ContactUs = () => {
 	});
 	const { name, email, subject, text, loading } = values;
 	const { websiteSetup } = useCartContext();
+	const legacySeoEnabled = useLegacySeoEnabled();
 
 	const handleChange = (name) => (event) => {
 		setValues({ ...values, [name]: event.target.value });
@@ -62,7 +64,7 @@ const ContactUs = () => {
 
 	return (
 		<ContactUsWrapper>
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<meta charSet='utf-8' />
 				<title>Serene Jannat | Contact Us - Your Comfort is Our Priority</title>
 				<meta
@@ -102,7 +104,7 @@ const ContactUs = () => {
 						}),
 					}}
 				/>
-			</Helmet>
+			</Helmet> : null}
 
 			<Row justify='center' align='middle'>
 				<Col xs={24} sm={20} md={16} lg={12} xl={16}>

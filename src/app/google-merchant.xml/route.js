@@ -24,15 +24,37 @@ const FEED_SHIPPING_COUNTRY = "US";
 const FEED_SHIPPING_SERVICE = "Standard";
 const DEFAULT_SHIPPING_PRICE_USD = 0;
 
+function getCategoryInferenceText(product = {}) {
+	const parts = [
+		product?.productName,
+		product?.printifyProductDetails?.title,
+		product?.category?.categoryName,
+		product?.gender?.genderName,
+		...(Array.isArray(product?.subcategory)
+			? product.subcategory.map((entry) => entry?.SubcategoryName)
+			: []),
+	];
+
+	return parts
+		.map((value) => `${value || ""}`.trim().toLowerCase())
+		.filter(Boolean)
+		.join(" ");
+}
+
 function inferGoogleProductCategory(product = {}) {
-	const text = `${product?.category?.categoryName || product?.productName || ""}`
-		.toLowerCase()
-		.trim();
+	const text = getCategoryInferenceText(product);
 	if (!text) return "Home & Garden > Decor";
 	if (text.includes("mug")) {
 		return "Home & Garden > Kitchen & Dining > Tableware > Drinkware > Mugs";
 	}
-	if (text.includes("t-shirt") || text.includes("hoodie") || text.includes("sweatshirt")) {
+	if (
+		text.includes("t-shirt") ||
+		text.includes("tee") ||
+		text.includes("shirt") ||
+		text.includes("hoodie") ||
+		text.includes("sweatshirt") ||
+		text.includes("pullover")
+	) {
 		return "Apparel & Accessories > Clothing";
 	}
 	if (text.includes("tote") || text.includes("weekender") || text.includes("bag")) {
@@ -48,6 +70,61 @@ function inferGoogleProductCategory(product = {}) {
 		return "Home & Garden > Decor > Magnets";
 	}
 	return "Home & Garden > Decor";
+}
+
+function isApparelCategory(category = "") {
+	return `${category || ""}`.startsWith("Apparel & Accessories > Clothing");
+}
+
+function resolveFeedGender(product = {}) {
+	const genderToken = `${product?.gender?.genderName || ""}`.trim().toLowerCase();
+	const text = getCategoryInferenceText(product);
+
+	if (
+		genderToken.includes("women") ||
+		genderToken.includes("female") ||
+		text.includes("women") ||
+		text.includes("female") ||
+		text.includes("ladies")
+	) {
+		return "female";
+	}
+
+	if (
+		genderToken.includes("men") ||
+		genderToken.includes("male") ||
+		text.includes("men") ||
+		text.includes("male")
+	) {
+		return "male";
+	}
+
+	return "unisex";
+}
+
+function resolveFeedAgeGroup(product = {}) {
+	const text = getCategoryInferenceText(product);
+	if (text.includes("infant") || text.includes("baby") || text.includes("newborn")) {
+		return "infant";
+	}
+	if (
+		text.includes("toddler") ||
+		text.includes("kid") ||
+		text.includes("kids") ||
+		text.includes("child") ||
+		text.includes("children") ||
+		text.includes("youth")
+	) {
+		return "kids";
+	}
+	return "adult";
+}
+
+function buildApparelAttributesXml(product = {}, googleCategory = "") {
+	if (!isApparelCategory(googleCategory)) return "";
+	return `
+	<g:gender>${escapeXml(resolveFeedGender(product))}</g:gender>
+	<g:age_group>${escapeXml(resolveFeedAgeGroup(product))}</g:age_group>`;
 }
 
 function toSafeQueryValue(value = "") {
@@ -354,6 +431,7 @@ function buildPodFeedItems({
 }) {
 	const occasions = getPodOccasions(product);
 	const selections = getPodVariantSelections(product);
+	const apparelAttributesXml = buildApparelAttributesXml(product, googleCategory);
 	const effectiveSelections = selections.length
 		? selections
 		: [
@@ -450,6 +528,7 @@ function buildPodFeedItems({
 	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
 	<g:custom_label_1>${escapeXml(occasion)}</g:custom_label_1>
 	<g:custom_label_2>customizable</g:custom_label_2>
+	${apparelAttributesXml}
 	${selection.size ? `<g:size>${escapeXml(selection.size)}</g:size>` : ""}
 	${selectedColor ? `<g:color>${escapeXml(selectedColor)}</g:color>` : ""}
 	${
@@ -478,6 +557,7 @@ function buildStandardFeedItems({
 		: [];
 	const fallbackImage =
 		getPrimaryProductImage(product) || buildFeedImageSet(product, {})[0] || "";
+	const apparelAttributesXml = buildApparelAttributesXml(product, googleCategory);
 
 	if (!attributes.length) {
 		const effectivePrice = getProductPrice(product);
@@ -513,6 +593,7 @@ function buildStandardFeedItems({
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
 	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
+	${apparelAttributesXml}
 	<g:identifier_exists>false</g:identifier_exists>
 </item>`,
 		];
@@ -571,6 +652,7 @@ function buildStandardFeedItems({
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
 	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
+	${apparelAttributesXml}
 	${attr?.size ? `<g:size>${escapeXml(attr.size)}</g:size>` : ""}
 	${resolvedColor ? `<g:color>${escapeXml(resolvedColor)}</g:color>` : ""}
 	${attr?.SubSKU ? `<g:mpn>${escapeXml(attr.SubSKU)}</g:mpn>` : ""}

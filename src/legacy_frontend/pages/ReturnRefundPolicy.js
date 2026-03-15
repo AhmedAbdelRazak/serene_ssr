@@ -4,9 +4,11 @@ import React from "react";
 import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import { useCartContext } from "../cart_context";
+import { useLegacySeoEnabled } from "../bootstrap/legacySeo";
 
 const ReturnRefundPolicy = () => {
 	const { websiteSetup } = useCartContext();
+	const legacySeoEnabled = useLegacySeoEnabled();
 
 	const title = "Return and Refund Policy | Serene Jannat";
 	const description =
@@ -17,7 +19,7 @@ const ReturnRefundPolicy = () => {
 
 	return (
 		<Wrapper>
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<title>{title}</title>
 				<meta name='description' content={description} />
 				<meta name='keywords' content={keywords} />
@@ -29,7 +31,7 @@ const ReturnRefundPolicy = () => {
 					href='https://serenejannat.com/return-refund-policy'
 				/>
 				<meta property='og:type' content='website' />
-			</Helmet>
+			</Helmet> : null}
 			<ContentWrapper>
 				{websiteSetup && websiteSetup.returnsAndRefund && (
 					<DescriptionWrapper>

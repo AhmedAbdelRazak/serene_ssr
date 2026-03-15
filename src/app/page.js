@@ -8,7 +8,7 @@ import { preload } from "react-dom";
 import { createMetadata } from "@/lib/seo";
 import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
 
-export const dynamic = "force-dynamic";
+export const revalidate = 300;
 
 export const metadata = createMetadata({
 	title: "Serene Jannat | Personalized Gifts, Print On Demand, and Home Decor",
@@ -149,29 +149,6 @@ export default async function HomePage() {
 
 	return (
 		<>
-			{heroAsset?.src ? (
-				<img
-					src={heroAsset.src}
-					srcSet={heroAsset.srcSet || undefined}
-					sizes={heroAsset.sizes || "100vw"}
-					alt=''
-					aria-hidden='true'
-					width='1920'
-					height='997'
-					loading='eager'
-					fetchPriority='high'
-					decoding='async'
-					style={{
-						position: "absolute",
-						width: 1,
-						height: 1,
-						opacity: 0,
-						pointerEvents: "none",
-						inset: 0,
-						zIndex: -1,
-					}}
-				/>
-			) : null}
 			<HomeRouteClient initialRouteData={initialRouteData} />
 		</>
 	);

@@ -7,6 +7,9 @@ import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
 
+const GLOBAL_FONT_STYLESHEET =
+	"https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&family=Allison&display=swap";
+
 export const metadata = createMetadata({
 	title: "Serene Jannat | Harmonious Glow, Natural Bliss",
 	description:
@@ -31,23 +34,24 @@ export default function RootLayout({ children }) {
 	return (
 		<html lang='en'>
 			<head>
-				<link rel='preconnect' href='https://res.cloudinary.com' />
+				<link
+					rel='preconnect'
+					href='https://res.cloudinary.com'
+					crossOrigin='anonymous'
+				/>
 				<link rel='preconnect' href='https://fonts.gstatic.com' crossOrigin='anonymous' />
 				<link
 					rel='preload'
 					as='style'
-					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
+					href={GLOBAL_FONT_STYLESHEET}
 				/>
 				<link
 					rel='stylesheet'
-					href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
+					href={GLOBAL_FONT_STYLESHEET}
 					media='all'
 				/>
 				<noscript>
-					<link
-						rel='stylesheet'
-						href='https://fonts.googleapis.com/css2?family=Rastantly+Cortez&family=Montserrat:wght@400;700&family=Open+Sans&family=Great+Vibes&family=Allison&family=Allura&family=Dancing+Script&family=Lobster&display=swap'
-					/>
+					<link rel='stylesheet' href={GLOBAL_FONT_STYLESHEET} />
 				</noscript>
 				<script
 					dangerouslySetInnerHTML={{

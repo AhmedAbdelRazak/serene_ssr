@@ -10,6 +10,8 @@ import {
 } from "@/lib/product-helpers";
 import { createMetadata, itemListSchema } from "@/lib/seo";
 
+export const revalidate = 300;
+
 function getSafeSearchParamValue(source, key) {
 	const raw = source?.[key];
 	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();

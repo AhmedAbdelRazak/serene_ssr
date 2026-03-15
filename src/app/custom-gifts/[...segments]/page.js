@@ -17,6 +17,8 @@ import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
 import { notFound } from "next/navigation";
 
+export const revalidate = 300;
+
 function parseSegments(segments = []) {
 	if (!Array.isArray(segments) || segments.length === 0) return null;
 	if (segments.length === 1) {

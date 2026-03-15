@@ -3,13 +3,7 @@
 import React from "react";
 import styled from "styled-components";
 import { useHistory } from "react-router-dom";
-import {
-	FaFacebookF,
-	FaTwitter,
-	FaInstagram,
-	FaLinkedinIn,
-	FaYoutube,
-} from "react-icons/fa";
+import { FaFacebookF, FaInstagram } from "react-icons/fa";
 
 const Footer = () => {
 	const history = useHistory();
@@ -34,29 +28,18 @@ const Footer = () => {
 					<Icon
 						href='https://www.facebook.com/profile.php?id=61575325586166'
 						target='_blank'
+						rel='noopener noreferrer'
 						aria-label='Facebook'
 					>
 						<FaFacebookF />
 					</Icon>
-					<Icon href='https://twitter.com' target='_blank' aria-label='Twitter'>
-						<FaTwitter />
-					</Icon>
 					<Icon
 						href='https://www.facebook.com/profile.php?id=61575325586166'
 						target='_blank'
+						rel='noopener noreferrer'
 						aria-label='Instagram'
 					>
 						<FaInstagram />
-					</Icon>
-					<Icon
-						href='https://linkedin.com'
-						target='_blank'
-						aria-label='LinkedIn'
-					>
-						<FaLinkedinIn />
-					</Icon>
-					<Icon href='https://youtube.com' target='_blank' aria-label='YouTube'>
-						<FaYoutube />
 					</Icon>
 				</SocialIcons>
 
@@ -64,11 +47,6 @@ const Footer = () => {
 					sally.abdelrazak@serenejannat.com <br />
 					(951) 565-7568
 				</ContactInfo>
-
-				{/* <Image
-					loading='lazy'
-					src='https://cdn.builder.io/api/v1/image/assets/TEMP/86ecccb2d8ca05a9530882de2f3aca37eb788e4c92d3bfb3274eac36bbc892d7?apiKey=cdf657c2c4874b31988402beb4ed56ad&'
-				/> */}
 
 				<Terms
 					onClick={() => handleNavigation("/privacy-policy-terms-conditions")}
@@ -80,7 +58,7 @@ const Footer = () => {
 				</Terms>
 
 				<Copyright>
-					Copyright©{new Date().getFullYear()} Serene Jannat All Rights
+					Copyright (c) {new Date().getFullYear()} Serene Jannat All Rights
 					Reserved.
 				</Copyright>
 			</ContentWrapper>
@@ -147,12 +125,6 @@ const ContactInfo = styled.div`
 	font-size: 14px;
 	line-height: 1.5;
 	margin-bottom: 30px;
-`;
-
-// eslint-disable-next-line
-const Image = styled.img`
-	width: 132px;
-	margin-bottom: 20px;
 `;
 
 const Terms = styled.div`

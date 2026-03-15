@@ -60,6 +60,7 @@ import {
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
 } from "@/lib/pod-product";
+import { useLegacySeoEnabled } from "../../bootstrap/legacySeo";
 import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 
 // Child tutorial/animation (temporarily disabled on the single POD page)
@@ -76,6 +77,8 @@ import { getOccasionDesignPreset } from "./podDesignPresets";
 const { Title } = Typography;
 const { Option } = Select;
 const POD_ADVANCED_MODE_KEY = "podAdvancedModeEnabledV1";
+const POD_FONT_STYLESHEET =
+	"https://fonts.googleapis.com/css2?family=Allura&family=Dancing+Script&family=Great+Vibes&family=Lobster&display=swap";
 
 function clampNumber(value, min, max) {
 	return Math.min(max, Math.max(min, value));
@@ -690,6 +693,7 @@ export default function CustomizeSelectedProduct() {
 	const history = useHistory();
 	const location = useLocation();
 	const routeBootstrap = useLegacyRouteBootstrap();
+	const legacySeoEnabled = useLegacySeoEnabled();
 	const initialPodBootstrap = useMemo(() => {
 		if (
 			routeBootstrap?.type === "pod-product" &&
@@ -699,6 +703,19 @@ export default function CustomizeSelectedProduct() {
 		}
 		return null;
 	}, [productId, routeBootstrap]);
+
+	useEffect(() => {
+		if (typeof document === "undefined") return undefined;
+		if (document.getElementById("serene-pod-fonts")) return undefined;
+
+		const link = document.createElement("link");
+		link.id = "serene-pod-fonts";
+		link.rel = "stylesheet";
+		link.href = POD_FONT_STYLESHEET;
+		document.head.appendChild(link);
+
+		return () => {};
+	}, []);
 
 	const initialPersonalization = resolvePodPersonalization(location.search);
 	const [selectedOccasion, setSelectedOccasion] = useState(
@@ -3448,7 +3465,7 @@ export default function CustomizeSelectedProduct() {
 	return (
 		<CustomizeWrapper>
 			<SlickBaseStyles />
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<title>{metaTitle}</title>
 				<meta name='description' content={metaDescription} />
 				<meta name='keywords' content={metaKeywords} />
@@ -3540,7 +3557,7 @@ export default function CustomizeSelectedProduct() {
 						}),
 					}}
 				/>
-			</Helmet>
+			</Helmet> : null}
 
 			{/*
 				Child Animation/Tutorial is intentionally disabled for now.

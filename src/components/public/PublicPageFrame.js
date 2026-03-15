@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useMemo } from "react";
 import { Route } from "react-router-dom";
 import { HelmetProvider } from "react-helmet-async";
 import { CartProvider } from "@/legacy_frontend/cart_context";
@@ -14,9 +14,17 @@ export default function PublicPageFrame({
 	initialRouteData = null,
 	children,
 }) {
+	const bootstrapData = useMemo(
+		() =>
+			initialRouteData
+				? { disableLegacySeo: true, ...initialRouteData }
+				: { disableLegacySeo: true },
+		[initialRouteData]
+	);
+
 	return (
 		<HelmetProvider>
-			<LegacyRouteBootstrapProvider initialRouteData={initialRouteData}>
+			<LegacyRouteBootstrapProvider initialRouteData={bootstrapData}>
 				<CartProvider>
 					<Suspense fallback={null}>
 						<PublicRouterBridge>

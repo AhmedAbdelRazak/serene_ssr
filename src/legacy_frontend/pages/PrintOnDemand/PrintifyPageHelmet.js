@@ -1,6 +1,10 @@
 ﻿import React from "react";
 import { Helmet } from "react-helmet-async";
 import { useLocation } from "react-router-dom";
+import {
+	escapeJsonString,
+	useLegacySeoEnabled,
+} from "../../bootstrap/legacySeo";
 import { resolveImageUrl } from "../../utils/image";
 
 /**
@@ -17,20 +21,6 @@ const toPodSlug = (str = "") =>
 		.trim()
 		.replace(/\s+/g, "-")
 		.replace(/-+/g, "-");
-
-/**
- * Utility: Safely escape special JSON characters
- */
-const escapeJsonString = (str = "") => {
-	return str
-		.replace(/\\/g, "\\\\")
-		.replace(/"/g, '\\"')
-		.replace(/\n/g, "\\n")
-		.replace(/\r/g, "\\r")
-		.replace(/\t/g, "\\t")
-		.replace(/\b/g, "\\b")
-		.replace(/\f/g, "\\f");
-};
 
 /**
  * Generate keywords based on your POD product array
@@ -114,7 +104,10 @@ const generateProductSchema = (products) => {
 
 const PrintifyPageHelmet = ({ products }) => {
 	const location = useLocation();
+	const legacySeoEnabled = useLegacySeoEnabled();
 	const hasQueryFilters = Boolean(location.search && location.search !== "?");
+
+	if (!legacySeoEnabled) return null;
 
 	const title = "Customize Your Gift | Print On Demand at Serene Jannat";
 	const description =

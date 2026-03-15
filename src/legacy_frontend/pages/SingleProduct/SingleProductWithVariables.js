@@ -22,18 +22,11 @@ import RelatedProductsCarousel from "./RelatedProductsCarousel";
 import SigninModal from "./SigninModal/SigninModal";
 import { Helmet } from "react-helmet-async";
 import axios from "axios";
-
-// Utility function to escape JSON strings
-const escapeJsonString = (str) => {
-	return str
-		.replace(/\\/g, "\\\\")
-		.replace(/"/g, '\\"')
-		.replace(/\n/g, "\\n")
-		.replace(/\r/g, "\\r")
-		.replace(/\t/g, "\\t")
-		.replace(/\b/g, "\\b")
-		.replace(/\f/g, "\\f");
-};
+import DeferredRender from "../../components/DeferredRender";
+import {
+	escapeJsonString,
+	useLegacySeoEnabled,
+} from "../../bootstrap/legacySeo";
 
 const truncateMetaDescription = (text, limit = 155) => {
 	if (!text) return "";
@@ -58,6 +51,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	const [allColors, setAllColors] = useState([]);
 	const [likes, setLikes] = useState(0);
 	const [modalVisible3, setModalVisible3] = useState(false);
+	const legacySeoEnabled = useLegacySeoEnabled();
 
 	const history = useHistory();
 	const location = useLocation();
@@ -331,7 +325,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 
 	return (
 		<div>
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<script type='application/ld+json'>
 					{`
         {
@@ -491,7 +485,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 						}),
 					}}
 				/>
-			</Helmet>
+			</Helmet> : null}
 
 			<SigninModal
 				modalVisible3={modalVisible3}
@@ -626,14 +620,18 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 					</ButtonContainer>
 				</ProductDetailsWrapper>
 			</SingleProductWrapper>
-			<CommentsAndRatings product={product} user={user} token={token} />
-			<div className='my-3'>
-				{product &&
-				product.relatedProducts &&
-				product.relatedProducts.length > 0 ? (
-					<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
-				) : null}
-			</div>
+			<DeferredRender rootMargin='240px 0px'>
+				<CommentsAndRatings product={product} user={user} token={token} />
+			</DeferredRender>
+			<DeferredRender rootMargin='240px 0px'>
+				<div className='my-3'>
+					{product &&
+					product.relatedProducts &&
+					product.relatedProducts.length > 0 ? (
+						<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
+					) : null}
+				</div>
+			</DeferredRender>
 		</div>
 	);
 };

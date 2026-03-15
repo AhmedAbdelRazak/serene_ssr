@@ -11,13 +11,14 @@ const CommentsAndRatings = ({ product, user, token }) => {
 	const [star, setStar] = useState(0);
 	const [comments, setComments] = useState([]);
 	const [text, setText] = useState("");
+	const isLeanBootstrap = product?.bootstrapMode === "lean";
 	const safeRatings = Array.isArray(product?.ratings) ? product.ratings : [];
 	const safeComments = Array.isArray(product?.comments) ? product.comments : [];
 
 	useEffect(() => {
 		if (safeRatings.length > 0 && user?._id) {
 			const existingRatingObject = safeRatings.find(
-				(ele) => ele.ratedBy._id === user._id
+				(ele) => ele?.ratedBy?._id === user._id
 			);
 			setStar(existingRatingObject ? existingRatingObject.star : 0);
 		}
@@ -94,45 +95,51 @@ const CommentsAndRatings = ({ product, user, token }) => {
 			</RatingSection>
 			<CommentsSection>
 				<CommentsTitle>Comments</CommentsTitle>
-				{comments.map((comment, index) => {
-					const userRating = safeRatings.find(
-						(rating) => rating.ratedBy._id === comment?.postedBy?._id
-					)?.star;
-					const postedByName = `${comment?.postedBy?.name || "Anonymous"}`
-						.trim()
-						.split(" ")
-						.filter(Boolean);
-					const displayName = postedByName[0] || "Anonymous";
-					const displayInitial = postedByName[1]?.[0] || "";
-					return (
-						<CommentWrapper key={index}>
-							<CommentDetails>
-								<CommentText>{comment.text}</CommentText>
-								<CommentMeta>
-									Posted by {displayName}
-									{displayInitial ? ` ${displayInitial}.` : ""} on{" "}
-									{moment(comment.created).format("MMMM Do YYYY, h:mm:ss a")}
-								</CommentMeta>
-								{userRating && (
-									<UserRating>
-										<StarRating
-											starDimension='15px'
-											starSpacing='2px'
-											starRatedColor='red'
-											rating={userRating}
-											editing={false}
-										/>
-									</UserRating>
+				{isLeanBootstrap ? (
+					<CommentLoadingText>
+						Customer reviews are loading for the full product view.
+					</CommentLoadingText>
+				) : (
+					comments.map((comment, index) => {
+						const userRating = safeRatings.find(
+							(rating) => rating?.ratedBy?._id === comment?.postedBy?._id
+						)?.star;
+						const postedByName = `${comment?.postedBy?.name || "Anonymous"}`
+							.trim()
+							.split(" ")
+							.filter(Boolean);
+						const displayName = postedByName[0] || "Anonymous";
+						const displayInitial = postedByName[1]?.[0] || "";
+						return (
+							<CommentWrapper key={index}>
+								<CommentDetails>
+									<CommentText>{comment.text}</CommentText>
+									<CommentMeta>
+										Posted by {displayName}
+										{displayInitial ? ` ${displayInitial}.` : ""} on{" "}
+										{moment(comment.created).format("MMMM Do YYYY, h:mm:ss a")}
+									</CommentMeta>
+									{userRating && (
+										<UserRating>
+											<StarRating
+												starDimension='15px'
+												starSpacing='2px'
+												starRatedColor='red'
+												rating={userRating}
+												editing={false}
+											/>
+										</UserRating>
+									)}
+								</CommentDetails>
+								{comment?.postedBy?._id && user?._id === comment.postedBy._id && (
+									<DeleteIcon onClick={() => handleDeleteComment(comment)}>
+										<DeleteOutlined />
+									</DeleteIcon>
 								)}
-							</CommentDetails>
-							{comment?.postedBy?._id && user?._id === comment.postedBy._id && (
-								<DeleteIcon onClick={() => handleDeleteComment(comment)}>
-									<DeleteOutlined />
-								</DeleteIcon>
-							)}
-						</CommentWrapper>
-					);
-				})}
+							</CommentWrapper>
+						);
+					})
+				)}
 				<AddCommentForm onSubmit={handleAddComment}>
 					<CommentInput
 						type='text'
@@ -176,6 +183,11 @@ const CommentsSection = styled.div`
 const CommentsTitle = styled.h3`
 	font-size: 20px;
 	color: var(--text-color-primary);
+`;
+
+const CommentLoadingText = styled.p`
+	color: var(--text-color-primary);
+	margin-bottom: 16px;
 `;
 
 const CommentWrapper = styled.div`

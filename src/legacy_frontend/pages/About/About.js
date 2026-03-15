@@ -3,6 +3,7 @@ import styled from "styled-components";
 import { useLocation } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { useCartContext } from "../../cart_context";
+import { useLegacySeoEnabled } from "../../bootstrap/legacySeo";
 
 const About = () => {
 	const [cleanedDescription, setCleanedDescription] = useState("");
@@ -10,6 +11,7 @@ const About = () => {
 	const location = useLocation();
 
 	const { websiteSetup } = useCartContext();
+	const legacySeoEnabled = useLegacySeoEnabled();
 
 	// (1) Cloudinary Transform Helper
 	//     If the URL isn't Cloudinary, return original.
@@ -56,7 +58,7 @@ const About = () => {
 		<AboutPageWrapper className='container'>
 			{websiteSetup?.aboutUsBanner?.paragraph && (
 				<>
-					<Helmet>
+					{legacySeoEnabled ? <Helmet>
 						<meta charSet='utf-8' />
 						<title>Serene Jannat | About Us</title>
 						<meta
@@ -94,7 +96,7 @@ const About = () => {
 								}),
 							}}
 						/>
-					</Helmet>
+					</Helmet> : null}
 
 					<div className='my-4'>
 						<ImageWrapper>

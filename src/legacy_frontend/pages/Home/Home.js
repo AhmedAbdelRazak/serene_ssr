@@ -2,6 +2,10 @@ import React, { Suspense, lazy, useEffect, useRef, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 // Context
+import {
+	escapeJsonString,
+	useLegacySeoEnabled,
+} from "../../bootstrap/legacySeo";
 import { useCartContext } from "../../cart_context";
 import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 // Components
@@ -41,18 +45,6 @@ const FadeUpDiv = styled.div`
 // Utility function to capitalize the first letter of each word
 const capitalizeWords = (str = "") => {
 	return str.replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-// Utility function to escape JSON strings
-const escapeJsonString = (str = "") => {
-	return str
-		.replace(/\\/g, "\\\\")
-		.replace(/"/g, '\\"')
-		.replace(/\n/g, "\\n")
-		.replace(/\r/g, "\\r")
-		.replace(/\t/g, "\\t")
-		.replace(/\b/g, "\\b")
-		.replace(/\f/g, "\\f");
 };
 
 // Generate keywords from products array
@@ -282,6 +274,7 @@ const Home = () => {
 	const [loading, setLoading] = useState(() => shouldRefetchHomeData);
 
 	const { websiteSetup } = useCartContext();
+	const legacySeoEnabled = useLegacySeoEnabled();
 	const effectiveWebsiteSetup =
 		websiteSetup || initialHomeBootstrap?.websiteSetup || null;
 	const heroBanner = effectiveWebsiteSetup?.homeMainBanners?.[0];
@@ -404,13 +397,14 @@ const Home = () => {
 
 	return (
 		<HomeWrapper>
-			{/* Helmet / SEO */}
-			<HomePageHelmet
-				featuredProducts={featuredProducts}
-				newArrivalProducts={newArrivalProducts}
-				customDesignProducts={customDesignProducts}
-				heroBanner={heroBanner}
-			/>
+			{legacySeoEnabled ? (
+				<HomePageHelmet
+					featuredProducts={featuredProducts}
+					newArrivalProducts={newArrivalProducts}
+					customDesignProducts={customDesignProducts}
+					heroBanner={heroBanner}
+				/>
+			) : null}
 			<VisuallyHiddenH1>
 				Serene Jannat - Best Gifts and Candles Online Shop
 			</VisuallyHiddenH1>
@@ -487,15 +481,18 @@ const SectionSkeleton = styled.div`
 	margin: 20px auto;
 	border-radius: 12px;
 	background: linear-gradient(90deg, #f1f1f1 25%, #e7e7e7 37%, #f1f1f1 63%);
-	background-size: 400% 100%;
-	animation: shimmer 1.4s ease infinite;
+	animation: skeletonPulse 1.6s ease-in-out infinite;
+	will-change: opacity;
 
-	@keyframes shimmer {
+	@keyframes skeletonPulse {
 		0% {
-			background-position: 100% 0;
+			opacity: 0.84;
+		}
+		50% {
+			opacity: 1;
 		}
 		100% {
-			background-position: -100% 0;
+			opacity: 0.84;
 		}
 	}
 `;

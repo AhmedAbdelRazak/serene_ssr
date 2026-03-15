@@ -9,9 +9,12 @@ import {
 	getProductInventoryCount,
 	getProductPrice,
 } from "@/lib/product-helpers";
+import { createPublicProductBootstrap } from "@/lib/public-product";
 import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
 import { notFound } from "next/navigation";
+
+export const revalidate = 300;
 
 function getSafeSearchParamValue(source, key) {
 	const raw = source?.[key];
@@ -105,6 +108,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 	const image = getPrimaryProductImage(product, selection);
 	const price = getProductPrice(product);
 	const inventoryCount = getProductInventoryCount(product);
+	const bootstrapProduct = createPublicProductBootstrap(product);
 	const canonicalPath = buildProductPath(product);
 	const redirectParams = buildVariantSearchParams(resolvedSearchParams);
 	const redirectQuery = redirectParams.toString();
@@ -126,6 +130,17 @@ export default async function SingleProductPage({ params, searchParams }) {
 				: "https://schema.org/OutOfStock",
 	});
 	schema.itemGroupId = product?._id;
+	const ratings = Array.isArray(product?.ratings) ? product.ratings : [];
+	if (ratings.length > 0) {
+		const ratingValue =
+			ratings.reduce((sum, rating) => sum + Number(rating?.star || 0), 0) /
+			ratings.length;
+		schema.aggregateRating = {
+			"@type": "AggregateRating",
+			ratingValue: Number(ratingValue.toFixed(1)),
+			reviewCount: ratings.length,
+		};
+	}
 	schema.additionalProperty = [
 		selection.color && {
 			"@type": "PropertyValue",
@@ -154,7 +169,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 		type: "standard-product",
 		productSlug: resolvedParams?.productSlug || "",
 		categorySlug: resolvedParams?.categorySlug || "",
-		product,
+		product: bootstrapProduct,
 		title,
 		description,
 		price,
@@ -162,6 +177,7 @@ export default async function SingleProductPage({ params, searchParams }) {
 		selection,
 		canonicalPath,
 		availabilityLabel: inventoryCount > 0 ? "In stock" : "Out of stock",
+		hydrateProductOnMount: true,
 	};
 
 	return (

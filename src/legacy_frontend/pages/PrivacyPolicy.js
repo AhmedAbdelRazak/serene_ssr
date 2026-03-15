@@ -4,9 +4,11 @@ import React from "react";
 import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import { useCartContext } from "../cart_context";
+import { useLegacySeoEnabled } from "../bootstrap/legacySeo";
 
 const PrivacyPolicy = () => {
 	const { websiteSetup } = useCartContext();
+	const legacySeoEnabled = useLegacySeoEnabled();
 
 	const title = "Privacy Policy | Terms & Conditions | Serene Jannat";
 	const description =
@@ -17,7 +19,7 @@ const PrivacyPolicy = () => {
 
 	return (
 		<Wrapper>
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<title>{title}</title>
 				<meta name='description' content={description} />
 				<meta name='keywords' content={keywords} />
@@ -29,7 +31,7 @@ const PrivacyPolicy = () => {
 					href='https://serenejannat.com/privacy-policy-terms-conditions'
 				/>
 				<meta property='og:type' content='website' />
-			</Helmet>
+			</Helmet> : null}
 			<ContentWrapper>
 				{websiteSetup && websiteSetup.termsAndCondition && (
 					<DescriptionWrapper>

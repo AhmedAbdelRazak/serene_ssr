@@ -16,6 +16,9 @@ const SingleProductMain = () => {
 		`${routeBootstrap?.product?._id || ""}` === `${productId || ""}`
 			? routeBootstrap.product
 			: null;
+	const shouldHydrateBootstrappedProduct =
+		Boolean(routeBootstrap?.hydrateProductOnMount) ||
+		bootstrappedProduct?.bootstrapMode === "lean";
 	const [product, setProduct] = useState(() => bootstrappedProduct);
 	const [error, setError] = useState(null);
 	const [likee, setLikee] = useState(false); // State to manage wishlist status
@@ -37,10 +40,15 @@ const SingleProductMain = () => {
 				return;
 			}
 
-			if (bootstrappedProduct && !likee) {
+			if (bootstrappedProduct && !shouldHydrateBootstrappedProduct && !likee) {
 				setProduct(bootstrappedProduct);
 				setError(null);
 				return;
+			}
+
+			if (bootstrappedProduct && shouldHydrateBootstrappedProduct) {
+				setProduct(bootstrappedProduct);
+				setError(null);
 			}
 
 			const fetchProduct = async () => {
@@ -59,6 +67,7 @@ const SingleProductMain = () => {
 			fetchProduct();
 		}, [
 			bootstrappedProduct,
+			shouldHydrateBootstrappedProduct,
 			productSlug,
 			categorySlug,
 			productId,

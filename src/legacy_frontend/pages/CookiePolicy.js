@@ -3,11 +3,14 @@
 import React from "react";
 import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
+import { useLegacySeoEnabled } from "../bootstrap/legacySeo";
 
 const CookiePolicy = () => {
+	const legacySeoEnabled = useLegacySeoEnabled();
+
 	return (
 		<CookiePolicyWrapper>
-			<Helmet>
+			{legacySeoEnabled ? <Helmet>
 				<title>Cookie Policy | Serene Jannat</title>
 				<meta
 					name='description'
@@ -25,7 +28,7 @@ const CookiePolicy = () => {
 				<meta property='og:url' content='https://serenejannat.com/cookie-policy' />
 				<meta property='og:type' content='website' />
 				<link rel='canonical' href='https://serenejannat.com/cookie-policy' />
-			</Helmet>
+			</Helmet> : null}
 			<div className='container'>
 				<h1>Cookies Policy</h1>
 				<p>
@@ -45,7 +48,7 @@ const CookiePolicy = () => {
 					the hardware of the user. The function of the cookie is to enable our
 					website to remember your actions and preferences (such as login,
 					language, font size and other display preferences) over a period of
-					time, so you donâ€™t have to keep re-entering them whenever you come
+					time, so you don't have to keep re-entering them whenever you come
 					back to the site or browse from one page to another.
 				</p>
 				<br />

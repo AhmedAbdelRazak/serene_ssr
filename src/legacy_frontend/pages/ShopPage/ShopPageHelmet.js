@@ -1,23 +1,15 @@
 ﻿import React from "react";
 import { Helmet } from "react-helmet-async";
 import { useLocation } from "react-router-dom";
+import {
+	escapeJsonString,
+	useLegacySeoEnabled,
+} from "../../bootstrap/legacySeo";
 import { resolveImageUrl } from "../../utils/image";
 
 // Safely capitalize words; provide a default to avoid .replace on undefined
 const capitalizeWords = (str = "") => {
 	return str.replace(/\b\w/g, (char) => char.toUpperCase());
-};
-
-// Safely escape JSON strings; provide a default to avoid .replace on undefined
-const escapeJsonString = (str = "") => {
-	return str
-		.replace(/\\/g, "\\\\")
-		.replace(/"/g, '\\"')
-		.replace(/\n/g, "\\n")
-		.replace(/\r/g, "\\r")
-		.replace(/\t/g, "\\t")
-		.replace(/\b/g, "\\b")
-		.replace(/\f/g, "\\f");
 };
 
 // (Optional) Utility for GTIN if you need it
@@ -215,7 +207,10 @@ const generateProductSchema = (products = []) => {
 
 const ShopPageHelmet = ({ products = [] }) => {
 	const location = useLocation();
+	const legacySeoEnabled = useLegacySeoEnabled();
 	const hasQueryFilters = Boolean(location.search && location.search !== "?");
+
+	if (!legacySeoEnabled) return null;
 
 	const title = "Our Products - Serene Jannat Gift Store";
 	const description =
