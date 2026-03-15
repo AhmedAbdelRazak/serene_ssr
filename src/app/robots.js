@@ -6,7 +6,17 @@ export default function robots() {
 			{
 				userAgent: "*",
 				allow: "/",
-				disallow: ["/admin", "/seller", "/dashboard", "/signin", "/signup", "/cart"],
+				disallow: [
+					"/admin",
+					"/seller",
+					"/dashboard",
+					"/signin",
+					"/signup",
+					"/sellingagent",
+					"/cart",
+					"/payment-link",
+					"/api/track",
+				],
 			},
 		],
 		sitemap: [

@@ -115,6 +115,10 @@ export const getCategoriesAndSubcategories = cache(async ({ revalidate = 1800 } 
 	return fetchJson("/product/categories/subcategories", { revalidate });
 });
 
+export const getColorsCatalog = cache(async ({ revalidate = 1800 } = {}) => {
+	return fetchJson("/colors", { revalidate });
+});
+
 export const getAllProductsForSeo = cache(
 	async ({ maxPages = 200, records = 200, revalidate = 1800 } = {}) => {
 		const safeRecords = Math.max(10, Number(records) || 200);

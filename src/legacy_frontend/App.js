@@ -10,6 +10,19 @@ import NavbarTop from "./NavbarUpdate/NavbarTop";
 import NavbarBottom from "./NavbarUpdate/NavbarBottom";
 import Footer from "./Footer";
 import Home from "./pages/Home/Home";
+import PrintifyAvailableProducts from "./pages/PrintOnDemand/PrintifyAvailableProducts";
+import CustomizeSelectedProduct from "./pages/PrintOnDemand/CustomizeSelectedProduct";
+import Login from "./pages/Login";
+import Register from "./pages/Register";
+import RegisterSeller from "./pages/RegisterSeller";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
+import CookiePolicy from "./pages/CookiePolicy";
+import ReturnRefundPolicy from "./pages/ReturnRefundPolicy";
+import About from "./pages/About/About";
+import Cart from "./pages/Checkout/Cart";
+import SingleProductMain from "./pages/SingleProduct/SingleProductMain";
+import ShopPageMain from "./pages/ShopPage/ShopPageMain";
+import ContactUs from "./pages/Contact/ContactUs";
 // eslint-disable-next-line
 // import AnimationWalkingComponent from "./pages/MyAnimationComponents/AnimationWalkingComponent";
 // eslint-disable-next-line
@@ -141,26 +154,12 @@ const CouponManagementMain = lazy(
 	() => import("./Seller/CouponManagement/CouponManagementMain"),
 );
 
-const PrintifyAvailableProducts = lazy(
-	() => import("./pages/PrintOnDemand/PrintifyAvailableProducts"),
-);
-const CustomizeSelectedProduct = lazy(
-	() => import("./pages/PrintOnDemand/CustomizeSelectedProduct"),
-);
 const PrintifyMain = lazy(
 	() => import("./Admin/PrintifyProductManagement/PrintifyMain"),
 );
 const WebsiteMain = lazy(() => import("./Admin/EditingWebsite/WebsiteMain"));
 
 // Lazy load components
-const Login = lazy(() => import("./pages/Login"));
-const Register = lazy(() => import("./pages/Register"));
-const RegisterSeller = lazy(() => import("./pages/RegisterSeller"));
-const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
-const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
-const ReturnRefundPolicy = lazy(() => import("./pages/ReturnRefundPolicy"));
-const About = lazy(() => import("./pages/About/About"));
-const Cart = lazy(() => import("./pages/Checkout/Cart"));
 const AdminDashboard = lazy(
 	() => import("./Admin/AdminMainDashboard/AdminDashboard"),
 );
@@ -180,11 +179,6 @@ const CustomerServiceMainAdmin = lazy(
 );
 const StorePOSMain = lazy(() => import("./Admin/StorePOS/StorePOSMain"));
 const UserDashboard = lazy(() => import("./User/UserDashboard"));
-const SingleProductMain = lazy(
-	() => import("./pages/SingleProduct/SingleProductMain"),
-);
-const ShopPageMain = lazy(() => import("./pages/ShopPage/ShopPageMain"));
-const ContactUs = lazy(() => import("./pages/Contact/ContactUs"));
 const ChatIcon = lazy(() => import("./Chat/ChatIcon"));
 const LinkGenerated = lazy(() => import("./Admin/StorePOS/LinkGenerated"));
 const CouponManagement = lazy(

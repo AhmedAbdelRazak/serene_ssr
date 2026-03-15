@@ -24,6 +24,20 @@ import {
 	SET_LOADING,
 } from "./actions";
 
+function findPrintifyOption(options = [], target = "") {
+	const targetToken = `${target || ""}`.trim().toLowerCase();
+	if (!targetToken) return null;
+	return (
+		options.find((option) => {
+			const optionType = `${option?.type || ""}`.trim().toLowerCase();
+			const optionName = `${option?.name || ""}`.trim().toLowerCase();
+			return (
+				optionType.includes(targetToken) || optionName.includes(targetToken)
+			);
+		}) || null
+	);
+}
+
 // OPTIONAL HELPER to find the correct Printify variant image by color/size
 function getVariantImageForColorSize(product, chosenAttributes) {
 	// If any crucial arrays are missing, bail out
@@ -37,12 +51,8 @@ function getVariantImageForColorSize(product, chosenAttributes) {
 	}
 
 	// 1) Find the "Colors" and "Sizes" options from printify
-	const colorOption = product.options.find(
-		(o) => o.name.toLowerCase() === "colors"
-	);
-	const sizeOption = product.options.find(
-		(o) => o.name.toLowerCase() === "sizes"
-	);
+	const colorOption = findPrintifyOption(product.options, "color");
+	const sizeOption = findPrintifyOption(product.options, "size");
 	if (!colorOption || !sizeOption) return null;
 
 	// 2) Attempt to match chosenAttributes color/size to the printify "title"

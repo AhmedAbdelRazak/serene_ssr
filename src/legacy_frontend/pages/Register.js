@@ -348,7 +348,7 @@ const Register = () => {
 				<meta property='og:url' content='https://serenejannat.com/signup' />
 				<meta property='og:type' content='website' />
 				<meta property='og:locale' content='en_US' />
-				<link rel='icon' href='gq_frontend/src/GeneralImgs/favicon.ico' />
+				<link rel='icon' href='/favicon.ico' />
 				<link rel='canonical' href='https://serenejannat.com/signup' />
 				<script
 					type='application/ld+json'

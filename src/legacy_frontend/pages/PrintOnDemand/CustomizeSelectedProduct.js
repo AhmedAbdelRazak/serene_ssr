@@ -54,6 +54,12 @@ import heic2any from "heic2any";
 
 // Fallback library for final image conversion
 import domtoimage from "dom-to-image-more";
+import {
+	findPodProductOption,
+	normalizePodProduct,
+	resolveInitialPodVariantSelection,
+} from "@/lib/pod-product";
+import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 
 // Child tutorial/animation (temporarily disabled on the single POD page)
 // import AnimationPODWalkThrough from "../MyAnimationComponents/AnimationPODWalkThrough";
@@ -682,6 +688,16 @@ export default function CustomizeSelectedProduct() {
 	const { productId, productSlug } = useParams();
 	const history = useHistory();
 	const location = useLocation();
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const initialPodBootstrap = useMemo(() => {
+		if (
+			routeBootstrap?.type === "pod-product" &&
+			routeBootstrap?.productId === productId
+		) {
+			return routeBootstrap;
+		}
+		return null;
+	}, [productId, routeBootstrap]);
 
 	const initialPersonalization = resolvePodPersonalization(location.search);
 	const [selectedOccasion, setSelectedOccasion] = useState(
@@ -733,8 +749,91 @@ export default function CustomizeSelectedProduct() {
 			.replace(/-+/g, "-");
 	}
 
-	const [product, setProduct] = useState(null);
-	const [loading, setLoading] = useState(true);
+	function buildCanonicalVariantSearch({
+		occasion = "",
+		color = "",
+		size = "",
+		scent = "",
+	} = {}) {
+		const params = new URLSearchParams();
+		if (occasion) params.set("occasion", occasion);
+		if (color) params.set("color", color);
+		if (size) params.set("size", size);
+		if (scent) params.set("scent", scent);
+		return params.toString();
+	}
+
+	function findProductOption(currentProduct, target = "") {
+		return findPodProductOption(currentProduct, target);
+	}
+
+	function resolveClosestVariantSelection(currentProduct, requested = {}) {
+		if (!currentProduct?.variants?.length) {
+			return {
+				color: requested.color || "",
+				size: requested.size || "",
+				scent: requested.scent || "",
+			};
+		}
+
+		const colorOpt = findProductOption(currentProduct, "color");
+		const sizeOpt = findProductOption(currentProduct, "size");
+		const scentOpt = findProductOption(currentProduct, "scent");
+		const numOrStr = (value) =>
+			typeof value === "number" ? value : parseInt(value, 10);
+		const findOptionValue = (option, title) =>
+			option?.values?.find((value) => value.title === title) || null;
+		const requestedColor = findOptionValue(colorOpt, requested.color);
+		const requestedSize = findOptionValue(sizeOpt, requested.size);
+		const requestedScent = findOptionValue(scentOpt, requested.scent);
+		const variants = currentProduct.variants.filter(
+			(variant) => variant?.is_enabled !== false
+		);
+		if (!variants.length) {
+			return {
+				color: requested.color || "",
+				size: requested.size || "",
+				scent: requested.scent || "",
+			};
+		}
+
+		let bestVariant = variants[0];
+		let bestScore = Number.NEGATIVE_INFINITY;
+		for (const variant of variants) {
+			const variantIds = variant.options.map(numOrStr);
+			let score = variant.is_default ? 5 : 0;
+			if (requestedColor) {
+				score += variantIds.includes(numOrStr(requestedColor.id)) ? 100 : -100;
+			}
+			if (requestedSize) {
+				score += variantIds.includes(numOrStr(requestedSize.id)) ? 60 : -60;
+			}
+			if (requestedScent) {
+				score += variantIds.includes(numOrStr(requestedScent.id)) ? 30 : -30;
+			}
+			if (score > bestScore) {
+				bestScore = score;
+				bestVariant = variant;
+			}
+		}
+
+		const pickTitle = (option) => {
+			if (!option?.values?.length) return "";
+			const match = option.values.find((value) =>
+				bestVariant.options.map(numOrStr).includes(numOrStr(value.id))
+			);
+			return match?.title || "";
+		};
+
+		return {
+			color: pickTitle(colorOpt) || requested.color || "",
+			size: pickTitle(sizeOpt) || requested.size || "",
+			scent: pickTitle(scentOpt) || requested.scent || "",
+		};
+	}
+
+	const [product, setProduct] = useState(() => initialPodBootstrap?.product || null);
+	const [loading, setLoading] = useState(() => !initialPodBootstrap?.product);
 	const printAreaFrame = useMemo(
 		() => getPodPrintAreaFrame(product || {}),
 		[product],
@@ -747,9 +846,15 @@ export default function CustomizeSelectedProduct() {
 	const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
 	// selected color, size, scent
-	const [selectedColor, setSelectedColor] = useState("");
-	const [selectedSize, setSelectedSize] = useState("");
-	const [selectedScent, setSelectedScent] = useState("");
+	const [selectedColor, setSelectedColor] = useState(
+		() => initialPodBootstrap?.selection?.color || ""
+	);
+	const [selectedSize, setSelectedSize] = useState(
+		() => initialPodBootstrap?.selection?.size || ""
+	);
+	const [selectedScent, setSelectedScent] = useState(
+		() => initialPodBootstrap?.selection?.scent || ""
+	);
 	const effectiveOccasionStylePreset = useMemo(
 		() => occasionStylePreset,
 		[occasionStylePreset],
@@ -886,19 +991,31 @@ export default function CustomizeSelectedProduct() {
 	});
 	const [defaultTextAdded, setDefaultTextAdded] = useState(false);
 
-	const [showMobileButtons, setShowMobileButtons] = useState(false);
-	useEffect(() => {
-		if (isMobile) {
-			setTimeout(() => {
-				setShowMobileButtons(true);
-			}, 1000);
-		}
-	}, [isMobile]);
+	const [showMobileButtons] = useState(true);
 
 	const [uploadingImage, setUploadingImage] = useState(false);
 
 	// Additional states to track user actions
 	const [hasChangedSizeOrColor, setHasChangedSizeOrColor] = useState(false);
+
+	useEffect(() => {
+		setElements([]);
+		setSelectedElementId(null);
+		setInlineEditId(null);
+		setInlineEditText("");
+		setDefaultTextAdded(false);
+		setIsDescriptionExpanded(false);
+		setHasChangedSizeOrColor(false);
+		setSelectedColor(initialPodBootstrap?.selection?.color || "");
+		setSelectedSize(initialPodBootstrap?.selection?.size || "");
+		setSelectedScent(initialPodBootstrap?.selection?.scent || "");
+		setOrder((prev) => ({
+			...prev,
+			product_id: productId || null,
+			variant_id: null,
+			customizations: { texts: [], images: [] },
+		}));
+	}, [initialPodBootstrap, productId]);
 
 	/**
 	 * ----------------------------------------------------------------
@@ -906,7 +1023,44 @@ export default function CustomizeSelectedProduct() {
 	 * ----------------------------------------------------------------
 	 */
 	useEffect(() => {
-		window.scrollTo({ top: 0, behavior: "smooth" });
+		let isActive = true;
+
+		const applyResolvedProduct = (rawProduct) => {
+			if (!isActive) return false;
+			const normalizedProduct = normalizePodProduct(rawProduct);
+			if (!normalizedProduct) {
+				message.error("Product not found or no data returned.");
+				setLoading(false);
+				return false;
+			}
+			if (!normalizedProduct.variants.length) {
+				message.error("No valid variants with pricing were found.");
+				setLoading(false);
+				return false;
+			}
+
+			setProduct(normalizedProduct);
+			setLoading(false);
+
+			const canonicalSlug = toPodSlug(
+				normalizedProduct.title || normalizedProduct.productName
+			);
+			if (canonicalSlug && canonicalSlug !== productSlug) {
+				history.replace(
+					`/custom-gifts/${canonicalSlug}/${productId}${location.search}`
+				);
+			}
+			return true;
+		};
+
+		if (initialPodBootstrap?.product && initialPodBootstrap.productId === productId) {
+			applyResolvedProduct(initialPodBootstrap.product);
+			return () => {
+				isActive = false;
+			};
+		}
+
+		setLoading(true);
 		const fetchProduct = async () => {
 			try {
 				const response = await axios.get(
@@ -917,147 +1071,7 @@ export default function CustomizeSelectedProduct() {
 					setLoading(false);
 					return;
 				}
-				const fetchedProduct = {
-					...response.data,
-					variants: response.data.printifyProductDetails?.variants || [],
-					options: response.data.printifyProductDetails?.options || [],
-					images: response.data.printifyProductDetails?.images || [],
-					title:
-						response.data.printifyProductDetails?.title ||
-						response.data.productName,
-					description:
-						response.data.printifyProductDetails?.description ||
-						response.data.description ||
-						"",
-				};
-
-				// only keep variants with a numeric price
-				const validVariants = fetchedProduct.variants.filter(
-					(variant) => typeof variant.price === "number" && variant.price > 0
-				);
-				if (!validVariants.length) {
-					message.error("No valid variants with pricing were found.");
-					setLoading(false);
-					return;
-				}
-				fetchedProduct.variants = validVariants;
-
-				// filter out option values that have no matching variant
-				fetchedProduct.options = fetchedProduct.options.map((opt) => {
-					const newValues = opt.values.filter((val) =>
-						validVariants.some((v) => v.options.includes(val.id))
-					);
-					return { ...opt, values: newValues };
-				});
-
-				setProduct(fetchedProduct);
-				const canonicalSlug = toPodSlug(
-					fetchedProduct.title || fetchedProduct.productName
-				);
-				if (canonicalSlug && canonicalSlug !== productSlug) {
-					history.replace(
-						`/custom-gifts/${canonicalSlug}/${productId}${location.search}`
-					);
-				}
-
-				// FB pixel track
-				ReactPixel.track("CustomizeProduct", {
-					content_name: fetchedProduct.title || fetchedProduct.productName,
-					content_ids: [fetchedProduct._id],
-					content_type: "product",
-				});
-
-				// Check query params for color/size/scent
-				const queryParams = new URLSearchParams(location.search);
-				const colorParam = queryParams.get("color");
-				const sizeParam = queryParams.get("size");
-				const scentParam = queryParams.get("scent");
-
-				const colorOpt = fetchedProduct.options.find(
-					(o) => o.name.toLowerCase() === "colors"
-				);
-				const sizeOpt = fetchedProduct.options.find(
-					(o) => o.name.toLowerCase() === "sizes"
-				);
-				const scentOpt = fetchedProduct.options.find(
-					(o) => o.name.toLowerCase() === "scents"
-				);
-
-				// color
-				if (colorOpt?.values?.length) {
-					if (
-						colorParam &&
-						colorOpt.values.some((val) => val.title === colorParam)
-					) {
-						setSelectedColor(colorParam);
-					} else {
-						setSelectedColor(colorOpt.values[0].title);
-					}
-				} else {
-					setSelectedColor("");
-				}
-
-				// size - existing approach
-				let chosenSize = "";
-				if (sizeOpt?.values?.length) {
-					if (
-						sizeParam &&
-						sizeOpt.values.some((val) => val.title === sizeParam)
-					) {
-						chosenSize = sizeParam;
-					} else {
-						// check if there's an is_default variant
-						const defVar = validVariants.find((v) => v.is_default);
-						if (defVar) {
-							const defSizeVal = sizeOpt.values.find((sv) =>
-								defVar.options.includes(sv.id)
-							);
-							if (defSizeVal) {
-								chosenSize = defSizeVal.title;
-							} else {
-								chosenSize = sizeOpt.values[0].title;
-							}
-						} else {
-							chosenSize = sizeOpt.values[0].title;
-						}
-					}
-				}
-
-				// If STILL no chosenSize => fallback to productAttributes
-				if (!chosenSize && fetchedProduct.productAttributes?.length) {
-					const foundAttrWithSize = fetchedProduct.productAttributes.find(
-						(attr) => attr.size && attr.size.trim() !== ""
-					);
-					if (foundAttrWithSize) {
-						chosenSize = foundAttrWithSize.size;
-					}
-				}
-				setSelectedSize(chosenSize || "");
-
-				// scent
-				let chosenScent = "";
-				if (scentOpt?.values?.length) {
-					if (
-						scentParam &&
-						scentOpt.values.some((val) => val.title === scentParam)
-					) {
-						chosenScent = scentParam;
-					} else {
-						chosenScent = scentOpt.values[0].title;
-					}
-				}
-				// fallback: check productAttributes if needed
-				if (!chosenScent && fetchedProduct.productAttributes?.length) {
-					const foundAttrWithScent = fetchedProduct.productAttributes.find(
-						(attr) => attr.scent && attr.scent.trim() !== ""
-					);
-					if (foundAttrWithScent) {
-						chosenScent = foundAttrWithScent.scent;
-					}
-				}
-				setSelectedScent(chosenScent || "");
-
-				setLoading(false);
+				applyResolvedProduct(response.data);
 			} catch (err) {
 				console.error(err);
 				message.error("Failed to load product details.");
@@ -1065,7 +1079,39 @@ export default function CustomizeSelectedProduct() {
 			}
 		};
 		fetchProduct();
-	}, [history, location.search, productId, productSlug]);
+		return () => {
+			isActive = false;
+		};
+	}, [history, initialPodBootstrap, productId, productSlug]);
+
+	useEffect(() => {
+		if (!product?._id) return;
+		ReactPixel.track("CustomizeProduct", {
+			content_name: product.title || product.productName,
+			content_ids: [product._id],
+			content_type: "product",
+		});
+	}, [product?._id, product?.productName, product?.title]);
+
+	useEffect(() => {
+		if (!product) return;
+		const queryParams = new URLSearchParams(location.search);
+		const resolvedSelection = resolveInitialPodVariantSelection(product, {
+			color: queryParams.get("color") || "",
+			size: queryParams.get("size") || "",
+			scent: queryParams.get("scent") || "",
+		});
+
+		if ((resolvedSelection.color || "") !== selectedColor) {
+			setSelectedColor(resolvedSelection.color || "");
+		}
+		if ((resolvedSelection.size || "") !== selectedSize) {
+			setSelectedSize(resolvedSelection.size || "");
+		}
+		if ((resolvedSelection.scent || "") !== selectedScent) {
+			setSelectedScent(resolvedSelection.scent || "");
+		}
+	}, [location.search, product]);
 
 	/**
 	 * 2) Add a default text box in the middle
@@ -1377,15 +1423,9 @@ export default function CustomizeSelectedProduct() {
 			return typeof x === "number" ? x : parseInt(x, 10);
 		}
 
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
-		const sizeOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "sizes"
-		);
-		const scentOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "scents"
-		);
+		const colorOpt = findProductOption(product, "color");
+		const sizeOpt = findProductOption(product, "size");
+		const scentOpt = findProductOption(product, "scent");
 
 		let matchingVariant = null;
 		// gather chosen IDs
@@ -1448,6 +1488,24 @@ export default function CustomizeSelectedProduct() {
 		selectedSize,
 	]);
 
+	useEffect(() => {
+		if (!product?.variants?.length) return;
+		const resolved = resolveClosestVariantSelection(product, {
+			color: selectedColor,
+			size: selectedSize,
+			scent: selectedScent,
+		});
+		if (resolved.color && resolved.color !== selectedColor) {
+			setSelectedColor(resolved.color);
+		}
+		if (resolved.size !== selectedSize) {
+			setSelectedSize(resolved.size || "");
+		}
+		if (resolved.scent !== selectedScent) {
+			setSelectedScent(resolved.scent || "");
+		}
+	}, [product, selectedColor, selectedSize, selectedScent]);
+
 	// If user changes color/size/scent => setHasChanged
 	useEffect(() => {
 		if (
@@ -1464,12 +1522,8 @@ export default function CustomizeSelectedProduct() {
 	function variantExistsForOption(sizeObj, colorTitle, scentTitle) {
 		if (!product) return false;
 
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
-		const scentOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "scents"
-		);
+		const colorOpt = findProductOption(product, "color");
+		const scentOpt = findProductOption(product, "scent");
 
 		function numOrStr(val) {
 			return typeof val === "number" ? val : parseInt(val, 10);
@@ -1506,12 +1560,8 @@ export default function CustomizeSelectedProduct() {
 
 	function variantExistsForScent(scentObj, colorTitle, sizeTitle) {
 		if (!product) return false;
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
-		const sizeOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "sizes"
-		);
+		const colorOpt = findProductOption(product, "color");
+		const sizeOpt = findProductOption(product, "size");
 
 		function numOrStr(val) {
 			return typeof val === "number" ? val : parseInt(val, 10);
@@ -2489,15 +2539,9 @@ export default function CustomizeSelectedProduct() {
 			return typeof x === "number" ? x : parseInt(x, 10);
 		}
 		// gather chosen
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
-		const sizeOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "sizes"
-		);
-		const scentOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "scents"
-		);
+		const colorOpt = findProductOption(product, "color");
+		const sizeOpt = findProductOption(product, "size");
+		const scentOpt = findProductOption(product, "scent");
 
 		const chosenIds = [];
 		if (colorOpt && selectedColor) {
@@ -2529,9 +2573,7 @@ export default function CustomizeSelectedProduct() {
 	// Filter the images based on color
 	const filteredImages = useMemo(() => {
 		if (!product) return [];
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
+		const colorOpt = findProductOption(product, "color");
 		if (!selectedColor || !colorOpt) {
 			return product.images.slice(0, 6);
 		}
@@ -2733,7 +2775,11 @@ export default function CustomizeSelectedProduct() {
 			};
 
 			/* bare printâ€‘area only */
-			const bareCaptureNode = barePrintAreaRef.current || bareDesignRef.current;
+			const bareCaptureNode = getBareDesignCaptureNode();
+			if (!bareCaptureNode) {
+				throw new Error("Design capture area is not ready yet.");
+			}
+			await prepareCaptureNode(bareCaptureNode);
 			const bareCanvas = await html2canvas(bareCaptureNode, screenshotOptions);
 			const bareDataURL = await compressCanvas(bareCanvas, {
 				mimeType: "image/png",
@@ -2749,6 +2795,7 @@ export default function CustomizeSelectedProduct() {
 			bareUrl = bareUpload.url;
 
 			/* final overlay (base image + user elements) */
+			await prepareCaptureNode(designOverlayRef.current);
 			const finalCanvas = await html2canvas(
 				designOverlayRef.current,
 				screenshotOptions
@@ -2775,8 +2822,13 @@ export default function CustomizeSelectedProduct() {
 					filter: (node) => !node.classList?.contains("noScreenshot"),
 				};
 
+				const bareCaptureNode = getBareDesignCaptureNode();
+				if (!bareCaptureNode) {
+					throw new Error("Design capture area is not ready yet.");
+				}
+				await prepareCaptureNode(bareCaptureNode);
 				const bareBlob = await domtoimage.toBlob(
-					barePrintAreaRef.current || bareDesignRef.current,
+					bareCaptureNode,
 					domOptions
 				);
 				const bareCanvas = await blobToCanvas(bareBlob);
@@ -2790,6 +2842,7 @@ export default function CustomizeSelectedProduct() {
 					})
 				).url;
 
+				await prepareCaptureNode(designOverlayRef.current);
 				const finalBlob = await domtoimage.toBlob(
 					designOverlayRef.current,
 					domOptions
@@ -2829,15 +2882,9 @@ export default function CustomizeSelectedProduct() {
 		// helper to coerce ids
 		const numOrStr = (v) => (typeof v === "number" ? v : parseInt(v, 10));
 
-		const colorOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "colors"
-		);
-		const sizeOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "sizes"
-		);
-		const scentOpt = product.options.find(
-			(o) => o.name.toLowerCase() === "scents"
-		);
+		const colorOpt = findProductOption(product, "color");
+		const sizeOpt = findProductOption(product, "size");
+		const scentOpt = findProductOption(product, "scent");
 
 		const chosenIds = [];
 		if (colorOpt && selectedColor) {
@@ -2994,7 +3041,6 @@ export default function CustomizeSelectedProduct() {
 
 			setIsPreviewButtonDisabled(true);
 			setIsPreviewLoading(true);
-			setIsPreviewModalVisible(true);
 			setPreviewImages([]);
 			setPreviewStatusText("Preparing your design...");
 			setPreviewProgress(8);
@@ -3015,8 +3061,7 @@ export default function CustomizeSelectedProduct() {
 					ignoreElements: (el) => el.classList?.contains("noScreenshot"),
 					backgroundColor: null,
 				};
-				const previewNode =
-					barePrintAreaRef.current || printAreaRef.current || bareDesignRef.current;
+				const previewNode = getBareDesignCaptureNode();
 				if (!previewNode) {
 					throw new Error("Preview capture area is not ready yet.");
 				}
@@ -3024,7 +3069,7 @@ export default function CustomizeSelectedProduct() {
 				setPreviewStatusText("Capturing design area...");
 				bumpProgress(20);
 
-				await waitForImagesReady(previewNode);
+				await prepareCaptureNode(previewNode);
 				const bareCanvas = await html2canvas(previewNode, screenshotOptions);
 				const bareDataURL = await compressCanvas(bareCanvas, {
 					mimeType: "image/png",
@@ -3046,12 +3091,11 @@ export default function CustomizeSelectedProduct() {
 					style: { transform: "scale(1.5)", transformOrigin: "top left" },
 					filter: (node) => !node.classList?.contains("noScreenshot"),
 				};
-				const previewNode =
-					barePrintAreaRef.current || printAreaRef.current || bareDesignRef.current;
+				const previewNode = getBareDesignCaptureNode();
 				if (!previewNode) {
 					throw new Error("Preview capture area is not ready yet.");
 				}
-				await waitForImagesReady(previewNode);
+				await prepareCaptureNode(previewNode);
 				const bareBlob = await domtoimage.toBlob(previewNode, domOptions);
 				const bareCanvas = await blobToCanvas(bareBlob);
 				const bareDataURL = await compressCanvas(bareCanvas, {
@@ -3074,15 +3118,9 @@ export default function CustomizeSelectedProduct() {
 
 			const numOrStr = (value) =>
 				typeof value === "number" ? value : parseInt(value, 10);
-			const colorOpt = product.options.find(
-				(option) => option.name.toLowerCase() === "colors"
-			);
-			const sizeOpt = product.options.find(
-				(option) => option.name.toLowerCase() === "sizes"
-			);
-			const scentOpt = product.options.find(
-				(option) => option.name.toLowerCase() === "scents"
-			);
+			const colorOpt = findProductOption(product, "color");
+			const sizeOpt = findProductOption(product, "size");
+			const scentOpt = findProductOption(product, "scent");
 
 			const chosenIds = [];
 			if (colorOpt && selectedColor) {
@@ -3119,6 +3157,7 @@ export default function CustomizeSelectedProduct() {
 				print_areas: product.printifyProductDetails?.print_areas || [],
 			};
 
+			setIsPreviewModalVisible(true);
 			setPreviewStatusText("Generating live mockups...");
 			bumpProgress(62);
 			const response = await axios.post(
@@ -3254,6 +3293,33 @@ export default function CustomizeSelectedProduct() {
 		);
 	}
 
+	async function waitForFontsReady() {
+		if (typeof document === "undefined" || !document.fonts?.ready) return;
+		try {
+			await document.fonts.ready;
+		} catch {}
+	}
+
+	async function waitForNextPaint(frames = 2) {
+		const totalFrames = Math.max(1, Number(frames) || 1);
+		for (let index = 0; index < totalFrames; index += 1) {
+			await new Promise((resolve) => {
+				window.requestAnimationFrame(() => resolve());
+			});
+		}
+	}
+
+	function getBareDesignCaptureNode() {
+		return printAreaRef.current || barePrintAreaRef.current || bareDesignRef.current;
+	}
+
+	async function prepareCaptureNode(node) {
+		if (!node) return;
+		await waitForFontsReady();
+		await waitForImagesReady(node);
+		await waitForNextPaint(2);
+	}
+
 	function handleRemoveBgToggle(elementId) {
 		setElements((prev) =>
 			prev.map((item) => {
@@ -3322,9 +3388,22 @@ export default function CustomizeSelectedProduct() {
 			: productDescription;
 
 	const seoSlug = toPodSlug(product.title || product.productName);
-	const canonicalUrl = `https://serenejannat.com/custom-gifts/${seoSlug}/${productId}`;
+	const canonicalVariantSearch = buildCanonicalVariantSearch({
+		occasion: selectedOccasion,
+		color: selectedColor,
+		size: selectedSize,
+		scent: selectedScent,
+	});
+	const canonicalUrl = `https://serenejannat.com/custom-gifts/${seoSlug}/${productId}${
+		canonicalVariantSearch ? `?${canonicalVariantSearch}` : ""
+	}`;
 	const personalizationLine = buildGiftMessage(selectedOccasion, selectedGiftName);
-	const metaTitle = `${product.title || product.productName} for ${selectedOccasion} | Serene Jannat`;
+	const metaVariantLabel = [selectedOccasion, selectedColor, selectedSize, selectedScent]
+		.filter(Boolean)
+		.join(" / ");
+	const metaTitle = metaVariantLabel
+		? `${product.title || product.productName} | ${metaVariantLabel} | Serene Jannat`
+		: `${product.title || product.productName} | Serene Jannat`;
 	const rawMetaDescription =
 		product.printifyProductDetails?.description ||
 		product.description ||
@@ -3332,7 +3411,7 @@ export default function CustomizeSelectedProduct() {
 	const normalizedMetaDescription = stripHtmlTags(rawMetaDescription)
 		.replace(/\s+/g, " ")
 		.trim();
-	const metaDescriptionBase = `${normalizedMetaDescription} Personalized for ${selectedOccasion}. ${personalizationLine}`;
+	const metaDescriptionBase = `${normalizedMetaDescription} Personalized for ${selectedOccasion}. ${personalizationLine} Customers can further customize color, size, scent, and artwork on the product page.`;
 	const metaDescription =
 		metaDescriptionBase.length > 155
 			? `${metaDescriptionBase.slice(0, 152).trim()}...`
@@ -3342,8 +3421,13 @@ export default function CustomizeSelectedProduct() {
 		"Custom Gift",
 		selectedOccasion,
 		`${selectedOccasion} gifts`,
+		selectedColor,
+		selectedSize,
+		selectedScent,
 		"Personalized Gifts USA",
-	].join(", ");
+	]
+		.filter(Boolean)
+		.join(", ");
 	const metaImage =
 		filteredImages?.[0]?.src ||
 		product.images?.[0]?.src ||
@@ -3352,13 +3436,9 @@ export default function CustomizeSelectedProduct() {
 	const schemaPrice = Number(String(displayedPrice || "").replace(/[^0-9.]/g, "")) || 0;
 
 	// color/size/scent option objects:
-	const colorOpt = product.options.find(
-		(o) => o.name.toLowerCase() === "colors"
-	);
-	const sizeOpt = product.options.find((o) => o.name.toLowerCase() === "sizes");
-	const scentOpt = product.options.find(
-		(o) => o.name.toLowerCase() === "scents"
-	);
+		const colorOpt = findProductOption(product, "color");
+		const sizeOpt = findProductOption(product, "size");
+		const scentOpt = findProductOption(product, "scent");
 
 	return (
 		<CustomizeWrapper>
@@ -3403,12 +3483,39 @@ export default function CustomizeSelectedProduct() {
 									name: "Occasion",
 									value: selectedOccasion,
 								},
+								selectedColor
+									? {
+											"@type": "PropertyValue",
+											name: "Color",
+											value: selectedColor,
+										}
+									: null,
+								selectedSize
+									? {
+											"@type": "PropertyValue",
+											name: "Size",
+											value: selectedSize,
+										}
+									: null,
+								selectedScent
+									? {
+											"@type": "PropertyValue",
+											name: "Scent",
+											value: selectedScent,
+										}
+									: null,
 								{
 									"@type": "PropertyValue",
 									name: "Personalization",
 									value: personalizationLine,
 								},
-							],
+								{
+									"@type": "PropertyValue",
+									name: "Customization",
+									value:
+										"Shoppers can further customize the final product on the product page.",
+								},
+							].filter(Boolean),
 						}),
 					}}
 				/>
@@ -3467,19 +3574,6 @@ export default function CustomizeSelectedProduct() {
 				/>
 			</AnimationPODWalkThroughWrapper>
 			*/}
-
-			{isMobile && (
-				<TopPreviewActionBar className='noScreenshot'>
-					<Button
-						type='default'
-						icon={<EyeOutlined />}
-						onClick={handlePreviewDesign}
-						disabled={isPreviewButtonDisabled || isPreviewLoading}
-					>
-						{isPreviewLoading ? "Preparing Preview..." : "Preview Design"}
-					</Button>
-				</TopPreviewActionBar>
-			)}
 
 			<Row gutter={[18, 20]}>
 				<Col xs={24} md={12}>
@@ -3594,11 +3688,20 @@ export default function CustomizeSelectedProduct() {
 													icon={<ShoppingCartOutlined />}
 													onClick={handleAddToCart}
 													disabled={isAddToCartDisabled}
-													style={{ width: "50%" }}
 												>
 													{isAddToCartDisabled
 														? "Processing..."
 														: "Add to Cart"}
+												</Button>
+												<Button
+													type='default'
+													icon={<EyeOutlined />}
+													onClick={handlePreviewDesign}
+													disabled={isPreviewButtonDisabled || isPreviewLoading}
+												>
+													{isPreviewLoading
+														? "Preparing Preview..."
+														: "Preview Design"}
 												</Button>
 												<Button
 													icon={<EditOutlined />}
@@ -3816,230 +3919,235 @@ export default function CustomizeSelectedProduct() {
 						</DesktopActionBar>
 					)}
 
-					<PersonalizationPanel>
-						<Title
-							level={4}
-							style={{ color: "var(--text-color-dark)", marginBottom: 8 }}
-						>
-							Gift Personalization
-						</Title>
-						<Row gutter={12}>
-							<Col span={12}>
-								<Select
-									style={{ width: "100%" }}
-									value={selectedOccasion}
-									onChange={(value) =>
-										syncPersonalization(value, selectedGiftName)
-									}
+					{!isMobile && (
+						<>
+							<PersonalizationPanel>
+								<Title
+									level={4}
+									style={{ color: "var(--text-color-dark)", marginBottom: 8 }}
 								>
-									{POD_OCCASION_OPTIONS.map((item) => (
-										<Option key={item.value} value={item.value}>
-											<span>
-												{item.icon} {item.value}
-											</span>
-										</Option>
-									))}
-								</Select>
-							</Col>
-							<Col span={12}>
-								<Input
-									value={selectedGiftName}
-									onChange={(e) =>
-										syncPersonalization(selectedOccasion, e.target.value)
-									}
-									placeholder='Name (optional)'
-									maxLength={40}
+									Gift Personalization
+								</Title>
+								<Row gutter={12}>
+									<Col span={12}>
+										<Select
+											style={{ width: "100%" }}
+											value={selectedOccasion}
+											onChange={(value) =>
+												syncPersonalization(value, selectedGiftName)
+											}
+										>
+											{POD_OCCASION_OPTIONS.map((item) => (
+												<Option key={item.value} value={item.value}>
+													<span>
+														{item.icon} {item.value}
+													</span>
+												</Option>
+											))}
+										</Select>
+									</Col>
+									<Col span={12}>
+										<Input
+											value={selectedGiftName}
+											onChange={(e) =>
+												syncPersonalization(selectedOccasion, e.target.value)
+											}
+											placeholder='Name (optional)'
+											maxLength={40}
+										/>
+									</Col>
+								</Row>
+								<PresetPreviewBox>
+								<PresetPreviewText
+										style={{
+											color: effectiveOccasionStylePreset.textColor,
+											backgroundColor: effectiveOccasionStylePreset.backgroundColor,
+											backgroundImage: `linear-gradient(140deg, ${
+												effectiveOccasionStylePreset.messageGradientStart ||
+												effectiveOccasionStylePreset.backgroundColor
+											} 0%, ${
+												effectiveOccasionStylePreset.messageGradientEnd ||
+												effectiveOccasionStylePreset.backgroundColor
+											} 100%)`,
+											fontFamily: effectiveOccasionStylePreset.fontFamily,
+											fontSize: `${Math.max(16, effectiveOccasionStylePreset.fontSize - 6)}px`,
+											fontWeight: effectiveOccasionStylePreset.fontWeight,
+											fontStyle: effectiveOccasionStylePreset.fontStyle,
+											letterSpacing:
+												effectiveOccasionStylePreset.letterSpacing || "0.08px",
+											textShadow:
+												effectiveOccasionStylePreset.textShadow ||
+												"0 1px 2px rgba(16, 33, 24, 0.16)",
+											borderRadius: `${effectiveOccasionStylePreset.borderRadius}px`,
+											border: `${clampNumber(
+												Number(effectiveOccasionStylePreset.messageBorderWidth) || 2,
+												1,
+												4,
+											)}px solid ${
+												effectiveOccasionStylePreset.messageBorderColor ||
+												effectiveOccasionStylePreset.accentBorderColor ||
+												"rgba(31, 41, 55, 0.2)"
+											}`,
+											boxShadow:
+												effectiveOccasionStylePreset.messageShadow ||
+												"0 6px 16px rgba(16, 33, 24, 0.12)",
+										}}
+									>
+										<PresetIconBubble
+											style={{
+												color: effectiveOccasionStylePreset.accentTextColor,
+												backgroundColor:
+													effectiveOccasionStylePreset.accentBackgroundColor,
+												backgroundImage: `linear-gradient(145deg, ${
+													effectiveOccasionStylePreset.accentBackgroundColor ||
+													effectiveOccasionStylePreset.messageGradientStart ||
+													"#ffffff"
+												} 0%, ${
+													effectiveOccasionStylePreset.accentBackgroundColor2 ||
+													effectiveOccasionStylePreset.accentBackgroundColor ||
+													"#f3f4f6"
+												} 100%)`,
+												borderColor: effectiveOccasionStylePreset.accentBorderColor,
+												boxShadow:
+													effectiveOccasionStylePreset.accentShadow ||
+													"0 5px 13px rgba(16, 33, 24, 0.1)",
+												textShadow:
+													effectiveOccasionStylePreset.textShadow ||
+													"0 1px 2px rgba(16, 33, 24, 0.16)",
+											}}
+										>
+											{effectiveOccasionStylePreset.accentIcon ||
+												selectedOccasionMeta.icon}
+										</PresetIconBubble>
+										<span>
+											{effectiveOccasionStylePreset.ornamentLeft || ""}
+											{effectiveOccasionStylePreset.ornamentLeft ? " " : ""}
+											{buildGiftMessage(selectedOccasion, selectedGiftName)}
+											{effectiveOccasionStylePreset.ornamentRight ? " " : ""}
+											{effectiveOccasionStylePreset.ornamentRight || ""}
+										</span>
+									</PresetPreviewText>
+								</PresetPreviewBox>
+								<Switch
+									checked={advancedEditMode}
+									onChange={handleAdvancedModeChange}
+									checkedChildren='Advanced on'
+									unCheckedChildren='Simple mode'
 								/>
-							</Col>
-						</Row>
-						<PresetPreviewBox>
-						<PresetPreviewText
-								style={{
-									color: effectiveOccasionStylePreset.textColor,
-									backgroundColor: effectiveOccasionStylePreset.backgroundColor,
-									backgroundImage: `linear-gradient(140deg, ${
-										effectiveOccasionStylePreset.messageGradientStart ||
-										effectiveOccasionStylePreset.backgroundColor
-									} 0%, ${
-										effectiveOccasionStylePreset.messageGradientEnd ||
-										effectiveOccasionStylePreset.backgroundColor
-									} 100%)`,
-									fontFamily: effectiveOccasionStylePreset.fontFamily,
-									fontSize: `${Math.max(16, effectiveOccasionStylePreset.fontSize - 6)}px`,
-									fontWeight: effectiveOccasionStylePreset.fontWeight,
-									fontStyle: effectiveOccasionStylePreset.fontStyle,
-									letterSpacing: effectiveOccasionStylePreset.letterSpacing || "0.08px",
-									textShadow:
-										effectiveOccasionStylePreset.textShadow ||
-										"0 1px 2px rgba(16, 33, 24, 0.16)",
-									borderRadius: `${effectiveOccasionStylePreset.borderRadius}px`,
-									border: `${clampNumber(
-										Number(effectiveOccasionStylePreset.messageBorderWidth) || 2,
-										1,
-										4,
-									)}px solid ${
-										effectiveOccasionStylePreset.messageBorderColor ||
-										effectiveOccasionStylePreset.accentBorderColor ||
-										"rgba(31, 41, 55, 0.2)"
-									}`,
-									boxShadow:
-										effectiveOccasionStylePreset.messageShadow ||
-										"0 6px 16px rgba(16, 33, 24, 0.12)",
-								}}
-							>
-								<PresetIconBubble
-									style={{
-										color: effectiveOccasionStylePreset.accentTextColor,
-										backgroundColor: effectiveOccasionStylePreset.accentBackgroundColor,
-										backgroundImage: `linear-gradient(145deg, ${
-											effectiveOccasionStylePreset.accentBackgroundColor ||
-											effectiveOccasionStylePreset.messageGradientStart ||
-											"#ffffff"
-										} 0%, ${
-											effectiveOccasionStylePreset.accentBackgroundColor2 ||
-											effectiveOccasionStylePreset.accentBackgroundColor ||
-											"#f3f4f6"
-										} 100%)`,
-										borderColor: effectiveOccasionStylePreset.accentBorderColor,
-										boxShadow:
-											effectiveOccasionStylePreset.accentShadow ||
-											"0 5px 13px rgba(16, 33, 24, 0.1)",
-										textShadow:
-											effectiveOccasionStylePreset.textShadow ||
-											"0 1px 2px rgba(16, 33, 24, 0.16)",
-									}}
+							</PersonalizationPanel>
+
+							<CustomizePanel className='whole-select-options'>
+								<Title
+									level={4}
+									style={{ color: "var(--text-color-dark)", marginBottom: 8 }}
 								>
-									{effectiveOccasionStylePreset.accentIcon || selectedOccasionMeta.icon}
-								</PresetIconBubble>
-								<span>
-									{effectiveOccasionStylePreset.ornamentLeft || ""}
-									{effectiveOccasionStylePreset.ornamentLeft ? " " : ""}
-									{buildGiftMessage(selectedOccasion, selectedGiftName)}
-									{effectiveOccasionStylePreset.ornamentRight ? " " : ""}
-									{effectiveOccasionStylePreset.ornamentRight || ""}
-								</span>
-							</PresetPreviewText>
-						</PresetPreviewBox>
-						<Switch
-							checked={advancedEditMode}
-							onChange={handleAdvancedModeChange}
-							checkedChildren='Advanced on'
-							unCheckedChildren='Simple mode'
-						/>
-					</PersonalizationPanel>
+									Select Options:
+								</Title>
+								<Row gutter={12}>
+									{colorOpt?.values?.length > 0 && (
+										<Col span={12}>
+											<Select
+												style={{ width: "100%" }}
+												className='selectDesktopOrMobile'
+												placeholder='Color'
+												value={selectedColor}
+												onChange={(val) => {
+													setSelectedColor(val);
+													setHasChangedSizeOrColor(true);
+												}}
+											>
+												{colorOpt.values.map((cObj) => (
+													<Option key={cObj.title} value={cObj.title}>
+														{cObj.title}
+													</Option>
+												))}
+											</Select>
+										</Col>
+									)}
 
-					<CustomizePanel className='whole-select-options'>
-						<Title
-							level={4}
-							style={{ color: "var(--text-color-dark)", marginBottom: 8 }}
-						>
-							Select Options:
-						</Title>
-						<Row gutter={12}>
-							{colorOpt?.values?.length > 0 && (
-								<Col span={12}>
-									<Select
-										style={{ width: "100%" }}
-										className='selectDesktopOrMobile'
-										placeholder='Color'
-										value={selectedColor}
-										onChange={(val) => {
-											setSelectedColor(val);
-											setHasChangedSizeOrColor(true);
-										}}
-									>
-										{colorOpt.values.map((cObj) => (
-											<Option key={cObj.title} value={cObj.title}>
-												{cObj.title}
-											</Option>
-										))}
-									</Select>
-								</Col>
-							)}
+									{sizeOpt?.values?.length > 0 && (
+										<Col span={12}>
+											<Select
+												style={{ width: "100%" }}
+												className='selectDesktopOrMobile'
+												placeholder='Size'
+												value={selectedSize}
+												onChange={(val) => {
+													setSelectedSize(val);
+													setHasChangedSizeOrColor(true);
+												}}
+											>
+												{sizeOpt.values.map((sizeObj) => {
+													const isDisabled = !variantExistsForOption(
+														sizeObj,
+														selectedColor,
+														selectedScent
+													);
+													return (
+														<Option
+															key={sizeObj.title}
+															value={sizeObj.title}
+															disabled={isDisabled}
+															style={{ color: isDisabled ? "#aaa" : "inherit" }}
+														>
+															{sizeObj.title}
+														</Option>
+													);
+												})}
+											</Select>
+										</Col>
+									)}
+								</Row>
 
-							{sizeOpt?.values?.length > 0 && (
-								<Col span={12}>
-									<Select
-										style={{ width: "100%" }}
-										className='selectDesktopOrMobile'
-										placeholder='Size'
-										value={selectedSize}
-										onChange={(val) => {
-											setSelectedSize(val);
-											setHasChangedSizeOrColor(true);
-										}}
-									>
-										{sizeOpt.values.map((sizeObj) => {
-											const isDisabled = !variantExistsForOption(
-												sizeObj,
-												selectedColor,
-												selectedScent
-											);
-											return (
-												<Option
-													key={sizeObj.title}
-													value={sizeObj.title}
-													disabled={isDisabled}
-													style={{ color: isDisabled ? "#aaa" : "inherit" }}
-												>
-													{sizeObj.title}
-												</Option>
-											);
-										})}
-									</Select>
-								</Col>
-							)}
-						</Row>
+								{scentOpt?.values?.length > 0 && (
+									<Row gutter={12} style={{ marginTop: 16 }}>
+										<Col span={24}>
+											<Title
+												level={4}
+												style={{
+													color: "var(--text-color-dark)",
+													marginBottom: 8,
+												}}
+											>
+												Scent:
+											</Title>
+											<Select
+												style={{ width: "100%" }}
+												className='selectDesktopOrMobile'
+												placeholder='Scent'
+												value={selectedScent}
+												onChange={(val) => {
+													setSelectedScent(val);
+													setHasChangedSizeOrColor(true);
+												}}
+											>
+												{scentOpt.values.map((scObj) => {
+													const isDisabled = !variantExistsForScent(
+														scObj,
+														selectedColor,
+														selectedSize
+													);
+													return (
+														<Option
+															key={scObj.title}
+															value={scObj.title}
+															disabled={isDisabled}
+															style={{ color: isDisabled ? "#aaa" : "inherit" }}
+														>
+															{scObj.title}
+														</Option>
+													);
+												})}
+											</Select>
+										</Col>
+									</Row>
+								)}
 
-						{/* Scent if any */}
-						{scentOpt?.values?.length > 0 && (
-							<Row gutter={12} style={{ marginTop: 16 }}>
-								<Col span={24}>
-									<Title
-										level={4}
-										style={{ color: "var(--text-color-dark)", marginBottom: 8 }}
-									>
-										Scent:
-									</Title>
-									<Select
-										style={{ width: "100%" }}
-										className='selectDesktopOrMobile'
-										placeholder='Scent'
-										value={selectedScent}
-										onChange={(val) => {
-											setSelectedScent(val);
-											setHasChangedSizeOrColor(true);
-										}}
-									>
-										{scentOpt.values.map((scObj) => {
-											const isDisabled = !variantExistsForScent(
-												scObj,
-												selectedColor,
-												selectedSize
-											);
-											return (
-												<Option
-													key={scObj.title}
-													value={scObj.title}
-													disabled={isDisabled}
-													style={{ color: isDisabled ? "#aaa" : "inherit" }}
-												>
-													{scObj.title}
-												</Option>
-											);
-										})}
-									</Select>
-								</Col>
-							</Row>
-						)}
+								<Divider style={{ margin: "16px 0" }} />
 
-						<Divider style={{ margin: "16px 0" }} />
-
-						<Title level={4} style={{ color: "var(--text-color-dark)" }}>
-							Add/Update Text
-						</Title>
-						{!isMobile && (
-							<>
+								<Title level={4} style={{ color: "var(--text-color-dark)" }}>
+									Add/Update Text
+								</Title>
 								<Row gutter={8}>
 									<Col span={24}>
 										<Input.TextArea
@@ -4059,19 +4167,17 @@ export default function CustomizeSelectedProduct() {
 										Add Text
 									</Button>
 								</div>
-							</>
-						)}
 
-						<Divider />
-						<Title level={4}>Upload Your Image</Title>
+								<Divider />
+								<Title level={4}>Upload Your Image</Title>
 
-						{!isMobile && (
-							<UploadZone {...getRootProps()}>
-								<input {...getInputProps()} />
-								<p>Drag &amp; drop or click to select an image</p>
-							</UploadZone>
-						)}
-					</CustomizePanel>
+								<UploadZone {...getRootProps()}>
+									<input {...getInputProps()} />
+									<p>Drag &amp; drop or click to select an image</p>
+								</UploadZone>
+							</CustomizePanel>
+						</>
+					)}
 
 				</Col>
 			</Row>
@@ -4976,7 +5082,7 @@ const CustomizeWrapper = styled.section`
 	background-color: var(--background-light);
 
 	@media (max-width: 800px) {
-		padding: 10px !important;
+		padding: 16px 14px 20px !important;
 		margin: 0 !important;
 	}
 `;
@@ -5006,6 +5112,9 @@ const DesignOverlay = styled.div`
 		height: auto;
 		overflow: visible;
 		aspect-ratio: 800 / 700;
+		border-radius: 18px;
+		border: 1px solid #ece0d6;
+		box-shadow: 0 14px 28px rgba(0, 0, 0, 0.08);
 	}
 `;
 
@@ -5078,56 +5187,57 @@ const SlideImageWrapper = styled.div`
 
 const MobileToolbarWrapper = styled.div`
 	display: flex;
-	flex-wrap: wrap;
-	gap: 1rem;
-	padding: 8px;
-	background: #fff;
+	flex-direction: column;
+	gap: 12px;
+	padding: 14px;
+	margin: 4px 0 14px;
+	background: linear-gradient(180deg, #fffaf6 0%, #ffffff 100%);
+	border: 1px solid #ece0d6;
+	border-radius: 16px;
+	box-shadow: 0 10px 24px rgba(0, 0, 0, 0.06);
 `;
 
 const MobileLeftCorner = styled.div`
-	flex: 1;
 	display: flex;
 	flex-direction: column;
+	gap: 10px;
+
+	> .ant-select {
+		margin-bottom: 0 !important;
+	}
 `;
 
 const FloatingActions = styled.div`
-	display: flex;
-	gap: 8px;
-	flex-wrap: wrap;
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 10px;
+	width: 100%;
 
-	button {
+	> button {
 		display: flex;
 		align-items: center;
+		justify-content: center;
 		gap: 6px;
+		width: 100%;
+		min-height: 44px;
+		margin: 0 !important;
+	}
+
+	> button:last-of-type {
+		grid-column: 1 / -1;
+	}
+
+	@media (max-width: 360px) {
+		grid-template-columns: 1fr;
+
+		> button:last-of-type {
+			grid-column: auto;
+		}
 	}
 `;
 
 const MobileBottomPanel = styled.div`
 	margin-top: 2rem;
-`;
-
-const TopPreviewActionBar = styled.div`
-	display: flex;
-	justify-content: flex-end;
-	margin: 0 0 12px;
-	position: static;
-	top: auto;
-	z-index: 1;
-
-	button {
-		border-radius: 10px;
-		border: 1px solid #e5d7cc;
-		background: #fff;
-		box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
-	}
-
-	@media (max-width: 800px) {
-		top: 62px;
-		margin-bottom: 8px;
-		button {
-			width: 100%;
-		}
-	}
 `;
 
 const DesktopActionBar = styled.div`

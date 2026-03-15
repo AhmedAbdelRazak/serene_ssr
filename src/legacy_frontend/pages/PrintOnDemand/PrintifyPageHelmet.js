@@ -114,6 +114,7 @@ const generateProductSchema = (products) => {
 
 const PrintifyPageHelmet = ({ products }) => {
 	const location = useLocation();
+	const hasQueryFilters = Boolean(location.search && location.search !== "?");
 
 	const title = "Customize Your Gift | Print On Demand at Serene Jannat";
 	const description =
@@ -129,6 +130,9 @@ const PrintifyPageHelmet = ({ products }) => {
 			<title>{title}</title>
 			<meta name='description' content={description} />
 			<meta name='keywords' content={keywords} />
+			{hasQueryFilters ? (
+				<meta name='robots' content='noindex, follow' />
+			) : null}
 
 			<meta property='og:title' content={title} />
 			<meta property='og:description' content={description} />

@@ -31,6 +31,19 @@ function getPrintifyOptions(product = {}) {
 		: [];
 }
 
+function getPrintifyVariants(product = {}) {
+	return Array.isArray(product?.printifyProductDetails?.variants)
+		? product.printifyProductDetails.variants
+		: [];
+}
+
+function getPrintifyImages(product = {}) {
+	if (Array.isArray(product?.printifyProductDetails?.images)) {
+		return product.printifyProductDetails.images;
+	}
+	return Array.isArray(product?.images) ? product.images : [];
+}
+
 function getOptionValuesByNameFragment(product = {}, fragment = "") {
 	const needle = normalizeToken(fragment);
 	if (!needle) return [];
@@ -44,6 +57,49 @@ function getOptionValuesByNameFragment(product = {}, fragment = "") {
 		values.push(...option.values);
 	}
 	return values;
+}
+
+function getPrintifyOptionValueMap(product = {}) {
+	const map = new Map();
+	for (const option of getPrintifyOptions(product)) {
+		const optionName = normalizeToken(option?.name);
+		const optionType = normalizeToken(option?.type) || optionName;
+		const values = Array.isArray(option?.values) ? option.values : [];
+		for (const value of values) {
+			const id = `${value?.id ?? ""}`.trim();
+			if (!id) continue;
+			map.set(id, {
+				id,
+				optionName,
+				optionType,
+				title: `${value?.title || ""}`.trim(),
+				colors: Array.isArray(value?.colors) ? value.colors : [],
+			});
+		}
+	}
+	return map;
+}
+
+function findPrintifyOptionValue(product = {}, fragment = "", requested = "") {
+	const requestedToken = normalizeToken(requested);
+	const requestedHex = normalizeColorToken(requested);
+	if (!requestedToken && !requestedHex) return null;
+	const values = getOptionValuesByNameFragment(product, fragment);
+	for (const value of values) {
+		const title = normalizeToken(value?.title);
+		if (title && title === requestedToken) {
+			return value;
+		}
+		if (fragment === "color" && requestedHex) {
+			const hexes = Array.isArray(value?.colors)
+				? value.colors.map((entry) => normalizeColorToken(entry)).filter(Boolean)
+				: [];
+			if (hexes.includes(requestedHex)) {
+				return value;
+			}
+		}
+	}
+	return null;
 }
 
 function getColorCandidates(product = {}, requestedColor = "") {
@@ -285,6 +341,221 @@ export function getProductPrice(product = {}) {
 	return Number.isFinite(priceCandidate) ? priceCandidate : 0;
 }
 
+function getPodOccasionEntries(product = {}) {
+	const occasions = [];
+	for (const attr of getProductAttributes(product)) {
+		const defaultDesigns = Array.isArray(attr?.defaultDesigns) ? attr.defaultDesigns : [];
+		for (const design of defaultDesigns) {
+			const value = `${design?.occassion || design?.occasion || ""}`.trim();
+			if (value) occasions.push(value);
+		}
+	}
+	return uniqueStrings(occasions);
+}
+
+export function getPodOccasions(product = {}) {
+	const actualOccasions = getPodOccasionEntries(product);
+	return actualOccasions.length ? actualOccasions : POD_OCCASIONS;
+}
+
+export function getPodVariantSelections(product = {}) {
+	if (!isPodProduct(product)) return [];
+
+	const selectionMap = new Map();
+	const optionValueMap = getPrintifyOptionValueMap(product);
+	const variants = getPrintifyVariants(product);
+
+	for (const [index, variant] of variants.entries()) {
+		if (variant?.is_enabled === false) continue;
+		const optionIds = Array.isArray(variant?.options)
+			? variant.options.map((value) => `${value ?? ""}`.trim()).filter(Boolean)
+			: [];
+		const selection = {
+			variantId: `${variant?.id ?? ""}`.trim(),
+			variantSku: `${variant?.sku ?? ""}`.trim(),
+			price: variant?.price,
+			isDefault: Boolean(variant?.is_default),
+			optionIds,
+			color: "",
+			size: "",
+			scent: "",
+		};
+
+		for (const optionId of optionIds) {
+			const info = optionValueMap.get(optionId);
+			if (!info) continue;
+			if (!selection.color && info.optionType.includes("color")) {
+				selection.color = info.title;
+				continue;
+			}
+			if (!selection.size && info.optionType.includes("size")) {
+				selection.size = info.title;
+				continue;
+			}
+			if (!selection.scent && info.optionType.includes("scent")) {
+				selection.scent = info.title;
+			}
+		}
+
+		const key = [
+			normalizeToken(selection.color),
+			normalizeToken(selection.size),
+			normalizeToken(selection.scent),
+		].join("|");
+		const token =
+			[
+				selection.color,
+				selection.size,
+				selection.scent,
+				selection.variantSku,
+				selection.variantId,
+				`${index + 1}`,
+			]
+				.map((value) => toSlug(value))
+				.filter(Boolean)
+				.join("-") || `${index + 1}`;
+		const enrichedSelection = { ...selection, token };
+		const current = selectionMap.get(key);
+		if (!current || enrichedSelection.isDefault) {
+			selectionMap.set(key, enrichedSelection);
+		}
+	}
+
+	if (selectionMap.size > 0) {
+		return Array.from(selectionMap.values());
+	}
+
+	const fallbackSelections = new Map();
+	for (const [index, attr] of getProductAttributes(product).entries()) {
+		const selection = {
+			variantId: "",
+			variantSku: `${attr?.SubSKU ?? ""}`.trim(),
+			price: attr?.priceAfterDiscount || attr?.price,
+			isDefault: index === 0,
+			optionIds: [],
+			color: `${attr?.color || ""}`.trim(),
+			size: `${attr?.size || ""}`.trim(),
+			scent: `${attr?.scent || ""}`.trim(),
+		};
+		const key = [
+			normalizeToken(selection.color),
+			normalizeToken(selection.size),
+			normalizeToken(selection.scent),
+		].join("|");
+		if (!fallbackSelections.has(key)) {
+			const token =
+				[
+					selection.color,
+					selection.size,
+					selection.scent,
+					selection.variantSku,
+					`${index + 1}`,
+				]
+					.map((value) => toSlug(value))
+					.filter(Boolean)
+					.join("-") || `${index + 1}`;
+			fallbackSelections.set(key, { ...selection, token });
+		}
+	}
+
+	return Array.from(fallbackSelections.values());
+}
+
+export function buildPodSelectionQuery({
+	occasion = "",
+	name = "",
+	color = "",
+	size = "",
+	scent = "",
+} = {}) {
+	const params = new URLSearchParams();
+	if (occasion) params.set("occasion", occasion);
+	if (name) params.set("name", name);
+	if (color) params.set("color", color);
+	if (size) params.set("size", size);
+	if (scent) params.set("scent", scent);
+	return params.toString();
+}
+
+export function getMatchingPrintifyVariantIds(
+	product = {},
+	{ color = "", size = "", scent = "" } = {}
+) {
+	const chosenIds = [];
+	const colorValue = findPrintifyOptionValue(product, "color", color);
+	const sizeValue = findPrintifyOptionValue(product, "size", size);
+	const scentValue = findPrintifyOptionValue(product, "scent", scent);
+	if (colorValue?.id !== undefined && colorValue?.id !== null) {
+		chosenIds.push(`${colorValue.id}`.trim());
+	}
+	if (sizeValue?.id !== undefined && sizeValue?.id !== null) {
+		chosenIds.push(`${sizeValue.id}`.trim());
+	}
+	if (scentValue?.id !== undefined && scentValue?.id !== null) {
+		chosenIds.push(`${scentValue.id}`.trim());
+	}
+	if (!chosenIds.length) return [];
+
+	return getPrintifyVariants(product)
+		.filter((variant) => {
+			if (variant?.is_enabled === false) return false;
+			const optionIds = Array.isArray(variant?.options)
+				? variant.options.map((value) => `${value ?? ""}`.trim())
+				: [];
+			return chosenIds.every((entry) => optionIds.includes(entry));
+		})
+		.map((variant) => `${variant?.id ?? ""}`.trim())
+		.filter(Boolean);
+}
+
+export function getPodGalleryImages(
+	product = {},
+	{ color = "", size = "", scent = "" } = {},
+	limit = 6
+) {
+	const printifyImages = getPrintifyImages(product);
+	const allImages = uniqueStrings(
+		printifyImages.map((image) => resolveImageUrl(image)).filter(Boolean)
+	);
+	if (!printifyImages.length) return allImages.slice(0, limit);
+
+	const matchingVariantIds = new Set(
+		getMatchingPrintifyVariantIds(product, { color, size, scent })
+	);
+	let filtered = [];
+
+	if (matchingVariantIds.size > 0) {
+		filtered = printifyImages
+			.filter((image) => {
+				const variantIds = Array.isArray(image?.variant_ids)
+					? image.variant_ids.map((value) => `${value ?? ""}`.trim())
+					: [];
+				return variantIds.some((variantId) => matchingVariantIds.has(variantId));
+			})
+			.map((image) => resolveImageUrl(image))
+			.filter(Boolean);
+	}
+
+	if (!filtered.length && color) {
+		const colorOnlyVariantIds = new Set(
+			getMatchingPrintifyVariantIds(product, { color })
+		);
+		if (colorOnlyVariantIds.size > 0) {
+			filtered = printifyImages
+				.filter((image) => {
+					const variantIds = Array.isArray(image?.variant_ids)
+						? image.variant_ids.map((value) => `${value ?? ""}`.trim())
+						: [];
+					return variantIds.some((variantId) => colorOnlyVariantIds.has(variantId));
+				})
+				.map((image) => resolveImageUrl(image))
+				.filter(Boolean);
+		}
+	}
+
+	return uniqueStrings(filtered.length ? filtered : allImages).slice(0, limit);
+}
+
 function getVariantValueIdsByOptionName(product = {}, optionName = "") {
 	const options = Array.isArray(product?.printifyProductDetails?.options)
 		? product.printifyProductDetails.options
@@ -302,37 +573,21 @@ function getVariantValueIdsByOptionName(product = {}, optionName = "") {
 
 export function buildPodQueryCombinations(product = {}) {
 	if (!isPodProduct(product)) return [];
-	const occasionValues = POD_OCCASIONS;
-	const sizeValues = getVariantValueIdsByOptionName(product, "size");
-	const colorValues = getVariantValueIdsByOptionName(product, "color");
-	const scentValues = getVariantValueIdsByOptionName(product, "scent");
+	const occasionValues = getPodOccasions(product);
+	const selections = getPodVariantSelections(product);
 	const combinations = [];
 
 	for (const occasion of occasionValues) {
-		combinations.push(`occasion=${encodeURIComponent(occasion)}`);
-		for (const size of sizeValues.slice(0, 8)) {
+		combinations.push(buildPodSelectionQuery({ occasion }));
+		for (const selection of selections) {
 			combinations.push(
-				`occasion=${encodeURIComponent(occasion)}&size=${encodeURIComponent(size)}`
+				buildPodSelectionQuery({
+					occasion,
+					color: selection.color,
+					size: selection.size,
+					scent: selection.scent,
+				})
 			);
-		}
-		for (const color of colorValues.slice(0, 10)) {
-			combinations.push(
-				`occasion=${encodeURIComponent(occasion)}&color=${encodeURIComponent(color)}`
-			);
-		}
-		for (const scent of scentValues.slice(0, 10)) {
-			combinations.push(
-				`occasion=${encodeURIComponent(occasion)}&scent=${encodeURIComponent(scent)}`
-			);
-		}
-		for (const size of sizeValues.slice(0, 5)) {
-			for (const color of colorValues.slice(0, 5)) {
-				combinations.push(
-					`occasion=${encodeURIComponent(occasion)}&size=${encodeURIComponent(
-						size
-					)}&color=${encodeURIComponent(color)}`
-				);
-			}
 		}
 	}
 

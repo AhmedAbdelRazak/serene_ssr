@@ -1,20 +1,16 @@
 "use client";
 
 import "@ant-design/v5-patch-for-react-19";
-import dynamic from "next/dynamic";
 import { useEffect, useMemo } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { HelmetProvider } from "react-helmet-async";
 import { StyleSheetManager } from "styled-components";
 import isPropValid from "@emotion/is-prop-valid";
 import { CartProvider } from "@/legacy_frontend/cart_context";
+import { LegacyRouteBootstrapProvider } from "@/legacy_frontend/bootstrap/LegacyRouteBootstrapContext";
+import LegacyApp from "@/legacy_frontend/App";
 
-const LegacyApp = dynamic(() => import("@/legacy_frontend/App"), {
-	ssr: false,
-	loading: () => <div style={{ minHeight: "40vh" }} />,
-});
-
-export default function LegacyFrontendApp() {
+export default function LegacyFrontendApp({ initialRouteData = null }) {
 	const clientId =
 		process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
 		process.env.REACT_APP_GOOGLE_CLIENT_ID ||
@@ -90,15 +86,17 @@ export default function LegacyFrontendApp() {
 	return (
 		<StyleSheetManager shouldForwardProp={shouldForwardProp}>
 			<HelmetProvider>
-				<CartProvider>
-					{requiresGoogleProvider ? (
-						<GoogleOAuthProvider clientId={clientId}>
+				<LegacyRouteBootstrapProvider initialRouteData={initialRouteData}>
+					<CartProvider>
+						{requiresGoogleProvider ? (
+							<GoogleOAuthProvider clientId={clientId}>
+								<LegacyApp />
+							</GoogleOAuthProvider>
+						) : (
 							<LegacyApp />
-						</GoogleOAuthProvider>
-					) : (
-						<LegacyApp />
-					)}
-				</CartProvider>
+						)}
+					</CartProvider>
+				</LegacyRouteBootstrapProvider>
 			</HelmetProvider>
 		</StyleSheetManager>
 	);

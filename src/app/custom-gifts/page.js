@@ -9,12 +9,14 @@ function getSafeSearchParamValue(source, key) {
 }
 
 export async function generateMetadata({ searchParams }) {
-	const occasion = getSafeSearchParamValue(searchParams, "occasion");
-	const name = getSafeSearchParamValue(searchParams, "name");
-	const color = getSafeSearchParamValue(searchParams, "color");
-	const size = getSafeSearchParamValue(searchParams, "size");
-	const scent = getSafeSearchParamValue(searchParams, "scent");
-	const page = getSafeSearchParamValue(searchParams, "page");
+	const resolvedSearchParams = await searchParams;
+	const occasion = getSafeSearchParamValue(resolvedSearchParams, "occasion");
+	const name = getSafeSearchParamValue(resolvedSearchParams, "name");
+	const color = getSafeSearchParamValue(resolvedSearchParams, "color");
+	const size = getSafeSearchParamValue(resolvedSearchParams, "size");
+	const scent = getSafeSearchParamValue(resolvedSearchParams, "scent");
+	const page = getSafeSearchParamValue(resolvedSearchParams, "page");
+	const hasActiveFilters = [occasion, name, color, size, scent, page].some(Boolean);
 	const personalization = [occasion, name].filter(Boolean).join(" - ");
 	const filtersSummary = [color && `color: ${color}`, size && `size: ${size}`, scent && `scent: ${scent}`, page && `page: ${page}`]
 		.filter(Boolean)
@@ -36,6 +38,7 @@ export async function generateMetadata({ searchParams }) {
 			size || "",
 			scent || "",
 		].filter(Boolean),
+		noindex: hasActiveFilters,
 	});
 }
 

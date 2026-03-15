@@ -1,10 +1,16 @@
-import { getAllProductsForSeo } from "@/lib/api";
+import { getAllProductsForSeo, getColorsCatalog } from "@/lib/api";
 import {
+	buildPodSelectionQuery,
 	buildProductPath,
+	findBestProductAttribute,
+	getPodGalleryImages,
+	getPodOccasions,
+	getPodVariantSelections,
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
 	getProductPrice,
+	isPodProduct,
 	resolveImageUrl,
 } from "@/lib/product-helpers";
 import { formatPrice } from "@/lib/utils";
@@ -58,6 +64,92 @@ function toFeedIdToken(value = "") {
 		.replace(/^-|-$/g, "");
 }
 
+function normalizeHexColor(value = "") {
+	const raw = toSafeQueryValue(value).toLowerCase();
+	if (!raw) return "";
+	if (/^#?[0-9a-f]{3,8}$/i.test(raw)) {
+		return raw.startsWith("#") ? raw : `#${raw}`;
+	}
+	return "";
+}
+
+function isHexColorValue(value = "") {
+	return Boolean(normalizeHexColor(value));
+}
+
+function toDisplayLabel(value = "") {
+	const raw = toSafeQueryValue(value);
+	if (!raw) return "";
+	return raw.replace(/\b[a-z]/g, (match) => match.toUpperCase());
+}
+
+function buildColorLookup(colors = []) {
+	const map = new Map();
+	for (const entry of Array.isArray(colors) ? colors : []) {
+		const label = toDisplayLabel(entry?.color);
+		const hex = normalizeHexColor(entry?.hexa);
+		if (!label || !hex) continue;
+		map.set(hex, label);
+		map.set(hex.replace(/^#/, ""), label);
+	}
+	return map;
+}
+
+function resolvePrintifyColorLabel(product = {}, rawColor = "") {
+	const normalizedHex = normalizeHexColor(rawColor);
+	const normalizedRaw = toSafeQueryValue(rawColor).toLowerCase();
+	if (!normalizedHex && !normalizedRaw) return "";
+
+	const options = Array.isArray(product?.printifyProductDetails?.options)
+		? product.printifyProductDetails.options
+		: [];
+
+	for (const option of options) {
+		const optionType = toSafeQueryValue(option?.type).toLowerCase();
+		const optionName = toSafeQueryValue(option?.name).toLowerCase();
+		if (optionType !== "color" && !optionName.includes("color")) continue;
+
+		for (const value of Array.isArray(option?.values) ? option.values : []) {
+			const title = toDisplayLabel(value?.title);
+			const valueTitle = toSafeQueryValue(value?.title).toLowerCase();
+			const valueHexes = Array.isArray(value?.colors)
+				? value.colors.map((entry) => normalizeHexColor(entry)).filter(Boolean)
+				: [];
+
+			if (valueTitle && valueTitle === normalizedRaw) {
+				return title;
+			}
+			if (normalizedHex && valueHexes.includes(normalizedHex)) {
+				return title;
+			}
+		}
+	}
+
+	return "";
+}
+
+function resolveVariantColorLabel(product = {}, rawColor = "", colorLookup = new Map()) {
+	const directLabel = toDisplayLabel(rawColor);
+	if (!rawColor) return "";
+
+	const printifyLabel = resolvePrintifyColorLabel(product, rawColor);
+	if (printifyLabel) return printifyLabel;
+
+	const normalizedHex = normalizeHexColor(rawColor);
+	if (normalizedHex && colorLookup.has(normalizedHex)) {
+		return colorLookup.get(normalizedHex) || "";
+	}
+	if (normalizedHex && colorLookup.has(normalizedHex.replace(/^#/, ""))) {
+		return colorLookup.get(normalizedHex.replace(/^#/, "")) || "";
+	}
+
+	if (isHexColorValue(rawColor)) {
+		return "";
+	}
+
+	return directLabel;
+}
+
 function extractImageUrls(source) {
 	if (!source) return [];
 	if (Array.isArray(source)) {
@@ -87,25 +179,61 @@ function uniqueImageUrls(urls = []) {
 	return deduped;
 }
 
-function buildFeedImageSet(product = {}, attr = null) {
+function buildFeedImageSet(
+	product = {},
+	{ attr = null, occasion = "", color = "", size = "", scent = "" } = {}
+) {
+	const primary = getPrimaryProductImage(product, {
+		occasion,
+		color,
+		size,
+		scent,
+	});
+	const galleryImages = getPodGalleryImages(product, { color, size, scent }, 10);
+
 	const images = uniqueImageUrls([
+		primary,
 		...extractImageUrls(attr?.exampleDesignImage),
 		...extractImageUrls(attr?.productImages),
+		...galleryImages,
 		...extractImageUrls(product?.thumbnailImage),
 		...extractImageUrls(product?.productImages),
 		...extractImageUrls(product?.printifyProductDetails?.images),
 	]);
+
 	if (!images.length) {
 		const fallback = getPrimaryProductImage(product);
 		return fallback ? [fallback] : [];
 	}
+
 	return images;
+}
+
+function buildAdditionalImageXml(imageSet = []) {
+	return imageSet
+		.slice(1, 11)
+		.map(
+			(url) =>
+				`<g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
+		)
+		.join("");
 }
 
 function toNonNegativeNumber(value, fallback = 0) {
 	const parsed = Number(value);
 	if (!Number.isFinite(parsed) || parsed < 0) {
 		return Number(fallback) >= 0 ? Number(fallback) : 0;
+	}
+	return parsed;
+}
+
+function normalizeVariantPrice(value, fallback = 0) {
+	const parsed = Number(value);
+	if (!Number.isFinite(parsed) || parsed <= 0) {
+		return Number(fallback) > 0 ? Number(fallback) : 0;
+	}
+	if (Number.isInteger(parsed) && parsed >= 100) {
+		return Number((parsed / 100).toFixed(2));
 	}
 	return parsed;
 }
@@ -140,92 +268,179 @@ function buildShippingXml(product = {}, attr = null) {
 	</g:shipping>`;
 }
 
-function buildVariantLink(baseLink = "", product = {}, attr = {}) {
-	const params = new URLSearchParams();
-	const safeSize = toSafeQueryValue(attr?.size);
-	const safeColor = toSafeQueryValue(attr?.color);
-	const safeScent = toSafeQueryValue(attr?.scent);
-	if (safeSize) params.set("size", safeSize);
-	if (safeColor) params.set("color", safeColor);
-	if (safeScent) params.set("scent", safeScent);
-
-	const isPod = Boolean(
-		product?.isPrintifyProduct && product?.printifyProductDetails?.POD
-	);
-	if (isPod && !params.has("occasion")) {
-		const fallbackOccasion =
-			toSafeQueryValue(
-				attr?.defaultDesigns?.[0]?.occassion ||
-					attr?.defaultDesigns?.[0]?.occasion ||
-				product?.defaultDesigns?.[0]?.occassion ||
-					product?.defaultDesigns?.[0]?.occasion
-			) || "Birthday";
-		params.set("occasion", fallbackOccasion);
-	}
-
-	const query = params.toString();
+function buildVariantLink(baseLink = "", selection = {}) {
+	const query = buildPodSelectionQuery(selection);
 	return query ? `${baseLink}?${query}` : baseLink;
 }
 
-export async function GET(request) {
-	const toAbsoluteUrl = (path = "/") => absoluteXmlUrl(path, request);
+function buildFeedDescription(
+	baseDescription = "",
+	{ isPod = false, occasion = "", color = "", size = "", scent = "" } = {}
+) {
+	const safeDescription = toSafeQueryValue(baseDescription);
+	const options = [];
+	if (occasion) options.push("occasion");
+	if (color) options.push("color");
+	if (size) options.push("size");
+	if (scent) options.push("scent");
 
-	let products = [];
-	try {
-		products = await getAllProductsForSeo({ maxPages: 200, records: 200, revalidate: 1800 });
-	} catch {
-		products = [];
+	if (!isPod) {
+		if (!options.length) return safeDescription;
+		return `${safeDescription} Shoppers can review available ${options.join(
+			", "
+		)} options on the product page before checkout.`;
 	}
 
-	const itemsXml = products
-		.filter((product) => product?._id)
-		.flatMap((product) => {
-			const name = getProductDisplayName(product);
-			const description = getProductDescription(product);
-			const link = toAbsoluteUrl(buildProductPath(product));
-			const brand = product?.brandName || "Serene Jannat";
-			const categoryName = product?.category?.categoryName || "Gifts";
-			const googleCategory = inferGoogleProductCategory(product);
-			const fallbackImage = getPrimaryProductImage(product) || toAbsoluteUrl("/logo512.png");
+	const designLead = occasion
+		? `Shown with the ${occasion} design.`
+		: "Shown with a customizable design.";
+	const customizationLead = options.length
+		? `Shoppers can personalize the design and adjust ${options.join(
+				", "
+		  )} on the product page before checkout.`
+		: "Shoppers can personalize the design on the product page before checkout.";
+	return `${safeDescription} ${designLead} ${customizationLead}`.trim();
+}
 
-			const attributes = Array.isArray(product?.productAttributes)
-				? product.productAttributes
-				: [];
+function buildVariantTitle(name = "", parts = [], customizationNotice = "") {
+	const suffix = parts.filter(Boolean).join(" / ");
+	if (suffix && customizationNotice) {
+		return `${name} - ${suffix} - ${customizationNotice}`;
+	}
+	if (suffix) return `${name} - ${suffix}`;
+	if (customizationNotice) return `${name} - ${customizationNotice}`;
+	return name;
+}
 
-			if (!attributes.length) {
-				const effectivePrice = getProductPrice(product);
-				const originalPrice =
-					Number(product?.price || 0) > 0
-						? Number(product.price)
-						: effectivePrice;
-				const inStock =
-					Number(product?.quantity || 0) > 0 ? "in stock" : "out of stock";
-				const imageSet = buildFeedImageSet(product, null);
-				const primaryImage = imageSet[0] || fallbackImage;
-				const shippingXml = buildShippingXml(product, null);
-				const additionalImageLinks = imageSet
-					.slice(1, 11)
-					.map(
-						(url) =>
-							`<g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
-					)
-					.join("");
-				return [
-					`<item>
-	<g:id>${escapeXml(String(product._id))}</g:id>
-	<title>${escapeXml(name)}</title>
+function resolveVariantPricing(product = {}, attr = null, variantLike = null) {
+	const productBasePrice = Number(product?.price || 0);
+	const productEffectivePrice = getProductPrice(product);
+	const attrPrice = Number(attr?.price || 0);
+	const attrEffectivePrice =
+		Number(attr?.priceAfterDiscount || 0) > 0
+			? Number(attr.priceAfterDiscount)
+			: attrPrice;
+	const variantPrice = normalizeVariantPrice(variantLike?.price, 0);
+
+	const originalPrice =
+		attrPrice > 0 ? attrPrice : variantPrice > 0 ? variantPrice : productBasePrice;
+	const effectivePrice =
+		attrEffectivePrice > 0
+			? attrEffectivePrice
+			: variantPrice > 0
+				? variantPrice
+				: productEffectivePrice;
+
+	return {
+		originalPrice: originalPrice > 0 ? originalPrice : effectivePrice,
+		effectivePrice,
+	};
+}
+
+function resolveAvailability(product = {}, attr = null) {
+	const quantity = Number(attr?.quantity ?? product?.quantity ?? 0);
+	return quantity > 0 ? "in stock" : "out of stock";
+}
+
+function buildPodFeedItems({
+	product,
+	name,
+	baseDescription,
+	baseLink,
+	brand,
+	categoryName,
+	googleCategory,
+	colorLookup,
+}) {
+	const occasions = getPodOccasions(product);
+	const selections = getPodVariantSelections(product);
+	const effectiveSelections = selections.length
+		? selections
+		: [
+				{
+					variantId: "",
+					variantSku: "",
+					price: 0,
+					token: "default",
+					color: "",
+					size: "",
+					scent: "",
+				},
+		  ];
+
+	return occasions.flatMap((occasion) =>
+		effectiveSelections.map((selection, index) => {
+			const resolvedColor = resolveVariantColorLabel(
+				product,
+				selection.color,
+				colorLookup
+			);
+			const selectedColor =
+				resolvedColor ||
+				(isHexColorValue(selection.color) ? "" : selection.color);
+			const attr = findBestProductAttribute(product, {
+				color: selectedColor || selection.color,
+				size: selection.size,
+				scent: selection.scent,
+			});
+			const imageSet = buildFeedImageSet(product, {
+				attr,
+				occasion,
+				color: selectedColor || selection.color,
+				size: selection.size,
+				scent: selection.scent,
+			});
+			const primaryImage = imageSet[0] || "";
+			const additionalImageLinks = buildAdditionalImageXml(imageSet);
+			const shippingXml = buildShippingXml(product, attr);
+			const { originalPrice, effectivePrice } = resolveVariantPricing(
+				product,
+				attr,
+				selection
+			);
+			const availability = resolveAvailability(product, attr);
+			const description = buildFeedDescription(baseDescription, {
+				isPod: true,
+				occasion,
+				color: selectedColor,
+				size: selection.size,
+				scent: selection.scent,
+			});
+			const title = buildVariantTitle(
+				name,
+				[occasion, selectedColor, selection.size, selection.scent],
+				"Customize Further"
+			);
+			const link = buildVariantLink(baseLink, {
+				occasion,
+				color: selectedColor || selection.color,
+				size: selection.size,
+				scent: selection.scent,
+			});
+			const occasionToken = toFeedIdToken(occasion || "custom") || "custom";
+			const variantToken =
+				toFeedIdToken(selection.token) ||
+				toFeedIdToken(selection.variantSku) ||
+				`${index + 1}`;
+			const itemId = `${product._id}-${occasionToken}-${variantToken}`;
+			const itemGroupId = `${product._id}-${occasionToken}`;
+
+			return `<item>
+	<g:id>${escapeXml(itemId)}</g:id>
+	<g:item_group_id>${escapeXml(itemGroupId)}</g:item_group_id>
+	<title>${escapeXml(title)}</title>
 	<description>${escapeXml(description)}</description>
 	<link>${escapeXml(link)}</link>
 	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
-	<g:availability>${escapeXml(inStock)}</g:availability>
+	<g:availability>${escapeXml(availability)}</g:availability>
 	<g:condition>new</g:condition>
-	<g:price>${escapeXml(formatPrice(originalPrice, FEED_CURRENCY))}</g:price>
+	<g:price>${escapeXml(formatPrice(originalPrice || effectivePrice, FEED_CURRENCY))}</g:price>
 	${
 		originalPrice > effectivePrice
 			? `<g:sale_price>${escapeXml(
 					formatPrice(effectivePrice, FEED_CURRENCY)
-				)}</g:sale_price>`
+			  )}</g:sale_price>`
 			: ""
 	}
 	${shippingXml}
@@ -233,68 +448,122 @@ export async function GET(request) {
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
 	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
-	${product?.productSKU ? `<g:mpn>${escapeXml(product.productSKU)}</g:mpn>` : ""}
+	<g:custom_label_1>${escapeXml(occasion)}</g:custom_label_1>
+	<g:custom_label_2>customizable</g:custom_label_2>
+	${selection.size ? `<g:size>${escapeXml(selection.size)}</g:size>` : ""}
+	${selectedColor ? `<g:color>${escapeXml(selectedColor)}</g:color>` : ""}
+	${
+		selection.variantSku
+			? `<g:mpn>${escapeXml(selection.variantSku)}</g:mpn>`
+			: ""
+	}
+	<g:identifier_exists>false</g:identifier_exists>
+</item>`;
+		})
+	);
+}
+
+function buildStandardFeedItems({
+	product,
+	name,
+	baseDescription,
+	baseLink,
+	brand,
+	categoryName,
+	googleCategory,
+	colorLookup,
+}) {
+	const attributes = Array.isArray(product?.productAttributes)
+		? product.productAttributes
+		: [];
+	const fallbackImage =
+		getPrimaryProductImage(product) || buildFeedImageSet(product, {})[0] || "";
+
+	if (!attributes.length) {
+		const effectivePrice = getProductPrice(product);
+		const originalPrice =
+			Number(product?.price || 0) > 0 ? Number(product.price) : effectivePrice;
+		const availability = resolveAvailability(product, null);
+		const imageSet = buildFeedImageSet(product, {});
+		const primaryImage = imageSet[0] || fallbackImage;
+		const description = buildFeedDescription(baseDescription, { isPod: false });
+		const additionalImageLinks = buildAdditionalImageXml(imageSet);
+		const shippingXml = buildShippingXml(product, null);
+
+		return [
+			`<item>
+	<g:id>${escapeXml(String(product._id))}</g:id>
+	<title>${escapeXml(name)}</title>
+	<description>${escapeXml(description)}</description>
+	<link>${escapeXml(baseLink)}</link>
+	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
+	${additionalImageLinks}
+	<g:availability>${escapeXml(availability)}</g:availability>
+	<g:condition>new</g:condition>
+	<g:price>${escapeXml(formatPrice(originalPrice, FEED_CURRENCY))}</g:price>
+	${
+		originalPrice > effectivePrice
+			? `<g:sale_price>${escapeXml(
+					formatPrice(effectivePrice, FEED_CURRENCY)
+			  )}</g:sale_price>`
+			: ""
+	}
+	${shippingXml}
+	<g:brand>${escapeXml(brand)}</g:brand>
+	<g:product_type>${escapeXml(categoryName)}</g:product_type>
+	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
+	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
 	<g:identifier_exists>false</g:identifier_exists>
 </item>`,
-				];
-			}
+		];
+	}
 
-			return attributes.map((attr, index) => {
-				const imageSet = buildFeedImageSet(product, attr);
-				const variantImage = imageSet[0] || fallbackImage;
-				const shippingXml = buildShippingXml(product, attr);
-				const additionalImageLinks = imageSet
-					.slice(1, 11)
-					.map(
-						(url) =>
-							`<g:additional_image_link>${escapeXml(url)}</g:additional_image_link>`
-					)
-					.join("");
-				const variantLink = buildVariantLink(link, product, attr);
-				const originalVariantPrice =
-					Number(attr?.price || 0) > 0
-						? Number(attr.price)
-						: Number(product?.price || 0);
-				const effectiveVariantPrice =
-					Number(attr?.priceAfterDiscount || 0) > 0
-						? Number(attr.priceAfterDiscount)
-						: Number(attr?.price || 0) > 0
-							? Number(attr.price)
-							: getProductPrice(product);
-				const variantInStock =
-						Number(attr?.quantity || product?.quantity || 0) > 0
-							? "in stock"
-							: "out of stock";
-				const variantToken =
-					toFeedIdToken(attr?.SubSKU) ||
-					toFeedIdToken(attr?.PK) ||
-					`${index + 1}`;
-				const variantId = `${product._id}-${variantToken}`;
-				const variantTitleSuffix = [attr?.size, attr?.color, attr?.scent]
-					.filter(Boolean)
-					.join(" / ");
-				const variantTitle = variantTitleSuffix
-					? `${name} - ${variantTitleSuffix}`
-					: name;
+	return attributes.map((attr, index) => {
+		const resolvedColor = resolveVariantColorLabel(product, attr?.color, colorLookup);
+		const imageSet = buildFeedImageSet(product, {
+			attr,
+			color: resolvedColor || attr?.color,
+			size: attr?.size,
+			scent: attr?.scent,
+		});
+		const primaryImage = imageSet[0] || fallbackImage;
+		const additionalImageLinks = buildAdditionalImageXml(imageSet);
+		const shippingXml = buildShippingXml(product, attr);
+		const { originalPrice, effectivePrice } = resolveVariantPricing(product, attr, null);
+		const availability = resolveAvailability(product, attr);
+		const title = buildVariantTitle(
+			name,
+			[attr?.size, resolvedColor, attr?.scent],
+			"More Options Available"
+		);
+		const description = buildFeedDescription(baseDescription, {
+			isPod: false,
+			color: resolvedColor,
+			size: attr?.size,
+			scent: attr?.scent,
+		});
+		const variantToken =
+			toFeedIdToken(attr?.SubSKU) ||
+			toFeedIdToken(attr?.PK) ||
+			`${index + 1}`;
+		const variantId = `${product._id}-${variantToken}`;
 
-				return `<item>
+		return `<item>
 	<g:id>${escapeXml(variantId)}</g:id>
 	<g:item_group_id>${escapeXml(String(product._id))}</g:item_group_id>
-	<title>${escapeXml(variantTitle)}</title>
+	<title>${escapeXml(title)}</title>
 	<description>${escapeXml(description)}</description>
-	<link>${escapeXml(variantLink)}</link>
-	<g:image_link>${escapeXml(variantImage)}</g:image_link>
+	<link>${escapeXml(baseLink)}</link>
+	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
-	<g:availability>${escapeXml(variantInStock)}</g:availability>
+	<g:availability>${escapeXml(availability)}</g:availability>
 	<g:condition>new</g:condition>
-	<g:price>${escapeXml(
-		formatPrice(originalVariantPrice || effectiveVariantPrice, FEED_CURRENCY)
-	)}</g:price>
+	<g:price>${escapeXml(formatPrice(originalPrice || effectivePrice, FEED_CURRENCY))}</g:price>
 	${
-		originalVariantPrice > effectiveVariantPrice
+		originalPrice > effectivePrice
 			? `<g:sale_price>${escapeXml(
-					formatPrice(effectiveVariantPrice, FEED_CURRENCY)
-				)}</g:sale_price>`
+					formatPrice(effectivePrice, FEED_CURRENCY)
+			  )}</g:sale_price>`
 			: ""
 	}
 	${shippingXml}
@@ -303,10 +572,61 @@ export async function GET(request) {
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
 	<g:custom_label_0>${escapeXml(categoryName)}</g:custom_label_0>
 	${attr?.size ? `<g:size>${escapeXml(attr.size)}</g:size>` : ""}
-	${attr?.color ? `<g:color>${escapeXml(attr.color)}</g:color>` : ""}
+	${resolvedColor ? `<g:color>${escapeXml(resolvedColor)}</g:color>` : ""}
 	${attr?.SubSKU ? `<g:mpn>${escapeXml(attr.SubSKU)}</g:mpn>` : ""}
 	<g:identifier_exists>false</g:identifier_exists>
 </item>`;
+	});
+}
+
+export async function GET(request) {
+	const toAbsoluteUrl = (path = "/") => absoluteXmlUrl(path, request);
+
+	let products = [];
+	let colorLookup = new Map();
+	try {
+		const [allProducts, colorCatalog] = await Promise.all([
+			getAllProductsForSeo({ maxPages: 200, records: 200, revalidate: 1800 }),
+			getColorsCatalog({ revalidate: 1800 }).catch(() => []),
+		]);
+		products = Array.isArray(allProducts) ? allProducts : [];
+		colorLookup = buildColorLookup(colorCatalog);
+	} catch {
+		products = [];
+	}
+
+	const itemsXml = products
+		.filter((product) => product?._id)
+		.flatMap((product) => {
+			const name = getProductDisplayName(product);
+			const baseDescription = getProductDescription(product);
+			const baseLink = toAbsoluteUrl(buildProductPath(product));
+			const brand = product?.brandName || "Serene Jannat";
+			const categoryName = product?.category?.categoryName || "Gifts";
+			const googleCategory = inferGoogleProductCategory(product);
+
+			if (isPodProduct(product)) {
+				return buildPodFeedItems({
+					product,
+					name,
+					baseDescription,
+					baseLink,
+					brand,
+					categoryName,
+					googleCategory,
+					colorLookup,
+				});
+			}
+
+			return buildStandardFeedItems({
+				product,
+				name,
+				baseDescription,
+				baseLink,
+				brand,
+				categoryName,
+				googleCategory,
+				colorLookup,
 			});
 		})
 		.join("\n");

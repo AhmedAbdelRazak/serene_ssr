@@ -95,7 +95,7 @@ const ContactUs = () => {
 				<meta property='og:url' content='https://serenejannat.com/contact' />
 				<meta property='og:type' content='website' />
 				<meta property='og:locale' content='en_US' />
-				<link rel='icon' href='serene_frontend/src/GeneralImgs/favicon.ico' />
+				<link rel='icon' href='/favicon.ico' />
 				<link rel='canonical' href='https://serenejannat.com/contact' />
 				<script
 					type='application/ld+json'

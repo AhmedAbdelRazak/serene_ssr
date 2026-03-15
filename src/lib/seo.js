@@ -104,6 +104,6 @@ export function organizationSchema() {
 		name: "Serene Jannat",
 		url: SITE_URL,
 		logo: absoluteUrl("/logo192.png"),
-		sameAs: [],
+		sameAs: ["https://www.facebook.com/profile.php?id=61575325586166"],
 	};
 }

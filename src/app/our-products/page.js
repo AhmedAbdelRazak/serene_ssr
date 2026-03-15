@@ -9,6 +9,7 @@ function getSafeSearchParamValue(source, key) {
 }
 
 export async function generateMetadata({ searchParams }) {
+	const resolvedSearchParams = await searchParams;
 	const readableFilters = [];
 	const filterKeys = [
 		"category",
@@ -23,10 +24,11 @@ export async function generateMetadata({ searchParams }) {
 		"page",
 	];
 	filterKeys.forEach((key) => {
-		const value = getSafeSearchParamValue(searchParams, key);
+		const value = getSafeSearchParamValue(resolvedSearchParams, key);
 		if (!value) return;
 		readableFilters.push(`${key}: ${value}`);
 	});
+	const hasActiveFilters = readableFilters.length > 0;
 	const suffix = readableFilters.length ? ` | ${readableFilters.join(" | ")}` : "";
 	const dynamicKeywords = [
 		"our products",
@@ -41,6 +43,7 @@ export async function generateMetadata({ searchParams }) {
 			"Browse all products with advanced filtering by category, size, color, price, and store.",
 		pathname: "/our-products",
 		keywords: dynamicKeywords,
+		noindex: hasActiveFilters,
 	});
 }
 

@@ -1,6 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
-import { useHistory } from "react-router-dom";
+import { useHistory, useLocation } from "react-router-dom";
 import { Collapse } from "antd";
 import { useCartContext } from "../../cart_context";
 import { toast } from "react-toastify";
@@ -42,6 +42,13 @@ const truncateMetaDescription = (text, limit = 155) => {
 	return `${normalized.slice(0, limit - 3).trim()}...`;
 };
 
+const buildVariantSearch = ({ color = "", size = "" } = {}) => {
+	const params = new URLSearchParams();
+	if (color) params.set("color", color);
+	if (size && size !== "nosizes") params.set("size", size);
+	return params.toString();
+};
+
 const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	const { addToCart, openSidebar2 } = useCartContext();
 	const [selectedColor, setSelectedColor] = useState("");
@@ -53,6 +60,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	const [modalVisible3, setModalVisible3] = useState(false);
 
 	const history = useHistory();
+	const location = useLocation();
 	const token = isAuthenticated() && isAuthenticated().token;
 	const user = isAuthenticated() && isAuthenticated().user;
 
@@ -87,31 +95,84 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 		[product.productAttributes]
 	);
 
+	const resolveClosestAttribute = useCallback(
+		(color = "", size = "") => {
+			if (!product.productAttributes.length) return null;
+			const exactMatch = product.productAttributes.find(
+				(attr) => attr.color === color && attr.size === size
+			);
+			if (exactMatch) return exactMatch;
+			const colorMatch = product.productAttributes.find(
+				(attr) => attr.color === color
+			);
+			if (colorMatch) return colorMatch;
+			const sizeMatch = product.productAttributes.find(
+				(attr) => attr.size === size
+			);
+			if (sizeMatch) return sizeMatch;
+			return product.productAttributes[0];
+		},
+		[product.productAttributes]
+	);
+
 	useEffect(() => {
 		if (product.productAttributes.length > 0) {
-			const initialColor = product.productAttributes[0].color;
-			const initialSize = product.productAttributes[0].size;
-			setSelectedColor(initialColor);
-			setSelectedSize(initialSize);
-			updateChosenAttributes(initialColor, initialSize);
+			const queryParams = new URLSearchParams(location.search);
+			const requestedColor = queryParams.get("color") || "";
+			const requestedSize = queryParams.get("size") || "";
+			const initialAttribute = resolveClosestAttribute(requestedColor, requestedSize);
+			if (initialAttribute) {
+				setSelectedColor(initialAttribute.color);
+				setSelectedSize(initialAttribute.size);
+				updateChosenAttributes(initialAttribute.color, initialAttribute.size);
+			}
 		}
 
-		const isProductLiked = product.likes.some(
-			(like) => like.toString() === user._id
-		);
+		const userId = user?._id;
+		const isProductLiked = userId
+			? product.likes.some((like) => like.toString() === userId)
+			: false;
 		setLikee(isProductLiked);
 		setLikes(product.likes.length);
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [product, updateChosenAttributes, setLikee, user._id]);
+	}, [
+		location.search,
+		product,
+		resolveClosestAttribute,
+		updateChosenAttributes,
+		setLikee,
+		user?._id,
+	]);
+
+	useEffect(() => {
+		if (!product.productAttributes.length) return;
+		const nextSearch = buildVariantSearch({
+			color: selectedColor,
+			size: selectedSize,
+		});
+		const normalizedNextSearch = nextSearch ? `?${nextSearch}` : "";
+		if (normalizedNextSearch !== location.search) {
+			history.replace({
+				pathname: location.pathname,
+				search: normalizedNextSearch,
+			});
+		}
+	}, [history, location.pathname, location.search, product, selectedColor, selectedSize]);
 
 	const handleColorChange = (color) => {
-		setSelectedColor(color);
-		updateChosenAttributes(color, selectedSize);
+		const nextAttribute = resolveClosestAttribute(color, selectedSize);
+		if (!nextAttribute) return;
+		setSelectedColor(nextAttribute.color);
+		setSelectedSize(nextAttribute.size);
+		updateChosenAttributes(nextAttribute.color, nextAttribute.size);
 	};
 
 	const handleSizeChange = (size) => {
-		setSelectedSize(size);
-		updateChosenAttributes(selectedColor, size);
+		const nextAttribute = resolveClosestAttribute(selectedColor, size);
+		if (!nextAttribute) return;
+		setSelectedColor(nextAttribute.color);
+		setSelectedSize(nextAttribute.size);
+		updateChosenAttributes(nextAttribute.color, nextAttribute.size);
 	};
 
 	const handleAddToCart = () => {
@@ -253,6 +314,19 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 
 	const plainDescription = product.description.replace(/<[^>]+>/g, "");
 	const metaDescription = truncateMetaDescription(plainDescription);
+	const canonicalVariantSearch = buildVariantSearch({
+		color: selectedColor,
+		size: selectedSize,
+	});
+	const canonicalUrl = `https://serenejannat.com/single-product/${product.slug}/${product.category.categorySlug}/${product._id}${
+		canonicalVariantSearch ? `?${canonicalVariantSearch}` : ""
+	}`;
+	const metaVariantLabel = [getColorName(selectedColor), selectedSize]
+		.filter(Boolean)
+		.join(" / ");
+	const metaTitle = metaVariantLabel
+		? `${capitalizeWords(escapeJsonString(product.productName))} | ${metaVariantLabel} | Serene Jannat`
+		: `${capitalizeWords(escapeJsonString(product.productName))} | Serene Jannat`;
 
 	return (
 		<div>
@@ -348,24 +422,29 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 							}))
 						)},
             "productID": "${product._id}",
-            "identifier_exists": false
+            "identifier_exists": false,
+            "url": "${canonicalUrl}"${
+							selectedColor
+								? `,
+            "color": "${escapeJsonString(getColorName(selectedColor))}"`
+								: ""
+						}${
+							selectedSize && selectedSize !== "nosizes"
+								? `,
+            "size": "${escapeJsonString(selectedSize)}"`
+								: ""
+						}
         }
         `}
 				</script>
-				<link
-					rel='canonical'
-					href={`https://serenejannat.com/single-product/${product.slug}/${product.category.categorySlug}/${product._id}`}
-				/>
+				<link rel='canonical' href={canonicalUrl} />
 				<meta
 					property='og:title'
-					content={capitalizeWords(escapeJsonString(product.productName))}
+					content={metaTitle}
 				/>
 				<meta property='og:description' content={metaDescription} />
 				<meta property='og:image' content={chosenImages[0]} />
-				<meta
-					property='og:url'
-					content={`https://serenejannat.com/single-product/${product.slug}/${product.category.categorySlug}/${product._id}`}
-				/>
+				<meta property='og:url' content={canonicalUrl} />
 				<meta property='og:type' content='product' />
 				<meta
 					property='product:price:amount'
@@ -394,11 +473,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 					}`}
 				/>
 				<meta charSet='utf-8' />
-				<title>
-					{capitalizeWords(
-						`${product.category.categoryName} | ${product.productName}`
-					)}
-				</title>
+				<title>{metaTitle}</title>
 				<meta name='description' content={metaDescription} />
 				<script
 					type='application/ld+json'

@@ -215,6 +215,7 @@ const generateProductSchema = (products = []) => {
 
 const ShopPageHelmet = ({ products = [] }) => {
 	const location = useLocation();
+	const hasQueryFilters = Boolean(location.search && location.search !== "?");
 
 	const title = "Our Products - Serene Jannat Gift Store";
 	const description =
@@ -232,6 +233,9 @@ const ShopPageHelmet = ({ products = [] }) => {
 			<title>{title}</title>
 			<meta name='description' content={description} />
 			<meta name='keywords' content={keywords} />
+			{hasQueryFilters ? (
+				<meta name='robots' content='noindex, follow' />
+			) : null}
 			<meta property='og:title' content={title} />
 			<meta property='og:description' content={description} />
 			<meta property='og:url' content={canonicalUrl} />
