@@ -11,7 +11,6 @@ import {
 	gettingSpecificProducts,
 } from "../../apiCore";
 import {
-	buildCloudinarySrcSet,
 	getCloudinaryOptimizedUrl,
 	resolveImageUrl,
 } from "../../utils/image";
@@ -164,7 +163,24 @@ const HomePageHelmet = ({
 	const isCloudinaryHero =
 		heroUrl && heroUrl.includes("res.cloudinary.com");
 	const heroSrcSet = isCloudinaryHero
-		? buildCloudinarySrcSet(heroUrl, [480, 768, 1200, 1600])
+		? [
+				`${getCloudinaryOptimizedUrl(heroUrl, {
+					width: 480,
+					quality: "auto:eco",
+				})} 480w`,
+				`${getCloudinaryOptimizedUrl(heroUrl, {
+					width: 768,
+					quality: "auto:eco",
+				})} 768w`,
+				`${getCloudinaryOptimizedUrl(heroUrl, {
+					width: 1200,
+					quality: "auto",
+				})} 1200w`,
+				`${getCloudinaryOptimizedUrl(heroUrl, {
+					width: 1600,
+					quality: "auto",
+				})} 1600w`,
+			].join(", ")
 		: "";
 	const heroHref = heroUrl
 		? isCloudinaryHero

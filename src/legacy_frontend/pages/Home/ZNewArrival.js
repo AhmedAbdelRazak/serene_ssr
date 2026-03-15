@@ -8,6 +8,7 @@ import { readProduct, gettingSpecificProducts } from "../../apiCore";
 import { useHistory } from "react-router-dom";
 import axios from "axios";
 import { isAuthenticated } from "../../auth";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageUrl } from "../../utils/image";
 
@@ -261,6 +262,7 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 	// -----------------------------
 	return (
 		<Container>
+			<SlickBaseStyles />
 			<ZNewArrivalWrapper>
 				<h2>New Arrivals</h2>
 				<Slider {...settings}>

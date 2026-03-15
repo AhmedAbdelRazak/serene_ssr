@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import styled from "styled-components";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
 import fallbackHeroBanner from "../../GeneralImages/HomePageBanner1.jpg";
 
@@ -9,6 +10,7 @@ const SlickSlider = lazy(() => import("react-slick"));
 
 const Hero = ({ websiteSetup }) => {
 	const [autoplayEnabled, setAutoplayEnabled] = useState(false);
+	const [carouselEnabled, setCarouselEnabled] = useState(false);
 	const banners = websiteSetup?.homeMainBanners || [];
 	const bannerItems = banners.length
 		? banners
@@ -24,6 +26,66 @@ const Hero = ({ websiteSetup }) => {
 			];
 
 	useEffect(() => {
+		if (bannerItems.length <= 1) {
+			setCarouselEnabled(true);
+			return undefined;
+		}
+		if (typeof window === "undefined") return undefined;
+
+		setCarouselEnabled(false);
+
+		const isMobileViewport = window.matchMedia("(max-width: 768px)").matches;
+		if (!isMobileViewport) {
+			const frameId = window.requestAnimationFrame(() => {
+				setCarouselEnabled(true);
+			});
+			return () => {
+				window.cancelAnimationFrame(frameId);
+			};
+		}
+
+		let enabled = false;
+		const enableCarousel = () => {
+			if (enabled) return;
+			enabled = true;
+			setCarouselEnabled(true);
+			window.removeEventListener("pointerdown", enableCarousel);
+			window.removeEventListener("keydown", enableCarousel);
+			window.removeEventListener("touchstart", enableCarousel);
+			window.removeEventListener("scroll", enableCarousel);
+		};
+
+		window.addEventListener("pointerdown", enableCarousel, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("keydown", enableCarousel, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("touchstart", enableCarousel, {
+			once: true,
+			passive: true,
+		});
+		window.addEventListener("scroll", enableCarousel, {
+			once: true,
+			passive: true,
+		});
+		const timeoutId = window.setTimeout(enableCarousel, 12000);
+		return () => {
+			window.clearTimeout(timeoutId);
+			window.removeEventListener("pointerdown", enableCarousel);
+			window.removeEventListener("keydown", enableCarousel);
+			window.removeEventListener("touchstart", enableCarousel);
+			window.removeEventListener("scroll", enableCarousel);
+		};
+	}, [bannerItems.length]);
+
+	useEffect(() => {
+		if (bannerItems.length <= 1) {
+			setAutoplayEnabled(false);
+			return undefined;
+		}
 		if (typeof window === "undefined") return undefined;
 		let enabled = false;
 		const enableAutoplay = () => {
@@ -60,7 +122,7 @@ const Hero = ({ websiteSetup }) => {
 			window.removeEventListener("touchstart", enableAutoplay);
 			window.removeEventListener("scroll", enableAutoplay);
 		};
-	}, []);
+	}, [bannerItems.length]);
 
 	const settings = useMemo(
 		() => ({
@@ -87,23 +149,21 @@ const Hero = ({ websiteSetup }) => {
 		} = banner;
 
 		const isFirstSlide = idx === 0;
-		const quality = isFirstSlide ? "auto" : "auto:eco";
-
 		const base1600 = getCloudinaryOptimizedUrl(url, {
 			width: 1600,
-			quality,
+			quality: isFirstSlide ? "auto" : "auto:eco",
 		});
 		const base1200 = getCloudinaryOptimizedUrl(url, {
 			width: 1200,
-			quality,
+			quality: isFirstSlide ? "auto" : "auto:eco",
 		});
 		const base768 = getCloudinaryOptimizedUrl(url, {
 			width: 768,
-			quality,
+			quality: "auto:eco",
 		});
 		const base480 = getCloudinaryOptimizedUrl(url, {
 			width: 480,
-			quality,
+			quality: "auto:eco",
 		});
 
 		return (
@@ -150,8 +210,9 @@ const Hero = ({ websiteSetup }) => {
 
 	return (
 		<HeroSection>
+			<SlickBaseStyles />
 			<SliderContainer>
-				{bannerItems.length > 1 ? (
+				{bannerItems.length > 1 && carouselEnabled ? (
 					<Suspense fallback={renderSlide(bannerItems[0], 0)}>
 						<SlickSlider {...settings}>
 							{bannerItems.map((banner, idx) => renderSlide(banner, idx))}

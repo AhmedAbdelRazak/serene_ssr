@@ -39,6 +39,7 @@ import {
 import PrintifyCheckoutModal from "./PrintifyCheckoutModal";
 import { isAuthenticated } from "../../auth";
 import { cloudinaryUpload1, cleanupPreviewCustomDesign } from "../../apiCore";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 
 import html2canvas from "html2canvas";
 import { useCartContext } from "../../cart_context";
@@ -3368,6 +3369,7 @@ export default function CustomizeSelectedProduct() {
 	if (loading) {
 		return (
 			<CustomizeWrapper>
+				<SlickBaseStyles />
 				<Skeleton active />
 			</CustomizeWrapper>
 		);
@@ -3375,6 +3377,7 @@ export default function CustomizeSelectedProduct() {
 	if (!product) {
 		return (
 			<CustomizeWrapper>
+				<SlickBaseStyles />
 				<Title level={3} style={{ textAlign: "center" }}>
 					Product not found.
 				</Title>
@@ -3444,6 +3447,7 @@ export default function CustomizeSelectedProduct() {
 
 	return (
 		<CustomizeWrapper>
+			<SlickBaseStyles />
 			<Helmet>
 				<title>{metaTitle}</title>
 				<meta name='description' content={metaDescription} />

@@ -8,6 +8,7 @@ import { readProduct, gettingSpecificProducts } from "../../apiCore";
 import { useHistory } from "react-router-dom";
 import axios from "axios";
 import { isAuthenticated } from "../../auth";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageUrl } from "../../utils/image";
 
@@ -287,6 +288,7 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 	// -----------------------------------------------
 	return (
 		<Container>
+			<SlickBaseStyles />
 			<ZFeaturedProductsWrapper>
 				<h2>Featured Products</h2>
 				<Slider {...settings}>

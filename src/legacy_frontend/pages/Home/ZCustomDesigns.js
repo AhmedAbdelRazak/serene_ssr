@@ -4,6 +4,7 @@ import Slider from "react-slick";
 import { Card } from "antd";
 import { useHistory } from "react-router-dom";
 import { gettingSpecificProducts } from "../../apiCore";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageSources } from "../../utils/image";
 
@@ -167,6 +168,7 @@ const ZCustomDesigns = ({ customDesignProducts }) => {
 	// -----------------------------
 	return (
 		<Container>
+			<SlickBaseStyles />
 			<ZCustomDesignsWrapper>
 				<h2>
 					Welcome to our <strong className='mx-1'>PRINT ON DEMAND</strong>{" "}

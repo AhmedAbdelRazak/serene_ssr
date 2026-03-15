@@ -1,7 +1,5 @@
 import "./globals.css";
 import "@/legacy_frontend/App.css";
-import "@/legacy_frontend/slick-lite.css";
-import "@/legacy_frontend/perf-overrides.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import StyledComponentsRegistry from "@/components/layout/StyledComponentsRegistry";
 import WebVitalsReporter from "@/components/perf/WebVitalsReporter";

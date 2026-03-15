@@ -6,6 +6,7 @@ import { ShoppingCartOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import { readProduct } from "../../apiCore";
 import { useHistory } from "react-router-dom";
+import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageSources } from "../../utils/image";
 
@@ -66,6 +67,7 @@ const RelatedProductsCarousel = ({ relatedProducts }) => {
 
 	return (
 		<Container>
+			<SlickBaseStyles />
 			<RelatedProductsCarouselWrapper>
 				<h2>Products You May Also Like...</h2>
 				<Slider {...settings}>
