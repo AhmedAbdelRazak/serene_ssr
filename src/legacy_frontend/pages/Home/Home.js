@@ -436,16 +436,14 @@ const Home = () => {
 
 			{/* Categories */}
 			{categories.length > 0 ? (
-				<DeferredSection rootMargin='180px 0px'>
-					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
-						<FadeUpDiv>
-							<ZCategories
-								allCategories={categories}
-								allSubcategories={subcategories}
-							/>
-						</FadeUpDiv>
-					</Suspense>
-				</DeferredSection>
+				<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
+					<FadeUpDiv>
+						<ZCategories
+							allCategories={categories}
+							allSubcategories={subcategories}
+						/>
+					</FadeUpDiv>
+				</Suspense>
 			) : loading ? (
 				<SectionSkeleton aria-hidden='true' />
 			) : null}

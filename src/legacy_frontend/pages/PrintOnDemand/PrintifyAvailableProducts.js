@@ -21,7 +21,7 @@ import {
 import { getOccasionDesignPreset } from "./podDesignPresets";
 
 const { Option } = Select;
-const POD_LIST_PREVIEW_LOCAL_CACHE_KEY = "podListPreviewCacheV10";
+const POD_LIST_PREVIEW_LOCAL_CACHE_KEY = "podListPreviewCacheV11";
 const POD_LIST_PREVIEW_LOCAL_CACHE_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 days
 const POD_LIST_PREVIEW_LOCAL_CACHE_MAX_ENTRIES = 500;
 const POD_LIST_PREVIEW_SESSION_CLEANUP_KEY = "podListPreviewSessionProductsV2";
@@ -86,8 +86,8 @@ function getStoredDefaultDesignImagesForOccasion(product, occasion) {
 			const resolvedImages = images
 				.map((image) => {
 					const src =
-						resolveImageUrl(image?.url || image?.src || image) ||
-						resolveImageUrl(image?.url || image?.src || image, {
+						resolveImageUrl(image) ||
+						resolveImageUrl(image, {
 							preferCloudinary: false,
 						});
 					return src ? `${src}`.trim() : "";
@@ -719,6 +719,10 @@ const PrintifyAvailableProducts = () => {
 					if (cancelled) return;
 					const responseIsFallback =
 						response?.source === "fallback-error" || response?.success === false;
+					const storedDefaultImages =
+						response?.source === "stored-default-design"
+							? getStoredDefaultDesignImagesForOccasion(product, podOccasion)
+							: [];
 					const previewProductIdRaw = response?.preview_product_id;
 					const previewProductId =
 						previewProductIdRaw !== null &&
@@ -745,9 +749,10 @@ const PrintifyAvailableProducts = () => {
 							? response.preview_image.trim()
 							: "";
 					const previewImage =
-						previewImageRaw && /^https?:\/\//i.test(previewImageRaw)
+						storedDefaultImages[0] ||
+						(previewImageRaw && /^https?:\/\//i.test(previewImageRaw)
 							? previewImageRaw
-							: null;
+							: null);
 					if (previewImage) {
 						setPreviewByProductId((prev) => ({
 							...prev,

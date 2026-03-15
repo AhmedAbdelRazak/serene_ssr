@@ -173,9 +173,8 @@ function HomeFallback({ initialRouteData }) {
 						minHeight: "clamp(260px, 52vw, 700px)",
 						borderRadius: 18,
 						overflow: "hidden",
-						background: heroBanner?.url
-							? `center / cover no-repeat url(${heroBanner.url})`
-							: "linear-gradient(135deg, #58504a 0%, #b49c83 100%)",
+						background:
+							"linear-gradient(135deg, #58504a 0%, #8b765f 45%, #d7bda2 100%)",
 						boxShadow: "0 18px 32px rgba(0, 0, 0, 0.12)",
 					}}
 				>
@@ -257,45 +256,38 @@ function HomeFallback({ initialRouteData }) {
 					}}
 				>
 					{homeCards.length
-						? homeCards.map((product, index) => {
-								const imageUrl =
-									product?.thumbnailImage?.[0]?.images?.[0]?.url ||
-									product?.images?.[0]?.src ||
-									"";
-								return (
+						? homeCards.map((product, index) => (
+								<div
+									key={product?._id || `${product?.productName || "card"}-${index}`}
+									style={{
+										background: "#ffffff",
+										border: "1px solid #ece0d6",
+										borderRadius: 18,
+										overflow: "hidden",
+										boxShadow: "0 12px 24px rgba(0, 0, 0, 0.06)",
+									}}
+								>
 									<div
-										key={product?._id || `${product?.productName || "card"}-${index}`}
 										style={{
-											background: "#ffffff",
-											border: "1px solid #ece0d6",
-											borderRadius: 18,
-											overflow: "hidden",
-											boxShadow: "0 12px 24px rgba(0, 0, 0, 0.06)",
+											aspectRatio: "1 / 1",
+											background:
+												"linear-gradient(135deg, #efe8df 0%, #faf7f3 100%)",
 										}}
-									>
+									/>
+									<div style={{ padding: 14 }}>
 										<div
 											style={{
-												aspectRatio: "1 / 1",
-												background: imageUrl
-													? `center / cover no-repeat url(${imageUrl})`
-													: "linear-gradient(135deg, #efe8df 0%, #faf7f3 100%)",
+												fontWeight: 600,
+												color: "#332a24",
+												lineHeight: 1.35,
+												minHeight: 42,
 											}}
-										/>
-										<div style={{ padding: 14 }}>
-											<div
-												style={{
-													fontWeight: 600,
-													color: "#332a24",
-													lineHeight: 1.35,
-													minHeight: 42,
-												}}
-											>
-												{product?.productName || product?.title || "Product"}
-											</div>
+										>
+											{product?.productName || product?.title || "Product"}
 										</div>
 									</div>
-								);
-							})
+								</div>
+							))
 						: Array.from({ length: 6 }).map((_, index) => (
 								<div
 									key={index}
