@@ -11,18 +11,24 @@ const CommentsAndRatings = ({ product, user, token }) => {
 	const [star, setStar] = useState(0);
 	const [comments, setComments] = useState([]);
 	const [text, setText] = useState("");
+	const safeRatings = Array.isArray(product?.ratings) ? product.ratings : [];
+	const safeComments = Array.isArray(product?.comments) ? product.comments : [];
 
 	useEffect(() => {
-		if (product.ratings && user) {
-			const existingRatingObject = product.ratings.find(
+		if (safeRatings.length > 0 && user?._id) {
+			const existingRatingObject = safeRatings.find(
 				(ele) => ele.ratedBy._id === user._id
 			);
 			setStar(existingRatingObject ? existingRatingObject.star : 0);
 		}
-		setComments(product.comments);
-	}, [product, user]);
+		setComments(safeComments);
+	}, [safeComments, safeRatings, user]);
 
 	const handleStarClick = (newRating) => {
+		if (!isAuthenticated() || !user?._id || !token) {
+			toast.error("Please sign in to rate this product");
+			return;
+		}
 		setStar(newRating);
 		productStar(product._id, newRating, token, user.email, user._id).then(
 			(data) => {
@@ -89,16 +95,22 @@ const CommentsAndRatings = ({ product, user, token }) => {
 			<CommentsSection>
 				<CommentsTitle>Comments</CommentsTitle>
 				{comments.map((comment, index) => {
-					const userRating = product.ratings.find(
-						(rating) => rating.ratedBy._id === comment.postedBy._id
+					const userRating = safeRatings.find(
+						(rating) => rating.ratedBy._id === comment?.postedBy?._id
 					)?.star;
+					const postedByName = `${comment?.postedBy?.name || "Anonymous"}`
+						.trim()
+						.split(" ")
+						.filter(Boolean);
+					const displayName = postedByName[0] || "Anonymous";
+					const displayInitial = postedByName[1]?.[0] || "";
 					return (
 						<CommentWrapper key={index}>
 							<CommentDetails>
 								<CommentText>{comment.text}</CommentText>
 								<CommentMeta>
-									Posted by {comment.postedBy.name.split(" ")[0]}{" "}
-									{comment.postedBy.name.split(" ")[1][0]}. on{" "}
+									Posted by {displayName}
+									{displayInitial ? ` ${displayInitial}.` : ""} on{" "}
 									{moment(comment.created).format("MMMM Do YYYY, h:mm:ss a")}
 								</CommentMeta>
 								{userRating && (
@@ -113,7 +125,7 @@ const CommentsAndRatings = ({ product, user, token }) => {
 									</UserRating>
 								)}
 							</CommentDetails>
-							{comment.postedBy._id === user._id && (
+							{comment?.postedBy?._id && user?._id === comment.postedBy._id && (
 								<DeleteIcon onClick={() => handleDeleteComment(comment)}>
 									<DeleteOutlined />
 								</DeleteIcon>

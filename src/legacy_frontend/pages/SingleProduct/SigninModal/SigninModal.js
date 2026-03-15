@@ -52,7 +52,7 @@ const SigninModal = ({ modalVisible3, setModalVisible3 }) => {
 					setModalVisible3(false);
 				}}
 			>
-				{mainForm()}
+				{modalVisible3 ? mainForm() : null}
 			</Modal>
 		</SigninModalWrapper>
 	);

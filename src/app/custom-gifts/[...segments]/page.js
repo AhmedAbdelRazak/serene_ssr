@@ -15,7 +15,7 @@ import {
 } from "@/lib/pod-product";
 import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 function parseSegments(segments = []) {
 	if (!Array.isArray(segments) || segments.length === 0) return null;
@@ -161,18 +161,7 @@ export default async function PodProductPage({ params, searchParams }) {
 		selection
 	);
 	const canonicalPath = `/custom-gifts/${slug}/${parsed.productId}`;
-	const canonicalRedirectParams = buildPodSearchParams(resolvedSearchParams, {
-		includeName: true,
-	});
 	const canonicalMetadataParams = buildPodSearchParams(resolvedSearchParams);
-	const redirectQuery = canonicalRedirectParams.toString();
-
-	if (parsed.productSlug !== slug) {
-		permanentRedirect(
-			redirectQuery ? `${canonicalPath}?${redirectQuery}` : canonicalPath
-		);
-	}
-
 	const canonicalQuery = canonicalMetadataParams.toString();
 	const canonicalUrl = absoluteUrl(
 		canonicalQuery ? `${canonicalPath}?${canonicalQuery}` : canonicalPath

@@ -31,8 +31,9 @@ const Login = ({ setSignRegister }) => {
 	}, []);
 
 	const { emailOrPhone, password, loading } = values;
+	const auth = isAuthenticated() || {};
 	// eslint-disable-next-line
-	const { user } = isAuthenticated();
+	const { user } = auth;
 
 	const handleChange = (name) => (event) => {
 		setValues({ ...values, error: false, [name]: event.target.value });

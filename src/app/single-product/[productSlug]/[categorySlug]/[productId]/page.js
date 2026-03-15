@@ -11,7 +11,7 @@ import {
 } from "@/lib/product-helpers";
 import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
-import { notFound, permanentRedirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 function getSafeSearchParamValue(source, key) {
 	const raw = source?.[key];
@@ -108,15 +108,6 @@ export default async function SingleProductPage({ params, searchParams }) {
 	const canonicalPath = buildProductPath(product);
 	const redirectParams = buildVariantSearchParams(resolvedSearchParams);
 	const redirectQuery = redirectParams.toString();
-	const requestedPath = `/single-product/${resolvedParams?.productSlug || ""}/${
-		resolvedParams?.categorySlug || ""
-	}/${resolvedParams?.productId || ""}`;
-
-	if (requestedPath !== canonicalPath) {
-		permanentRedirect(
-			redirectQuery ? `${canonicalPath}?${redirectQuery}` : canonicalPath
-		);
-	}
 
 	const canonicalUrl = absoluteUrl(
 		redirectQuery ? `${canonicalPath}?${redirectQuery}` : canonicalPath
