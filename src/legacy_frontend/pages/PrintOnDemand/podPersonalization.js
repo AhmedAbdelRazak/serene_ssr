@@ -1,27 +1,37 @@
-export const POD_DEFAULT_OCCASION = "Birthday";
+import {
+	POD_DEFAULT_OCCASION,
+	POD_OCCASIONS,
+} from "@/lib/pod-occasions";
+
+export { POD_DEFAULT_OCCASION, POD_OCCASIONS };
+
 export const POD_DEFAULT_NAME = "";
 
-export const POD_OCCASION_OPTIONS = [
-	{ value: "Birthday", icon: "\u{1F382}" },
-	{ value: "Anniversary", icon: "\u{1F49E}" },
-	{ value: "Wedding", icon: "\u{1F48D}" },
-	{ value: "Graduation", icon: "\u{1F393}" },
-	{ value: "Baby Shower", icon: "\u{1F37C}" },
-	{ value: "Bridal Shower", icon: "\u{1F470}" },
-	{ value: "Housewarming", icon: "\u{1F3E1}" },
-	{ value: "Mother's Day", icon: "\u{1F339}" },
-	{ value: "Father's Day", icon: "\u{1F9D4}" },
-	{ value: "Valentine's Day", icon: "\u{2764}\u{FE0F}" },
-	{ value: "Ramadan", icon: "\u{1F319}" },
-	{ value: "Eid", icon: "\u{2728}" },
-	{ value: "Christmas", icon: "\u{1F384}" },
-	{ value: "Thanksgiving", icon: "\u{1F983}" },
-	{ value: "Retirement", icon: "\u{1F334}" },
-	{ value: "Get Well Soon", icon: "\u{1F490}" },
-	{ value: "New Baby", icon: "\u{1F476}" },
-	{ value: "Just Because", icon: "\u{1F381}" },
-];
-export const POD_OCCASIONS = POD_OCCASION_OPTIONS.map((item) => item.value);
+const POD_OCCASION_ICONS = {
+	Birthday: "\u{1F382}",
+	Anniversary: "\u{1F49E}",
+	Wedding: "\u{1F48D}",
+	Graduation: "\u{1F393}",
+	"Baby Shower": "\u{1F37C}",
+	"Bridal Shower": "\u{1F470}",
+	Housewarming: "\u{1F3E1}",
+	"Mother's Day": "\u{1F339}",
+	"Father's Day": "\u{1F9D4}",
+	"Valentine's Day": "\u{2764}\u{FE0F}",
+	Ramadan: "\u{1F319}",
+	Eid: "\u{2728}",
+	Christmas: "\u{1F384}",
+	Thanksgiving: "\u{1F983}",
+	Retirement: "\u{1F334}",
+	"Get Well Soon": "\u{1F490}",
+	"New Baby": "\u{1F476}",
+	"Just Because": "\u{1F381}",
+};
+
+export const POD_OCCASION_OPTIONS = POD_OCCASIONS.map((value) => ({
+	value,
+	icon: POD_OCCASION_ICONS[value] || "",
+}));
 
 export const POD_PERSONALIZATION_STORAGE_KEY = "podPersonalizationPrefsV1";
 export const POD_ONBOARDING_LAST_SHOWN_KEY = "podOnboardingLastShownAt";

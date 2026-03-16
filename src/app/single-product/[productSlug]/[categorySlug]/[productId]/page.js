@@ -9,36 +9,16 @@ import {
 	getProductInventoryCount,
 	getProductPrice,
 } from "@/lib/product-helpers";
+import {
+	sanitizeStandardProductRoute,
+	serializeComparableSearchParams,
+} from "@/lib/product-route-url";
 import { createPublicProductBootstrap } from "@/lib/public-product";
 import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 export const revalidate = 300;
-
-function getSafeSearchParamValue(source, key) {
-	const raw = source?.[key];
-	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();
-	if (typeof raw === "symbol") return "";
-	return `${raw ?? ""}`.trim();
-}
-
-function getVariantSelection(searchParams = {}) {
-	return {
-		color: getSafeSearchParamValue(searchParams, "color"),
-		size: getSafeSearchParamValue(searchParams, "size"),
-		scent: getSafeSearchParamValue(searchParams, "scent"),
-	};
-}
-
-function buildVariantSearchParams(searchParams = {}) {
-	const params = new URLSearchParams();
-	const selection = getVariantSelection(searchParams);
-	if (selection.color) params.set("color", selection.color);
-	if (selection.size) params.set("size", selection.size);
-	if (selection.scent) params.set("scent", selection.scent);
-	return params;
-}
 
 function buildVariantLabel({ color = "", size = "", scent = "" } = {}) {
 	return [color, size, scent].filter(Boolean).join(" / ");
@@ -51,13 +31,13 @@ export async function generateMetadata({ params, searchParams }) {
 		const product = await getProductById(resolvedParams?.productId, {
 			revalidate: 120,
 		});
+		const routeState = sanitizeStandardProductRoute(product, resolvedSearchParams);
 		const name = getProductDisplayName(product);
 		const description = getProductDescription(product);
-		const selection = getVariantSelection(resolvedSearchParams);
+		const selection = routeState.selection;
 		const variationLabel = buildVariantLabel(selection);
 		const image = getPrimaryProductImage(product, selection);
 		const canonicalPath = buildProductPath(product);
-		const canonicalSearchParams = buildVariantSearchParams(resolvedSearchParams);
 		return createMetadata({
 			title: variationLabel
 				? `${name} | ${variationLabel} | Serene Jannat`
@@ -66,7 +46,6 @@ export async function generateMetadata({ params, searchParams }) {
 				? `${description} This variation reflects ${variationLabel.toLowerCase()}. Additional options may be available on the product page.`
 				: description,
 			pathname: canonicalPath,
-			searchParams: canonicalSearchParams,
 			image,
 			keywords: [
 				name,
@@ -101,7 +80,8 @@ export default async function SingleProductPage({ params, searchParams }) {
 		notFound();
 	}
 
-	const selection = getVariantSelection(resolvedSearchParams);
+	const routeState = sanitizeStandardProductRoute(product, resolvedSearchParams);
+	const selection = routeState.selection;
 	const title = getProductDisplayName(product);
 	const description = getProductDescription(product);
 	const variationLabel = buildVariantLabel(selection);
@@ -110,12 +90,21 @@ export default async function SingleProductPage({ params, searchParams }) {
 	const inventoryCount = getProductInventoryCount(product);
 	const bootstrapProduct = createPublicProductBootstrap(product);
 	const canonicalPath = buildProductPath(product);
-	const redirectParams = buildVariantSearchParams(resolvedSearchParams);
-	const redirectQuery = redirectParams.toString();
+	const routeQuery = routeState.routeSearchParams.toString();
+	const routeUrl = routeQuery ? `${canonicalPath}?${routeQuery}` : canonicalPath;
+	const requestPath = `/single-product/${resolvedParams?.productSlug || ""}/${
+		resolvedParams?.categorySlug || ""
+	}/${resolvedParams?.productId || ""}`;
 
-	const canonicalUrl = absoluteUrl(
-		redirectQuery ? `${canonicalPath}?${redirectQuery}` : canonicalPath
-	);
+	if (
+		requestPath !== canonicalPath ||
+		serializeComparableSearchParams(resolvedSearchParams) !==
+			serializeComparableSearchParams(routeState.routeSearchParams)
+	) {
+		permanentRedirect(routeUrl);
+	}
+
+	const canonicalUrl = absoluteUrl(canonicalPath);
 	const schema = productSchema({
 		name: variationLabel ? `${title} - ${variationLabel}` : title,
 		description: variationLabel

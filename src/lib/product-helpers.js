@@ -1,4 +1,4 @@
-import { POD_OCCASIONS } from "./config";
+import { POD_OCCASIONS } from "./pod-occasions";
 import { stripHtml, toSlug, uniqueStrings } from "./utils";
 
 function normalizeToken(value = "") {

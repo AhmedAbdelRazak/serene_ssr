@@ -1,10 +1,6 @@
-import { POD_OCCASIONS } from "@/legacy_frontend/pages/PrintOnDemand/podPersonalization";
+import { POD_OCCASIONS } from "@/lib/pod-occasions";
 import { getAllProductsForSeo, getCategoriesAndSubcategories } from "@/lib/api";
-import {
-	buildPodQueryCombinations,
-	buildProductPath,
-	isPodProduct,
-} from "@/lib/product-helpers";
+import { buildProductPath } from "@/lib/product-helpers";
 import { absoluteXmlUrl, escapeXml, xmlResponse } from "@/lib/xml";
 
 export const revalidate = 1800;
@@ -20,7 +16,6 @@ const STATIC_PATHS = [
 	"/privacy-policy-terms-conditions",
 	"/cookie-policy",
 	"/return-refund-policy",
-	"/llms.txt",
 ];
 
 export async function GET(request) {
@@ -74,43 +69,6 @@ export async function GET(request) {
 			const productPath = buildProductPath(product);
 			const productLastmod = product?.updatedAt || product?.createdAt;
 			addUrl(toAbsoluteUrl(productPath), "0.9", "daily", productLastmod);
-
-			const productAttributes = Array.isArray(product?.productAttributes)
-				? product.productAttributes
-				: [];
-			const variantQueries = new Set();
-			for (const attr of productAttributes) {
-				const params = new URLSearchParams();
-				const safeSize = `${attr?.size || ""}`.trim();
-				const safeColor = `${attr?.color || ""}`.trim();
-				const safeScent = `${attr?.scent || ""}`.trim();
-				if (safeSize) params.set("size", safeSize);
-				if (safeColor) params.set("color", safeColor);
-				if (safeScent) params.set("scent", safeScent);
-				const query = params.toString();
-				if (query) variantQueries.add(query);
-			}
-
-			if (isPodProduct(product)) {
-				const podCombos = buildPodQueryCombinations(product);
-				for (const combo of podCombos) {
-					addUrl(
-						toAbsoluteUrl(`${productPath}?${combo}`),
-						"0.82",
-						"daily",
-						productLastmod
-					);
-				}
-			} else {
-				for (const variantQuery of variantQueries) {
-					addUrl(
-						toAbsoluteUrl(`${productPath}?${variantQuery}`),
-						"0.83",
-						"weekly",
-						productLastmod
-					);
-				}
-			}
 		}
 	} catch {
 		// keep static routes even if API fails temporarily

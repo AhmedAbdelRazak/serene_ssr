@@ -1,4 +1,4 @@
-import { POD_OCCASIONS } from "@/legacy_frontend/pages/PrintOnDemand/podPersonalization";
+import { POD_OCCASIONS } from "@/lib/pod-occasions";
 import { toSlug } from "./utils";
 
 const OBJECT_ID_REGEX = /^[a-f0-9]{24}$/i;
@@ -88,16 +88,14 @@ function resolveCategoryContext(searchParams = {}, categories = []) {
 	const matchedId = normalizeValue(matchedCategory?._id);
 	const matchedSlug = normalizeValue(matchedCategory?.categorySlug);
 	const matchedName = normalizeValue(matchedCategory?.categoryName);
-	const slugFromValue =
-		categoryValue && !OBJECT_ID_REGEX.test(categoryValue) ? toSlug(categoryValue) : "";
+	const matched = Boolean(matchedCategory && matchedId);
 
 	return {
 		categoryValues,
-		categoryId: matchedId || (OBJECT_ID_REGEX.test(categoryValue) ? categoryValue : ""),
-		categorySlug: matchedSlug || categorySlugParam || slugFromValue,
-		categoryName:
-			matchedName ||
-			(categorySlugParam ? toTitleCase(categorySlugParam) : slugFromValue ? toTitleCase(slugFromValue) : ""),
+		categoryId: matched ? matchedId : "",
+		categorySlug: matched ? matchedSlug : "",
+		categoryName: matched ? matchedName : "",
+		matched,
 	};
 }
 
@@ -112,8 +110,7 @@ export function buildShopCollectionSeo(searchParams = {}, categories = []) {
 	const hasCategorySlugInput = Boolean(rawCategorySlug);
 	const hasSingleCategory = category.categoryValues.length <= 1;
 	const hasIndexableCategory =
-		(!category.categoryValues.length && !hasCategorySlugInput) ||
-		Boolean(category.categoryId);
+		(!category.categoryValues.length && !hasCategorySlugInput) || category.matched;
 	const indexable = unsupportedKeys.length === 0 && hasSingleCategory && hasIndexableCategory;
 
 	const canonicalSearchParams = new URLSearchParams();
@@ -149,9 +146,13 @@ export function buildShopCollectionSeo(searchParams = {}, categories = []) {
 		page,
 		indexable,
 		noindex: !indexable,
+		activeKeys,
+		unsupportedKeys,
+		hasUnsupportedKeys: unsupportedKeys.length > 0,
 		categoryId: category.categoryId,
 		categorySlug: category.categorySlug,
 		categoryName: category.categoryName,
+		categoryMatched: category.matched,
 		canonicalSearchParams,
 		title,
 		description,
@@ -211,6 +212,9 @@ export function buildPodCollectionSeo(searchParams = {}) {
 		page,
 		indexable,
 		noindex: !indexable,
+		activeKeys,
+		unsupportedKeys,
+		hasUnsupportedKeys: unsupportedKeys.length > 0,
 		occasion,
 		canonicalSearchParams,
 		title,

@@ -34,29 +34,7 @@ export const GOOGLE_ANALYTICS_ID =
 	process.env.NEXT_PUBLIC_GOOGLE_ANALYTICS_MEASUREMENTID || "";
 export const FACEBOOK_PIXEL_ID = process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || "";
 
-export const POD_OCCASIONS = [
-	"Birthday",
-	"Anniversary",
-	"Graduation",
-	"Valentine's Day",
-	"Mother's Day",
-	"Father's Day",
-	"Christmas",
-	"Eid",
-	"New Year",
-	"Baby Shower",
-	"Wedding",
-	"Engagement",
-	"Get Well Soon",
-	"Congratulations",
-	"Thank You",
-	"New Baby",
-	"Housewarming",
-	"Just Because",
-];
-
 export function absoluteUrl(path = "/") {
 	const safePath = ensureLeadingSlash(path);
 	return `${SITE_URL}${safePath}`;
 }
-

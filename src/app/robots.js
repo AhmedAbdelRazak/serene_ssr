@@ -19,12 +19,7 @@ export default function robots() {
 				],
 			},
 		],
-		sitemap: [
-			absoluteUrl("/sitemap.xml"),
-			absoluteUrl("/google-merchant.xml"),
-			absoluteUrl("/merchant-center-feed.xml"),
-			absoluteUrl("/facebook-feed.xml"),
-		],
+		sitemap: absoluteUrl("/sitemap.xml"),
 		host: absoluteUrl("/"),
 	};
 }

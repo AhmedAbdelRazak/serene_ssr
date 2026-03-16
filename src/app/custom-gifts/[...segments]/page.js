@@ -13,9 +13,13 @@ import {
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
 } from "@/lib/pod-product";
+import {
+	sanitizePodProductRoute,
+	serializeComparableSearchParams,
+} from "@/lib/product-route-url";
 import { breadcrumbSchema, createMetadata, productSchema } from "@/lib/seo";
 import { absoluteUrl } from "@/lib/config";
-import { notFound } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 
 export const revalidate = 300;
 
@@ -25,46 +29,14 @@ function parseSegments(segments = []) {
 		return {
 			productId: segments[0],
 			productSlug: "",
+			extraSegments: [],
 		};
 	}
 	return {
 		productSlug: segments[0],
 		productId: segments[1],
+		extraSegments: segments.slice(2),
 	};
-}
-
-function getSafeSearchParamValue(source, key) {
-	const raw = source?.[key];
-	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();
-	if (typeof raw === "symbol") return "";
-	return `${raw ?? ""}`.trim();
-}
-
-function getPodImageSelectionOptions(searchParams = {}) {
-	return {
-		occasion: getSafeSearchParamValue(searchParams, "occasion"),
-		name: getSafeSearchParamValue(searchParams, "name"),
-		color: getSafeSearchParamValue(searchParams, "color"),
-		size: getSafeSearchParamValue(searchParams, "size"),
-		scent: getSafeSearchParamValue(searchParams, "scent"),
-	};
-}
-
-function buildPodSearchParams(searchParams = {}, { includeName = false } = {}) {
-	const params = new URLSearchParams();
-	const occasion = getSafeSearchParamValue(searchParams, "occasion");
-	const name = getSafeSearchParamValue(searchParams, "name");
-	const color = getSafeSearchParamValue(searchParams, "color");
-	const size = getSafeSearchParamValue(searchParams, "size");
-	const scent = getSafeSearchParamValue(searchParams, "scent");
-
-	if (occasion) params.set("occasion", occasion);
-	if (includeName && name) params.set("name", name);
-	if (color) params.set("color", color);
-	if (size) params.set("size", size);
-	if (scent) params.set("scent", scent);
-
-	return params;
 }
 
 function buildVariantLabel({ occasion = "", color = "", size = "", scent = "" } = {}) {
@@ -109,7 +81,8 @@ export async function generateMetadata({ params, searchParams }) {
 		const product = await getProductById(parsed.productId, { revalidate: 120 });
 		const name = getProductDisplayName(product);
 		const description = getProductDescription(product);
-		const selection = getPodImageSelectionOptions(resolvedSearchParams);
+		const routeState = sanitizePodProductRoute(product, resolvedSearchParams);
+		const selection = routeState.selection;
 		const variationLabel = buildVariantLabel(selection);
 		const image = getPrimaryProductImage(
 			product,
@@ -117,7 +90,6 @@ export async function generateMetadata({ params, searchParams }) {
 		);
 		const canonicalSlug = getProductSlug(product);
 		const path = `/custom-gifts/${canonicalSlug}/${parsed.productId}`;
-		const canonicalSearchParams = buildPodSearchParams(resolvedSearchParams);
 		const variantSuffix = [selection.color, selection.size, selection.scent]
 			.filter(Boolean)
 			.join(" / ");
@@ -137,10 +109,9 @@ export async function generateMetadata({ params, searchParams }) {
 			title,
 			description: `${description}${descriptionSuffix}`,
 			pathname: path,
-			searchParams: canonicalSearchParams,
 			image,
 			keywords: buildPodSeoKeywords(name, selection),
-			noindex: Boolean(getSafeSearchParamValue(resolvedSearchParams, "name")),
+			noindex: Boolean(selection.name),
 		});
 	} catch {
 		return createMetadata({
@@ -171,7 +142,8 @@ export default async function PodProductPage({ params, searchParams }) {
 
 	const title = getProductDisplayName(product);
 	const description = getProductDescription(product);
-	const selection = getPodImageSelectionOptions(resolvedSearchParams);
+	const routeState = sanitizePodProductRoute(product, resolvedSearchParams);
+	const selection = routeState.selection;
 	const variationLabel = buildVariantLabel(selection);
 	const image = getPrimaryProductImage(
 		product,
@@ -186,11 +158,19 @@ export default async function PodProductPage({ params, searchParams }) {
 		selection
 	);
 	const canonicalPath = `/custom-gifts/${slug}/${parsed.productId}`;
-	const canonicalMetadataParams = buildPodSearchParams(resolvedSearchParams);
-	const canonicalQuery = canonicalMetadataParams.toString();
-	const canonicalUrl = absoluteUrl(
-		canonicalQuery ? `${canonicalPath}?${canonicalQuery}` : canonicalPath
-	);
+	const routeQuery = routeState.routeSearchParams.toString();
+	const routeUrl = routeQuery ? `${canonicalPath}?${routeQuery}` : canonicalPath;
+	const requestPath = `/custom-gifts/${(resolvedParams?.segments || []).join("/")}`;
+
+	if (
+		requestPath !== canonicalPath ||
+		serializeComparableSearchParams(resolvedSearchParams) !==
+			serializeComparableSearchParams(routeState.routeSearchParams)
+	) {
+		permanentRedirect(routeUrl);
+	}
+
+	const canonicalUrl = absoluteUrl(canonicalPath);
 	const schema = productSchema({
 		name: variationLabel ? `${title} - ${variationLabel}` : title,
 		description: selection.occasion

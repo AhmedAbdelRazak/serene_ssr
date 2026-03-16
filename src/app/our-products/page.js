@@ -7,6 +7,10 @@ import {
 	getSafeSearchParamValue,
 } from "@/lib/collection-seo";
 import {
+	appendTrackingQueryParams,
+	serializeComparableSearchParams,
+} from "@/lib/product-route-url";
+import {
 	buildProductPath,
 	getPrimaryProductImage,
 	getProductDisplayName,
@@ -14,6 +18,7 @@ import {
 	isPodProduct,
 } from "@/lib/product-helpers";
 import { breadcrumbSchema, createMetadata, itemListSchema } from "@/lib/seo";
+import { permanentRedirect } from "next/navigation";
 
 export const revalidate = 300;
 
@@ -87,6 +92,17 @@ export default async function OurProductsPage({ searchParams }) {
 		resolvedSearchParams,
 		Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []
 	);
+	if (!seoState.hasUnsupportedKeys) {
+		const routeSearchParams = new URLSearchParams(seoState.canonicalSearchParams);
+		appendTrackingQueryParams(routeSearchParams, resolvedSearchParams);
+		if (
+			serializeComparableSearchParams(resolvedSearchParams) !==
+			serializeComparableSearchParams(routeSearchParams)
+		) {
+			const query = routeSearchParams.toString();
+			permanentRedirect(query ? `/our-products?${query}` : "/our-products");
+		}
+	}
 	const filterSource =
 		seoState.categoryId && !getSafeSearchParamValue(resolvedSearchParams, "category")
 			? { ...resolvedSearchParams, category: seoState.categoryId }
