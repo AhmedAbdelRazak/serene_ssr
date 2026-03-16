@@ -38,6 +38,21 @@ const api = (method, url, data, token = "") =>
 
 const getCMID = () => window.paypal?.getClientMetadataID?.();
 
+function formatApiError(error, fallbackMessage) {
+	const rawError = error?.response?.data?.error;
+	if (Array.isArray(rawError)) {
+		const joined = rawError
+			.map((entry) => entry?.message || entry?.path?.join?.(".") || "")
+			.filter(Boolean)
+			.join(" ");
+		if (joined) return joined;
+	}
+	if (typeof rawError === "string" && rawError.trim()) {
+		return rawError.trim();
+	}
+	return error?.message || fallbackMessage;
+}
+
 function normalizeSdkConfig(data) {
 	if (!data?.clientToken || !data?.clientId) {
 		throw new Error("PayPal SDK configuration is incomplete.");
@@ -372,6 +387,14 @@ export default function PayPalCheckout({
 			);
 			invoiceRef.current = provisionalInvoice;
 			return paypalOrderId;
+		} catch (error) {
+			console.error("PayPal create-order error:", error?.response?.data || error);
+			const errorMessage = formatApiError(
+				error,
+				"Payment could not be initialized."
+			);
+			onErrorRef.current?.(errorMessage);
+			throw new Error(errorMessage);
 		} finally {
 			setOverlay(false);
 		}
@@ -489,7 +512,9 @@ export default function PayPalCheckout({
 						onApprove={({ orderID }) => captureOrder(orderID)}
 						onError={(error) => {
 							console.error("PayPal wallet error:", error);
-							onErrorRef.current?.("PayPal wallet payment failed.");
+							onErrorRef.current?.(
+								error?.message || "PayPal wallet payment failed."
+							);
 						}}
 					/>
 				</ExpressSection>
@@ -505,7 +530,9 @@ export default function PayPalCheckout({
 						onApprove={({ orderID }) => captureOrder(orderID)}
 						onError={(error) => {
 							console.error("PayPal card error:", error);
-							onErrorRef.current?.("Card payment failed.");
+							onErrorRef.current?.(
+								error?.message || "Card payment failed."
+							);
 						}}
 					/>
 				</ExpressSection>

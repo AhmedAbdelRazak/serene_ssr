@@ -148,8 +148,12 @@ export function normalizePodProduct(rawProduct = null) {
 			: [];
 
 	const variants = sourceVariants.filter(
-				(variant) => typeof variant?.price === "number" && variant.price > 0
-			);
+		(variant) =>
+			typeof variant?.price === "number" &&
+			variant.price > 0 &&
+			variant?.is_enabled !== false &&
+			variant?.is_available !== false
+	);
 	const options = sourceOptions;
 	const images = sourceImages;
 
@@ -176,6 +180,7 @@ export function normalizePodProduct(rawProduct = null) {
 		images,
 		printifyProductDetails: rawPrintifyDetails
 			? {
+					...rawPrintifyDetails,
 					id: rawPrintifyDetails.id || null,
 					blueprint_id: rawPrintifyDetails.blueprint_id || null,
 					print_provider_id: rawPrintifyDetails.print_provider_id || null,
@@ -186,6 +191,10 @@ export function normalizePodProduct(rawProduct = null) {
 					title: rawPrintifyDetails.title || rawProduct?.productName || "",
 					description:
 						rawPrintifyDetails.description || rawProduct?.description || "",
+					POD: rawPrintifyDetails.POD === true,
+					variants,
+					options: filteredOptions,
+					images,
 				}
 			: null,
 	};
