@@ -33,6 +33,163 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 		});
 	}, []);
 
+	const formatColorLabel = (value = "") => {
+		const raw = `${value || ""}`.trim();
+		if (!raw) return "";
+		const foundColor = allColors.find(
+			(entry) => `${entry?.hexa || ""}`.trim().toLowerCase() === raw.toLowerCase()
+		);
+		return foundColor?.color || raw;
+	};
+
+	const normalizeVariantToken = (value = "") =>
+		`${value || ""}`.trim().toLowerCase().replace(/["']/g, "");
+
+	const normalizeColorToken = (value = "") => {
+		const raw = `${value || ""}`.trim().toLowerCase();
+		if (!raw) return "";
+		const stripped = raw.startsWith("#") ? raw.slice(1) : raw;
+		if (!/^[0-9a-f]{3,8}$/i.test(stripped)) {
+			return raw.startsWith("#") ? raw : `#${raw}`;
+		}
+		if (stripped.length === 3 || stripped.length === 4) {
+			return `#${stripped
+				.split("")
+				.map((char) => `${char}${char}`)
+				.join("")}`;
+		}
+		return `#${stripped}`;
+	};
+
+	const getPodOptionLabel = (value = null) => {
+		const explicit = `${value?.label || value?.title || ""}`.trim();
+		if (explicit) return explicit;
+		const fallbackColor = Array.isArray(value?.colors)
+			? value.colors.find((entry) => `${entry || ""}`.trim())
+			: "";
+		return `${fallbackColor || ""}`.trim();
+	};
+
+	const getPodOptionGroup = (item, key) => {
+		const product = item?.allProductDetailsIncluded || {};
+		const sourceOptions = [
+			...(Array.isArray(product?.printifyProductDetails?.options)
+				? product.printifyProductDetails.options
+				: []),
+			...(Array.isArray(product?.options) ? product.options : []),
+		];
+		const token = normalizeVariantToken(key);
+		return (
+			sourceOptions.find((option) => {
+				const optionType = normalizeVariantToken(option?.type);
+				const optionName = normalizeVariantToken(option?.name);
+				return optionType.includes(token) || optionName.includes(token);
+			}) || null
+		);
+	};
+
+	const findPodOptionLabelFromItem = (item, key, requestedValues = []) => {
+		const option = getPodOptionGroup(item, key);
+		if (!option?.values?.length) return "";
+
+		const candidates = requestedValues.flatMap((value) => {
+			const raw = `${value || ""}`.trim();
+			if (!raw) return [];
+			const base = normalizeVariantToken(raw);
+			const color = key === "color" ? normalizeColorToken(raw) : "";
+			return [base, color].filter(Boolean);
+		});
+		if (!candidates.length) return "";
+
+		const match =
+			option.values.find((value) => {
+				const titleToken = normalizeVariantToken(value?.title);
+				const labelToken = normalizeVariantToken(getPodOptionLabel(value));
+				const colorTokens = Array.isArray(value?.colors)
+					? value.colors.map((entry) => normalizeColorToken(entry)).filter(Boolean)
+					: [];
+				return candidates.some(
+					(candidate) =>
+						candidate === titleToken ||
+						candidate === labelToken ||
+						colorTokens.includes(candidate)
+				);
+			}) || null;
+
+		return match ? getPodOptionLabel(match) : "";
+	};
+
+	const getVariantTitleParts = (item) =>
+		`${item?.customDesign?.variantTitle || ""}`
+			.split("/")
+			.map((part) => part.trim())
+			.filter(Boolean);
+
+	const getPodVariantTitleFallback = (item, key) => {
+		const parts = getVariantTitleParts(item);
+		if (!parts.length) return "";
+
+		if (key === "size") {
+			return (
+				parts.find(
+					(part) =>
+						normalizeVariantToken(part) ===
+						normalizeVariantToken(item?.customDesign?.size || item?.size || "")
+				) || ""
+			);
+		}
+
+		if (key === "scent") {
+			return (
+				parts.find(
+					(part) =>
+						normalizeVariantToken(part) ===
+						normalizeVariantToken(item?.customDesign?.scent || item?.scent || "")
+				) || ""
+			);
+		}
+
+		const blocked = new Set(
+			[
+				item?.customDesign?.size,
+				item?.size,
+				item?.customDesign?.scent,
+				item?.scent,
+			]
+				.map((entry) => normalizeVariantToken(entry))
+				.filter(Boolean)
+		);
+		return parts.find((part) => !blocked.has(normalizeVariantToken(part))) || parts[0];
+	};
+
+	const getPodAttributeLabel = (item, key) => {
+		const variantValue = item?.customDesign?.variants?.[key] || null;
+		const rawValue =
+			variantValue?.label ||
+			variantValue?.title ||
+			item?.customDesign?.[key] ||
+			item?.chosenProductAttributes?.[key] ||
+			item?.[key] ||
+			"";
+		const variantFallback = getPodVariantTitleFallback(item, key);
+		const productResolvedValue = findPodOptionLabelFromItem(item, key, [
+			rawValue,
+			variantFallback,
+			...(Array.isArray(variantValue?.colors) ? variantValue.colors : []),
+		]);
+		if (key === "color") {
+			const formatted = formatColorLabel(rawValue);
+			if (formatted && !formatted.startsWith("#")) {
+				return formatted;
+			}
+			if (productResolvedValue) {
+				return formatColorLabel(productResolvedValue);
+			}
+			return formatColorLabel(variantFallback || formatted);
+		}
+		return productResolvedValue || `${rawValue || ""}`.trim() || variantFallback;
+	};
+
 	// If the coupon is good, apply the discount
 	const totalAmountAdjusted = goodCoupon
 		? (
@@ -90,9 +247,11 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 								: product.quantity || item.max || 999;
 
 							// if product is POD => disable color/size/scent changes
-							const isPodProduct =
-								item.isPrintifyProduct &&
-								product.printifyProductDetails?.POD === true;
+							const isPodProduct = Boolean(
+								item?.customDesign ||
+								item?.printifyProductDetails?.POD ||
+								product?.printifyProductDetails?.POD
+							);
 
 							return (
 								<CartItem key={i}>
@@ -103,6 +262,21 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 									/>
 									<ItemDetails>
 										<ItemName>{item.name}</ItemName>
+										{isPodProduct && item.customDesign ? (
+											<div style={{ marginTop: 6, color: "#5c5c5c", fontSize: 13 }}>
+												{item.customDesign.occasion ? (
+													<div>
+														<strong>Occasion:</strong>{" "}
+														{item.customDesign.occasion}
+													</div>
+												) : null}
+												{item.customDesign.giftName ? (
+													<div>
+														<strong>For:</strong> {item.customDesign.giftName}
+													</div>
+												) : null}
+											</div>
+										) : null}
 
 										{/* Quantity increment/decrement with maxQuantity */}
 										<QuantityWrapper>
@@ -140,34 +314,17 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 										</ItemTotal>
 
 										{/* If we have chosenProductAttributes => show color/size/scent (if present) */}
-										{item.chosenProductAttributes && (
+										{(item.chosenProductAttributes ||
+											(isPodProduct && item.customDesign)) && (
 											<AttributeWrapper>
 												{/* ===== COLOR SELECT ===== */}
-												{uniqueProductColors.length > 0 && (
+												{(uniqueProductColors.length > 0 ||
+													(isPodProduct && getPodAttributeLabel(item, "color"))) && (
 													<>
 														{isPodProduct && item.customDesign ? (
-															// POD with customDesign => single disabled option
-															<AttributeSelect
-																disabled
-																style={{ color: "grey" }}
-																value={
-																	item.customDesign.variants?.color?.title ||
-																	item.customDesign.color ||
-																	item.color
-																}
-															>
-																<option
-																	value={
-																		item.customDesign.variants?.color?.title ||
-																		item.customDesign.color ||
-																		item.color
-																	}
-																>
-																	{item.customDesign.variants?.color?.title ||
-																		item.customDesign.color ||
-																		item.color}
-																</option>
-															</AttributeSelect>
+															<PodAttributeValue>
+																{getPodAttributeLabel(item, "color")}
+															</PodAttributeValue>
 														) : (
 															// Normal color select => multiple options
 															<AttributeSelect
@@ -227,31 +384,13 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 												)}
 
 												{/* ===== SIZE SELECT ===== */}
-												{uniqueProductSizes.length > 0 && (
+												{(uniqueProductSizes.length > 0 ||
+													(isPodProduct && getPodAttributeLabel(item, "size"))) && (
 													<>
 														{isPodProduct && item.customDesign ? (
-															// POD => single disabled option for size
-															<AttributeSelect
-																disabled
-																style={{ color: "grey" }}
-																value={
-																	item.customDesign.variants?.size?.title ||
-																	item.customDesign.size ||
-																	item.size
-																}
-															>
-																<option
-																	value={
-																		item.customDesign.variants?.size?.title ||
-																		item.customDesign.size ||
-																		item.size
-																	}
-																>
-																	{item.customDesign.variants?.size?.title ||
-																		item.customDesign.size ||
-																		item.size}
-																</option>
-															</AttributeSelect>
+															<PodAttributeValue>
+																{getPodAttributeLabel(item, "size")}
+															</PodAttributeValue>
 														) : (
 															// Normal size select => multiple options
 															<AttributeSelect
@@ -296,31 +435,13 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 												)}
 
 												{/* ===== SCENT SELECT ===== */}
-												{uniqueProductScents.length > 0 && (
+												{(uniqueProductScents.length > 0 ||
+													(isPodProduct && getPodAttributeLabel(item, "scent"))) && (
 													<>
 														{isPodProduct && item.customDesign ? (
-															// POD => single disabled option for scent
-															<AttributeSelect
-																disabled
-																style={{ color: "grey" }}
-																value={
-																	item.customDesign.variants?.scent?.title ||
-																	item.customDesign.scent ||
-																	item.scent
-																}
-															>
-																<option
-																	value={
-																		item.customDesign.variants?.scent?.title ||
-																		item.customDesign.scent ||
-																		item.scent
-																	}
-																>
-																	{item.customDesign.variants?.scent?.title ||
-																		item.customDesign.scent ||
-																		item.scent}
-																</option>
-															</AttributeSelect>
+															<PodAttributeValue>
+																{getPodAttributeLabel(item, "scent")}
+															</PodAttributeValue>
 														) : (
 															// Normal scent select => multiple options
 															<AttributeSelect
@@ -534,6 +655,19 @@ const AttributeSelect = styled.select`
 		background-color: #ebebeb;
 		cursor: not-allowed;
 	}
+`;
+
+const PodAttributeValue = styled.div`
+	min-width: 86px;
+	padding: 5px 10px;
+	border: 1px solid #ccc;
+	border-radius: 5px;
+	background: #ebebeb;
+	color: #666;
+	font-size: 0.9rem;
+	line-height: 1.4;
+	cursor: default;
+	user-select: none;
 `;
 
 const RemoveButton = styled.button`

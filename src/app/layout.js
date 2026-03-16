@@ -2,6 +2,7 @@ import "./globals.css";
 import "@/legacy_frontend/App.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import StyledComponentsRegistry from "@/components/layout/StyledComponentsRegistry";
+import AntdCompatProvider from "@/components/providers/AntdCompatProvider";
 import ClientTelemetry from "@/components/perf/ClientTelemetry";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
@@ -91,9 +92,11 @@ export default function RootLayout({ children }) {
 			</head>
 			<body>
 				<StyledComponentsRegistry>
-					<ClientTelemetry />
-					<JsonLd data={organizationSchema()} />
-					<ChromeShell>{children}</ChromeShell>
+					<AntdCompatProvider>
+						<ClientTelemetry />
+						<JsonLd data={organizationSchema()} />
+						<ChromeShell>{children}</ChromeShell>
+					</AntdCompatProvider>
 				</StyledComponentsRegistry>
 			</body>
 		</html>

@@ -64,7 +64,11 @@ const Z4StepThree = ({
 					name: item.name,
 					ordered_quantity: item.amount,
 					price: item.priceAfterDiscount,
-					image: item.chosenProductAttributes?.productImages?.[0]?.url || "",
+					image:
+						item.image ||
+						item.chosenProductAttributes?.productImages?.[0]?.url ||
+						item.customDesign?.mockupPreviewUrl ||
+						"",
 					chosenAttributes: item.chosenProductAttributes,
 					isPrintifyProduct: item.isPrintifyProduct,
 					printifyProductDetails: item.printifyProductDetails,

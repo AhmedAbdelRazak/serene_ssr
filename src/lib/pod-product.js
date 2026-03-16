@@ -2,8 +2,114 @@ function normalizeOptionToken(value = "") {
 	return `${value || ""}`.trim().toLowerCase();
 }
 
+function normalizeColorToken(value = "") {
+	const raw = normalizeOptionToken(value);
+	if (!raw) return "";
+	const stripped = raw.startsWith("#") ? raw.slice(1) : raw;
+	if (!/^[0-9a-f]{3,8}$/i.test(stripped)) {
+		return raw.startsWith("#") ? raw : `#${raw}`;
+	}
+	if (stripped.length === 3 || stripped.length === 4) {
+		return `#${stripped
+			.split("")
+			.map((char) => `${char}${char}`)
+			.join("")}`;
+	}
+	return `#${stripped}`;
+}
+
 function coerceOptionId(value) {
 	return typeof value === "number" ? value : parseInt(value, 10);
+}
+
+function isColorOption(target = "") {
+	const token = normalizeOptionToken(target);
+	return token.includes("color");
+}
+
+function getOptionValues(source = null, target = "") {
+	if (Array.isArray(source?.values)) return source.values;
+	return findPodProductOption(source, target)?.values || [];
+}
+
+export function getPodOptionValueLabel(value = null) {
+	if (!value) return "";
+	const safeTitle = `${value?.label || value?.title || ""}`.trim();
+	if (safeTitle) return safeTitle;
+	const fallbackColor = Array.isArray(value?.colors)
+		? value.colors.find((entry) => `${entry || ""}`.trim())
+		: "";
+	return `${fallbackColor || ""}`.trim();
+}
+
+function doesOptionValueMatch(value = null, requested = "", target = "") {
+	if (!value) return false;
+	const requestedToken = normalizeOptionToken(requested);
+	const requestedColor = normalizeColorToken(requested);
+	if (!requestedToken && !requestedColor) return false;
+
+	const titleToken = normalizeOptionToken(value?.title);
+	const labelToken = normalizeOptionToken(getPodOptionValueLabel(value));
+	if (
+		(requestedToken && titleToken === requestedToken) ||
+		(requestedToken && labelToken === requestedToken)
+	) {
+		return true;
+	}
+
+	if (isColorOption(target) && requestedColor) {
+		const colorTokens = Array.isArray(value?.colors)
+			? value.colors.map((entry) => normalizeColorToken(entry)).filter(Boolean)
+			: [];
+		if (colorTokens.includes(requestedColor)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+export function findPodProductOptionValue(source, target = "", requested = "") {
+	const values = getOptionValues(source, target);
+	if (!values.length) return null;
+	return (
+		values.find((value) => doesOptionValueMatch(value, requested, target)) || null
+	);
+}
+
+export function buildPodSelectionFromVariant(
+	product,
+	variant,
+	fallbackSelection = {}
+) {
+	if (!variant) {
+		return {
+			color: fallbackSelection.color || "",
+			size: fallbackSelection.size || "",
+			scent: fallbackSelection.scent || "",
+		};
+	}
+
+	const variantOptionIds = Array.isArray(variant?.options)
+		? variant.options.map(coerceOptionId)
+		: [];
+	const pickLabel = (option) => {
+		if (!option?.values?.length) return "";
+		const match = option.values.find((value) =>
+			variantOptionIds.includes(coerceOptionId(value?.id))
+		);
+		return getPodOptionValueLabel(match);
+	};
+
+	const colorOption = findPodProductOption(product, "color");
+	const sizeOption = findPodProductOption(product, "size");
+	const scentOption = findPodProductOption(product, "scent");
+
+	return {
+		color: pickLabel(colorOption) || fallbackSelection.color || "",
+		size: pickLabel(sizeOption) || fallbackSelection.size || "",
+		scent: pickLabel(scentOption) || fallbackSelection.scent || "",
+	};
 }
 
 export function findPodProductOption(product, target = "") {
@@ -104,30 +210,28 @@ export function resolveInitialPodVariantSelection(
 	const productAttributes = Array.isArray(product?.productAttributes)
 		? product.productAttributes
 		: [];
+	const defaultVariant =
+		variants.find((variant) => variant?.is_default) || variants[0] || null;
+	const defaultSelection = buildPodSelectionFromVariant(product, defaultVariant, {});
 
 	let selectedColor = "";
 	if (colorOption?.values?.length) {
-		if (color && colorOption.values.some((value) => value.title === color)) {
-			selectedColor = color;
-		} else {
-			selectedColor = colorOption.values[0]?.title || "";
-		}
+		const resolvedColor = findPodProductOptionValue(colorOption, "color", color);
+		selectedColor =
+			getPodOptionValueLabel(resolvedColor) ||
+			defaultSelection.color ||
+			getPodOptionValueLabel(colorOption.values[0]) ||
+			"";
 	}
 
 	let selectedSize = "";
 	if (sizeOption?.values?.length) {
-		if (size && sizeOption.values.some((value) => value.title === size)) {
-			selectedSize = size;
-		} else {
-			const defaultVariant = variants.find((variant) => variant?.is_default);
-			const defaultSizeValue = sizeOption.values.find((value) =>
-				Array.isArray(defaultVariant?.options)
-					? defaultVariant.options.includes(value.id)
-					: false
-			);
-			selectedSize =
-				defaultSizeValue?.title || sizeOption.values[0]?.title || "";
-		}
+		const resolvedSize = findPodProductOptionValue(sizeOption, "size", size);
+		selectedSize =
+			getPodOptionValueLabel(resolvedSize) ||
+			defaultSelection.size ||
+			getPodOptionValueLabel(sizeOption.values[0]) ||
+			"";
 	}
 	if (!selectedSize && productAttributes.length) {
 		const fallbackSize = productAttributes.find(
@@ -140,11 +244,12 @@ export function resolveInitialPodVariantSelection(
 
 	let selectedScent = "";
 	if (scentOption?.values?.length) {
-		if (scent && scentOption.values.some((value) => value.title === scent)) {
-			selectedScent = scent;
-		} else {
-			selectedScent = scentOption.values[0]?.title || "";
-		}
+		const resolvedScent = findPodProductOptionValue(scentOption, "scent", scent);
+		selectedScent =
+			getPodOptionValueLabel(resolvedScent) ||
+			defaultSelection.scent ||
+			getPodOptionValueLabel(scentOption.values[0]) ||
+			"";
 	}
 	if (!selectedScent && productAttributes.length) {
 		const fallbackScent = productAttributes.find(
@@ -165,6 +270,13 @@ export function resolveInitialPodVariantSelection(
 export function findMatchingPodVariant(product, selection = {}) {
 	const variants = Array.isArray(product?.variants) ? product.variants : [];
 	if (!variants.length) return null;
+	if (selection?.variantId) {
+		const directMatch =
+			variants.find(
+				(variant) => `${variant?.id ?? ""}`.trim() === `${selection.variantId}`.trim()
+			) || null;
+		if (directMatch) return directMatch;
+	}
 
 	const colorOption = findPodProductOption(product, "color");
 	const sizeOption = findPodProductOption(product, "size");
@@ -172,30 +284,48 @@ export function findMatchingPodVariant(product, selection = {}) {
 	const chosenIds = [];
 
 	if (selection.color && colorOption?.values?.length) {
-		const colorValue = colorOption.values.find(
-			(value) => value.title === selection.color
+		const colorValue = findPodProductOptionValue(
+			colorOption,
+			"color",
+			selection.color
 		);
 		if (colorValue) chosenIds.push(coerceOptionId(colorValue.id));
 	}
 	if (selection.size && sizeOption?.values?.length) {
-		const sizeValue = sizeOption.values.find(
-			(value) => value.title === selection.size
+		const sizeValue = findPodProductOptionValue(
+			sizeOption,
+			"size",
+			selection.size
 		);
 		if (sizeValue) chosenIds.push(coerceOptionId(sizeValue.id));
 	}
 	if (selection.scent && scentOption?.values?.length) {
-		const scentValue = scentOption.values.find(
-			(value) => value.title === selection.scent
+		const scentValue = findPodProductOptionValue(
+			scentOption,
+			"scent",
+			selection.scent
 		);
 		if (scentValue) chosenIds.push(coerceOptionId(scentValue.id));
+	}
+	if (!chosenIds.length) {
+		return (
+			variants.find((variant) => variant?.is_default) ||
+			variants.find((variant) => variant?.is_enabled !== false) ||
+			variants[0] ||
+			null
+		);
 	}
 
 	return (
 		variants.find((variant) => {
+			if (variant?.is_enabled === false) return false;
 			const variantIds = Array.isArray(variant?.options)
 				? variant.options.map(coerceOptionId)
 				: [];
 			return chosenIds.every((chosenId) => variantIds.includes(chosenId));
-		}) || null
+		}) ||
+		variants.find((variant) => variant?.is_default) ||
+		variants[0] ||
+		null
 	);
 }

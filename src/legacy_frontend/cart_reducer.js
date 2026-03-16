@@ -39,6 +39,53 @@ function findPrintifyOption(options = [], target = "") {
 	);
 }
 
+function normalizeOptionToken(value = "") {
+	return `${value || ""}`.trim().toLowerCase();
+}
+
+function normalizeColorToken(value = "") {
+	const raw = normalizeOptionToken(value);
+	if (!raw) return "";
+	if (raw.startsWith("#")) return raw;
+	if (/^[0-9a-f]{3,8}$/i.test(raw)) return `#${raw}`;
+	return raw;
+}
+
+function matchesPrintifyOptionValue(value = {}, requested = "") {
+	const requestedToken = normalizeOptionToken(requested);
+	const requestedColor = normalizeColorToken(requested);
+	if (!requestedToken && !requestedColor) return false;
+
+	const titleToken = normalizeOptionToken(value?.title);
+	if (requestedToken && titleToken === requestedToken) {
+		return true;
+	}
+
+	const swatches = Array.isArray(value?.colors)
+		? value.colors.map((entry) => normalizeColorToken(entry)).filter(Boolean)
+		: [];
+	return Boolean(requestedColor && swatches.includes(requestedColor));
+}
+
+function findPrintifyOptionValue(option, requested = "") {
+	if (!Array.isArray(option?.values)) return null;
+	return option.values.find((value) =>
+		matchesPrintifyOptionValue(value, requested)
+	) || null;
+}
+
+function getPreferredPodCartImage(customDesign = {}, fallbackImage = "") {
+	return (
+		customDesign?.mockupPreviewUrl ||
+		(Array.isArray(customDesign?.mockupPreviewImages)
+			? customDesign.mockupPreviewImages.find(Boolean)
+			: "") ||
+		customDesign?.finalScreenshotUrl ||
+		fallbackImage ||
+		""
+	);
+}
+
 // OPTIONAL HELPER to find the correct Printify variant image by color/size
 function getVariantImageForColorSize(product, chosenAttributes) {
 	// If any crucial arrays are missing, bail out
@@ -57,12 +104,8 @@ function getVariantImageForColorSize(product, chosenAttributes) {
 	if (!colorOption || !sizeOption) return null;
 
 	// 2) Attempt to match chosenAttributes color/size to the printify "title"
-	const colorVal = colorOption.values.find(
-		(val) => val.title.toLowerCase() === chosenAttributes.color?.toLowerCase()
-	);
-	const sizeVal = sizeOption.values.find(
-		(val) => val.title.toLowerCase() === chosenAttributes.size?.toLowerCase()
-	);
+	const colorVal = findPrintifyOptionValue(colorOption, chosenAttributes.color);
+	const sizeVal = findPrintifyOptionValue(sizeOption, chosenAttributes.size);
 	if (!colorVal || !sizeVal) return null;
 
 	// 3) Find the matching variant
@@ -142,13 +185,16 @@ const cart_reducer = (state, action) => {
 
 				// If isPrintify
 				if (product.isPrintifyProduct) {
-					const isPOD = product.printifyProductDetails?.POD === true;
+					const isPOD = Boolean(
+						customDesign || product?.printifyProductDetails?.POD
+					);
 					if (isPOD) {
 						// ------------------ Printify POD ------------------
 						// If user used our screenshot-based customization
-						if (customDesign?.finalScreenshotUrl) {
-							finalImage = customDesign.finalScreenshotUrl;
-						} else {
+						if (customDesign) {
+							finalImage = getPreferredPodCartImage(customDesign, "");
+						}
+						if (!finalImage) {
 							// fallback to variant-based image if color/size is set
 							const possibleImg = getVariantImageForColorSize(
 								product.printifyProductDetails,
@@ -246,12 +292,15 @@ const cart_reducer = (state, action) => {
 
 				// If isPrintify
 				if (product.isPrintifyProduct) {
-					const isPOD = product.printifyProductDetails?.POD === true;
+					const isPOD = Boolean(
+						customDesign || product?.printifyProductDetails?.POD
+					);
 					if (isPOD) {
 						// e.g., use customDesign screenshot or fallback
-						if (customDesign?.finalScreenshotUrl) {
-							finalImage = customDesign.finalScreenshotUrl;
-						} else {
+						if (customDesign) {
+							finalImage = getPreferredPodCartImage(customDesign, "");
+						}
+						if (!finalImage) {
 							// fallback to product thumbnail
 							finalImage = product?.thumbnailImage?.[0]?.images?.[0]?.url || "";
 						}

@@ -50,13 +50,12 @@ import { Helmet } from "react-helmet-async";
 import ReactGA from "react-ga4";
 import ReactPixel from "react-facebook-pixel";
 
-// heic2any for .heic â†’ jpeg
-import heic2any from "heic2any";
-
-// Fallback library for final image conversion
-import domtoimage from "dom-to-image-more";
 import {
+	buildPodSelectionFromVariant,
+	findMatchingPodVariant,
 	findPodProductOption,
+	findPodProductOptionValue,
+	getPodOptionValueLabel,
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
 } from "@/lib/pod-product";
@@ -67,6 +66,7 @@ import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapCon
 // import AnimationPODWalkThrough from "../MyAnimationComponents/AnimationPODWalkThrough";
 import {
 	POD_OCCASION_OPTIONS,
+	buildPersonalizationSearch,
 	resolvePodPersonalization,
 	savePodPersonalization,
 	buildGiftMessage,
@@ -82,6 +82,64 @@ const POD_FONT_STYLESHEET =
 
 function clampNumber(value, min, max) {
 	return Math.min(max, Math.max(min, value));
+}
+
+let domToImageModulePromise = null;
+
+async function getDomToImage() {
+	if (typeof window === "undefined") {
+		throw new Error("dom-to-image is only available in the browser.");
+	}
+	if (!domToImageModulePromise) {
+		domToImageModulePromise = import("dom-to-image-more").then(
+			(module) => module.default || module
+		);
+	}
+	return domToImageModulePromise;
+}
+
+function normalizeVariantToken(value = "") {
+	return `${value || ""}`.trim().toLowerCase().replace(/["']/g, "");
+}
+
+function normalizeColorToken(value = "") {
+	const raw = `${value || ""}`.trim().toLowerCase();
+	if (!raw) return "";
+	const stripped = raw.startsWith("#") ? raw.slice(1) : raw;
+	if (!/^[0-9a-f]{3,8}$/i.test(stripped)) {
+		return raw.startsWith("#") ? raw : `#${raw}`;
+	}
+	if (stripped.length === 3 || stripped.length === 4) {
+		return `#${stripped
+			.split("")
+			.map((char) => `${char}${char}`)
+			.join("")}`;
+	}
+	return `#${stripped}`;
+}
+
+function looksLikeHexColor(value = "") {
+	return /^#?[0-9a-f]{3,8}$/i.test(`${value || ""}`.trim());
+}
+
+function getVariantTitleParts(variant = null) {
+	return `${variant?.title || ""}`
+		.split("/")
+		.map((part) => part.trim())
+		.filter(Boolean);
+}
+
+async function postFacebookConversion(payload = {}) {
+	try {
+		await fetch("/api/track/conversion", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {}
 }
 
 function getPodProductKindForDefaultDesign(product = {}) {
@@ -521,6 +579,10 @@ async function convertHeicToJpegIfNeeded(file) {
 		return file;
 	}
 	try {
+		if (typeof window === "undefined") {
+			return file;
+		}
+		const { default: heic2any } = await import("heic2any");
 		const convertedBlob = await heic2any({
 			blob: file,
 			toType: "image/jpeg",
@@ -610,6 +672,7 @@ async function fallbackDomToImageConvert(file) {
 		const objectURL = URL.createObjectURL(file);
 		img.onload = async () => {
 			try {
+				const domtoimage = await getDomToImage();
 				const blob = await domtoimage.toBlob(containerDiv, {
 					style: {
 						transform: "scale(1)",
@@ -785,6 +848,54 @@ export default function CustomizeSelectedProduct() {
 		return findPodProductOption(currentProduct, target);
 	}
 
+	function findProductOptionValue(currentProduct, target = "", requested = "") {
+		return findPodProductOptionValue(currentProduct, target, requested);
+	}
+
+	function getOptionDisplayLabel(optionValue, fallback = "") {
+		return getPodOptionValueLabel(optionValue) || `${fallback || ""}`.trim();
+	}
+
+	function getVariantSelectionFallbackLabel(
+		matchingVariant,
+		key,
+		{ sizeLabel = "", scentLabel = "" } = {}
+	) {
+		const parts = getVariantTitleParts(matchingVariant);
+		if (!parts.length) return "";
+		if (key === "size") {
+			const target = normalizeVariantToken(sizeLabel);
+			return parts.find((part) => normalizeVariantToken(part) === target) || "";
+		}
+		if (key === "scent") {
+			const target = normalizeVariantToken(scentLabel);
+			return parts.find((part) => normalizeVariantToken(part) === target) || "";
+		}
+
+		const blocked = new Set(
+			[sizeLabel, scentLabel]
+				.map((entry) => normalizeVariantToken(entry))
+				.filter(Boolean)
+		);
+		return parts.find((part) => !blocked.has(normalizeVariantToken(part))) || parts[0];
+	}
+
+	function getReadableColorLabel(optionValue, fallback = "", matchingVariant = null, context = {}) {
+		const direct = getOptionDisplayLabel(optionValue, fallback);
+		if (direct && !looksLikeHexColor(direct)) {
+			return direct;
+		}
+		const variantFallback = getVariantSelectionFallbackLabel(
+			matchingVariant,
+			"color",
+			context
+		);
+		if (variantFallback && !looksLikeHexColor(variantFallback)) {
+			return variantFallback;
+		}
+		return direct;
+	}
+
 	function resolveClosestVariantSelection(currentProduct, requested = {}) {
 		if (!currentProduct?.variants?.length) {
 			return {
@@ -794,60 +905,12 @@ export default function CustomizeSelectedProduct() {
 			};
 		}
 
-		const colorOpt = findProductOption(currentProduct, "color");
-		const sizeOpt = findProductOption(currentProduct, "size");
-		const scentOpt = findProductOption(currentProduct, "scent");
-		const numOrStr = (value) =>
-			typeof value === "number" ? value : parseInt(value, 10);
-		const findOptionValue = (option, title) =>
-			option?.values?.find((value) => value.title === title) || null;
-		const requestedColor = findOptionValue(colorOpt, requested.color);
-		const requestedSize = findOptionValue(sizeOpt, requested.size);
-		const requestedScent = findOptionValue(scentOpt, requested.scent);
-		const variants = currentProduct.variants.filter(
-			(variant) => variant?.is_enabled !== false
-		);
-		if (!variants.length) {
-			return {
-				color: requested.color || "",
-				size: requested.size || "",
-				scent: requested.scent || "",
-			};
-		}
-
-		let bestVariant = variants[0];
-		let bestScore = Number.NEGATIVE_INFINITY;
-		for (const variant of variants) {
-			const variantIds = variant.options.map(numOrStr);
-			let score = variant.is_default ? 5 : 0;
-			if (requestedColor) {
-				score += variantIds.includes(numOrStr(requestedColor.id)) ? 100 : -100;
-			}
-			if (requestedSize) {
-				score += variantIds.includes(numOrStr(requestedSize.id)) ? 60 : -60;
-			}
-			if (requestedScent) {
-				score += variantIds.includes(numOrStr(requestedScent.id)) ? 30 : -30;
-			}
-			if (score > bestScore) {
-				bestScore = score;
-				bestVariant = variant;
-			}
-		}
-
-		const pickTitle = (option) => {
-			if (!option?.values?.length) return "";
-			const match = option.values.find((value) =>
-				bestVariant.options.map(numOrStr).includes(numOrStr(value.id))
-			);
-			return match?.title || "";
-		};
-
-		return {
-			color: pickTitle(colorOpt) || requested.color || "",
-			size: pickTitle(sizeOpt) || requested.size || "",
-			scent: pickTitle(scentOpt) || requested.scent || "",
-		};
+		const bestVariant = findMatchingPodVariant(currentProduct, requested);
+		return buildPodSelectionFromVariant(currentProduct, bestVariant, {
+			color: requested.color || "",
+			size: requested.size || "",
+			scent: requested.scent || "",
+		});
 	}
 
 	const [product, setProduct] = useState(() => initialPodBootstrap?.product || null);
@@ -910,8 +973,83 @@ export default function CustomizeSelectedProduct() {
 		shipping_method: "",
 	});
 
-	const [isMobile, setIsMobile] = useState(window.innerWidth < 800);
-	const isSyncingUrlStateRef = useRef(false);
+	function buildSelectedVariantContext(currentProduct = product) {
+		const colorOpt = findProductOption(currentProduct, "color");
+		const sizeOpt = findProductOption(currentProduct, "size");
+		const scentOpt = findProductOption(currentProduct, "scent");
+		const colorValue = findProductOptionValue(
+			currentProduct,
+			"color",
+			selectedColor
+		);
+		const sizeValue = findProductOptionValue(
+			currentProduct,
+			"size",
+			selectedSize
+		);
+		const scentValue = findProductOptionValue(
+			currentProduct,
+			"scent",
+			selectedScent
+		);
+		const matchingVariant = findMatchingPodVariant(currentProduct, {
+			variantId: order.variant_id,
+			color: selectedColor,
+			size: selectedSize,
+			scent: selectedScent,
+		});
+
+		let finalPrice = currentProduct?.price || 0;
+		let finalPriceAfterDiscount =
+			currentProduct?.priceAfterDiscount || finalPrice;
+		let variantImage = "";
+		if (matchingVariant) {
+			finalPrice = matchingVariant.price / 100;
+			finalPriceAfterDiscount = finalPrice;
+			const matchImg = Array.isArray(currentProduct?.images)
+				? currentProduct.images.find((img) =>
+						Array.isArray(img?.variant_ids)
+							? img.variant_ids.includes(matchingVariant.id)
+							: false
+				  )
+				: null;
+			if (matchImg?.src) {
+				variantImage = matchImg.src;
+			}
+		}
+
+		const sizeLabel = getOptionDisplayLabel(sizeValue, selectedSize);
+		const scentLabel = getOptionDisplayLabel(scentValue, selectedScent);
+		const colorLabel = getReadableColorLabel(
+			colorValue,
+			selectedColor,
+			matchingVariant,
+			{
+				sizeLabel,
+				scentLabel,
+			}
+		);
+
+		return {
+			colorOpt,
+			sizeOpt,
+			scentOpt,
+			colorValue,
+			sizeValue,
+			scentValue,
+			matchingVariant,
+			finalPrice,
+			finalPriceAfterDiscount,
+			variantImage,
+			colorLabel,
+			sizeLabel,
+			scentLabel,
+		};
+	}
+
+	const [isMobile, setIsMobile] = useState(
+		() => typeof window !== "undefined" && window.innerWidth < 800
+	);
 	useEffect(() => {
 		const handleResize = () => setIsMobile(window.innerWidth < 800);
 		window.addEventListener("resize", handleResize);
@@ -920,7 +1058,6 @@ export default function CustomizeSelectedProduct() {
 
 	useEffect(() => {
 		const resolved = resolvePodPersonalization(location.search);
-		isSyncingUrlStateRef.current = true;
 		setSelectedOccasion(resolved.occasion);
 		setSelectedGiftName(resolved.name);
 		savePodPersonalization(resolved);
@@ -1441,36 +1578,17 @@ export default function CustomizeSelectedProduct() {
 	 */
 	useEffect(() => {
 		if (!product) return;
-		function numOrStr(x) {
-			return typeof x === "number" ? x : parseInt(x, 10);
-		}
-
-		const colorOpt = findProductOption(product, "color");
-		const sizeOpt = findProductOption(product, "size");
-		const scentOpt = findProductOption(product, "scent");
-
-		let matchingVariant = null;
-		// gather chosen IDs
-		const chosenIds = [];
-		if (colorOpt && selectedColor) {
-			const cVal = colorOpt.values.find((v) => v.title === selectedColor);
-			if (cVal) chosenIds.push(numOrStr(cVal.id));
-		}
-		if (sizeOpt && selectedSize) {
-			const sVal = sizeOpt.values.find((v) => v.title === selectedSize);
-			if (sVal) chosenIds.push(numOrStr(sVal.id));
-		}
-		if (scentOpt && selectedScent) {
-			const scVal = scentOpt.values.find((v) => v.title === selectedScent);
-			if (scVal) chosenIds.push(numOrStr(scVal.id));
-		}
-
-		matchingVariant = product.variants.find((v) => {
-			const varIds = v.options.map(numOrStr);
-			return chosenIds.every((ch) => varIds.includes(ch));
+		const matchingVariant = findMatchingPodVariant(product, {
+			color: selectedColor,
+			size: selectedSize,
+			scent: selectedScent,
 		});
-
-		setOrder((prev) => ({ ...prev, variant_id: matchingVariant?.id || null }));
+		const nextVariantId = matchingVariant?.id || null;
+		setOrder((prev) =>
+			prev.variant_id === nextVariantId
+				? prev
+				: { ...prev, variant_id: nextVariantId }
+		);
 	}, [product, selectedColor, selectedSize, selectedScent]);
 
 	useEffect(() => {
@@ -1479,28 +1597,11 @@ export default function CustomizeSelectedProduct() {
 			occasion: selectedOccasion,
 			name: selectedGiftName,
 		});
-
-		const params = new URLSearchParams(location.search);
-		params.set("occasion", safe.occasion);
-		if (safe.name) params.set("name", safe.name);
-		else params.delete("name");
-
-		if (selectedColor) params.set("color", selectedColor);
-		else params.delete("color");
-
-		if (selectedSize) params.set("size", selectedSize);
-		else params.delete("size");
-
-		if (selectedScent) params.set("scent", selectedScent);
-		else params.delete("scent");
-
-		const nextSearch = `?${params.toString()}`;
-		if (isSyncingUrlStateRef.current) {
-			if (nextSearch === location.search) {
-				isSyncingUrlStateRef.current = false;
-			}
-			return;
-		}
+		const nextSearch = buildPersonalizationSearch(safe, {
+			color: selectedColor || undefined,
+			size: selectedSize || undefined,
+			scent: selectedScent || undefined,
+		});
 		if (nextSearch !== location.search) {
 			history.replace({ pathname: location.pathname, search: nextSearch });
 		}
@@ -1550,24 +1651,21 @@ export default function CustomizeSelectedProduct() {
 	function variantExistsForOption(sizeObj, colorTitle, scentTitle) {
 		if (!product) return false;
 
-		const colorOpt = findProductOption(product, "color");
-		const scentOpt = findProductOption(product, "scent");
-
 		function numOrStr(val) {
 			return typeof val === "number" ? val : parseInt(val, 10);
 		}
 
 		let chosenColorId = null;
-		if (colorOpt && colorTitle) {
-			const colorVal = colorOpt.values.find((v) => v.title === colorTitle);
+		if (colorTitle) {
+			const colorVal = findProductOptionValue(product, "color", colorTitle);
 			if (!colorVal) return false;
 			chosenColorId = numOrStr(colorVal.id);
 		}
 
 		let sizeValId = sizeObj ? numOrStr(sizeObj.id) : null;
 		let chosenScentId = null;
-		if (scentOpt && scentTitle) {
-			const scVal = scentOpt.values.find((v) => v.title === scentTitle);
+		if (scentTitle) {
+			const scVal = findProductOptionValue(product, "scent", scentTitle);
 			if (scVal) chosenScentId = numOrStr(scVal.id);
 		}
 
@@ -1588,22 +1686,20 @@ export default function CustomizeSelectedProduct() {
 
 	function variantExistsForScent(scentObj, colorTitle, sizeTitle) {
 		if (!product) return false;
-		const colorOpt = findProductOption(product, "color");
-		const sizeOpt = findProductOption(product, "size");
 
 		function numOrStr(val) {
 			return typeof val === "number" ? val : parseInt(val, 10);
 		}
 
 		let chosenColorId = null;
-		if (colorOpt && colorTitle) {
-			const colorVal = colorOpt.values.find((v) => v.title === colorTitle);
+		if (colorTitle) {
+			const colorVal = findProductOptionValue(product, "color", colorTitle);
 			if (!colorVal) return false;
 			chosenColorId = numOrStr(colorVal.id);
 		}
 		let chosenSizeId = null;
-		if (sizeOpt && sizeTitle) {
-			const sizeVal = sizeOpt.values.find((v) => v.title === sizeTitle);
+		if (sizeTitle) {
+			const sizeVal = findProductOptionValue(product, "size", sizeTitle);
 			if (sizeVal) chosenSizeId = numOrStr(sizeVal.id);
 		}
 		let thisScentId = scentObj ? numOrStr(scentObj.id) : null;
@@ -2563,30 +2659,11 @@ export default function CustomizeSelectedProduct() {
 
 	function getVariantPrice() {
 		if (!product || !product.variants) return 0;
-		function numOrStr(x) {
-			return typeof x === "number" ? x : parseInt(x, 10);
-		}
-		// gather chosen
-		const colorOpt = findProductOption(product, "color");
-		const sizeOpt = findProductOption(product, "size");
-		const scentOpt = findProductOption(product, "scent");
-
-		const chosenIds = [];
-		if (colorOpt && selectedColor) {
-			const cVal = colorOpt.values.find((v) => v.title === selectedColor);
-			if (cVal) chosenIds.push(numOrStr(cVal.id));
-		}
-		if (sizeOpt && selectedSize) {
-			const sVal = sizeOpt.values.find((v) => v.title === selectedSize);
-			if (sVal) chosenIds.push(numOrStr(sVal.id));
-		}
-		if (scentOpt && selectedScent) {
-			const scVal = scentOpt.values.find((v) => v.title === selectedScent);
-			if (scVal) chosenIds.push(numOrStr(scVal.id));
-		}
-		const matchingVariant = product.variants.find((v) => {
-			const varIds = v.options.map(numOrStr);
-			return chosenIds.every((cid) => varIds.includes(cid));
+		const matchingVariant = findMatchingPodVariant(product, {
+			variantId: order.variant_id,
+			color: selectedColor,
+			size: selectedSize,
+			scent: selectedScent,
 		});
 		if (matchingVariant && typeof matchingVariant.price === "number") {
 			return parseFloat(matchingVariant.price / 100);
@@ -2608,7 +2685,7 @@ export default function CustomizeSelectedProduct() {
 		function numOrStr(x) {
 			return typeof x === "number" ? x : parseInt(x, 10);
 		}
-		const colorVal = colorOpt.values.find((v) => v.title === selectedColor);
+		const colorVal = findProductOptionValue(product, "color", selectedColor);
 		if (!colorVal) return product.images.slice(0, 6);
 
 		const matchingVars = product.variants.filter((v) => {
@@ -2761,6 +2838,77 @@ export default function CustomizeSelectedProduct() {
 		};
 	}, [activePreviewSession, isPreviewLinkedToCart]);
 
+	async function generateCartMockupPreview(
+		bareUrl,
+		variantContext = buildSelectedVariantContext(product)
+	) {
+		const fallbackResult = {
+			mockupPreviewUrl: variantContext?.variantImage || "",
+			previewImages: [],
+			previewProductId: null,
+			previewShopId: product?.printifyProductDetails?.shop_id || null,
+		};
+
+		if (!bareUrl || !variantContext?.matchingVariant?.id) {
+			return fallbackResult;
+		}
+
+		try {
+			if (activePreviewSession?.previewProductId && !isPreviewLinkedToCart) {
+				await cleanupActivePreviewSession(activePreviewSession);
+				setActivePreviewSession(null);
+				setPreviewImages([]);
+			}
+
+			const response = await axios.post(
+				`${process.env.REACT_APP_API_URL}/preview-custom-design`,
+				{
+					blueprint_id: product.printifyProductDetails?.blueprint_id,
+					print_provider_id:
+						product.printifyProductDetails?.print_provider_id,
+					variant_id: variantContext.matchingVariant.id,
+					design_image_url: bareUrl,
+					bare_design_image_url: bareUrl,
+					design_covers_print_area: true,
+					design_is_full_print_area_capture: true,
+					title: product.title || product.productName,
+					print_areas: product.printifyProductDetails?.print_areas || [],
+				}
+			);
+
+			const images = Array.isArray(response?.data?.preview_images)
+				? response.data.preview_images.filter(Boolean).slice(0, 3)
+				: [];
+			const previewProductId =
+				response?.data?.preview_product_id || response?.data?.product_id || null;
+			const previewShopId =
+				response?.data?.shop_id ||
+				product.printifyProductDetails?.shop_id ||
+				null;
+
+			setPreviewImages(images);
+			if (previewProductId) {
+				setActivePreviewSession({
+					previewProductId,
+					shopId: previewShopId,
+				});
+			} else {
+				setActivePreviewSession(null);
+			}
+			setIsPreviewLinkedToCart(false);
+
+			return {
+				mockupPreviewUrl: images[0] || fallbackResult.mockupPreviewUrl,
+				previewImages: images,
+				previewProductId,
+				previewShopId,
+			};
+		} catch (error) {
+			console.error("Cart mockup preview generation failed:", error);
+			return fallbackResult;
+		}
+	}
+
 	/**
 	 * 6) ADD TO CART => SCREENSHOT
 	 */
@@ -2854,6 +3002,7 @@ export default function CustomizeSelectedProduct() {
 				if (!bareCaptureNode) {
 					throw new Error("Design capture area is not ready yet.");
 				}
+				const domtoimage = await getDomToImage();
 				await prepareCaptureNode(bareCaptureNode);
 				const bareBlob = await domtoimage.toBlob(
 					bareCaptureNode,
@@ -2907,54 +3056,33 @@ export default function CustomizeSelectedProduct() {
 		}
 
 		/* â”€â”€ StepÂ 3: rebuild variantâ€‘price info, assemble customDesign payload â”€â”€ */
-		// helper to coerce ids
-		const numOrStr = (v) => (typeof v === "number" ? v : parseInt(v, 10));
-
-		const colorOpt = findProductOption(product, "color");
-		const sizeOpt = findProductOption(product, "size");
-		const scentOpt = findProductOption(product, "scent");
-
-		const chosenIds = [];
-		if (colorOpt && selectedColor) {
-			const cVal = colorOpt.values.find((v) => v.title === selectedColor);
-			if (cVal) chosenIds.push(numOrStr(cVal.id));
-		}
-		if (sizeOpt && selectedSize) {
-			const sVal = sizeOpt.values.find((v) => v.title === selectedSize);
-			if (sVal) chosenIds.push(numOrStr(sVal.id));
-		}
-		if (scentOpt && selectedScent) {
-			const scVal = scentOpt.values.find((v) => v.title === selectedScent);
-			if (scVal) chosenIds.push(numOrStr(scVal.id));
-		}
-
-		const matchingVariant = product.variants.find((v) =>
-			chosenIds.every((id) => v.options.map(numOrStr).includes(id))
-		);
-
-		/* price & variant image */
-		let finalPrice = product.price || 0;
-		let finalPriceAfterDiscount = product.priceAfterDiscount || finalPrice;
-		let variantImage = "";
-		if (matchingVariant) {
-			finalPrice = matchingVariant.price / 100;
-			finalPriceAfterDiscount = finalPrice;
-			const matchImg = product.images.find((img) =>
-				img.variant_ids.includes(matchingVariant.id)
-			);
-			if (matchImg) variantImage = matchImg.src;
-		}
+		const variantContext = buildSelectedVariantContext(product);
+		const {
+			colorValue,
+			sizeValue,
+			scentValue,
+			matchingVariant,
+			finalPrice,
+			finalPriceAfterDiscount,
+			variantImage,
+			colorLabel,
+			sizeLabel,
+			scentLabel,
+		} = variantContext;
+		const previewResult = await generateCartMockupPreview(bareUrl, variantContext);
 
 		const customDesign = {
 			bareScreenshotUrl: bareUrl,
 			finalScreenshotUrl: finalUrl,
+			mockupPreviewUrl: previewResult.mockupPreviewUrl || "",
+			mockupPreviewImages: previewResult.previewImages || [],
 			originalPrintifyImageURL: variantImage,
 			occasion: selectedOccasion,
 			giftName: selectedGiftName,
 			giftMessage: buildGiftMessage(selectedOccasion, selectedGiftName),
-			size: selectedSize,
-			color: selectedColor,
-			scent: selectedScent,
+			size: sizeLabel,
+			color: colorLabel,
+			scent: scentLabel,
 			printArea: "front",
 			placementParams: {
 				x: 0.5,
@@ -2963,11 +3091,11 @@ export default function CustomizeSelectedProduct() {
 				angle: 0,
 			},
 			PrintifyProductId: product.printifyProductDetails?.id || null,
-			previewProductId: activePreviewSession?.previewProductId || null,
-			previewShopId:
-				activePreviewSession?.shopId ||
-				product.printifyProductDetails?.shop_id ||
-				null,
+			variantId: matchingVariant?.id || order.variant_id || null,
+			variantSku: matchingVariant?.sku || "",
+			variantTitle: matchingVariant?.title || "",
+			previewProductId: previewResult.previewProductId || null,
+			previewShopId: previewResult.previewShopId || null,
 			customizations: JSON.parse(
 				JSON.stringify(order.customizations || { texts: [], images: [] })
 			),
@@ -2992,25 +3120,40 @@ export default function CustomizeSelectedProduct() {
 				wasReset: !!element.wasReset,
 			})),
 			variants: {
-				color: colorOpt
-					? colorOpt.values.find((c) => c.title === selectedColor)
+				color: colorValue
+					? {
+							...colorValue,
+							label: colorLabel,
+					  }
 					: null,
-				size: sizeOpt
-					? sizeOpt.values.find((s) => s.title === selectedSize)
+				size: sizeValue
+					? {
+							...sizeValue,
+							label: sizeLabel,
+					  }
 					: null,
-				scent: scentOpt
-					? scentOpt.values.find((s) => s.title === selectedScent)
+				scent: scentValue
+					? {
+							...scentValue,
+							label: scentLabel,
+					  }
 					: null,
 			},
 		};
 
 		const chosenProductAttributes = {
 			SubSKU: String(Date.now()),
-			color: selectedColor,
-			size: selectedSize,
-			scent: selectedScent,
+			color: colorLabel,
+			size: sizeLabel,
+			scent: scentLabel,
+			variantId: matchingVariant?.id || order.variant_id || null,
+			variantSku: matchingVariant?.sku || "",
 			quantity: 999,
-			productImages: [],
+			productImages: previewResult.mockupPreviewUrl
+				? [{ url: previewResult.mockupPreviewUrl }]
+				: variantImage
+					? [{ url: variantImage }]
+					: [],
 			price: finalPrice,
 			priceAfterDiscount: finalPriceAfterDiscount,
 		};
@@ -3018,7 +3161,7 @@ export default function CustomizeSelectedProduct() {
 		/* â”€â”€ StepÂ 4: push to cart & emit analytics â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 		addToCart(
 			product._id,
-			selectedColor,
+			colorLabel || selectedColor,
 			1,
 			product,
 			chosenProductAttributes,
@@ -3042,27 +3185,23 @@ export default function CustomizeSelectedProduct() {
 					contents: [{ id: product._id, quantity: 1 }],
 					eventID: eventId,
 				});
-				await axios.post(
-					`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-					{
-						eventName: "AddToCart",
-						eventId,
-						email: user?.email || null,
-						phone: user?.phone || null,
-						currency: "USD",
-						value: finalPriceAfterDiscount,
-						contentIds: [product._id],
-						userAgent: window.navigator.userAgent,
-					}
-				);
+				void postFacebookConversion({
+					eventName: "AddToCart",
+					eventId,
+					email: user?.email || null,
+					phone: user?.phone || null,
+					currency: "USD",
+					value: finalPriceAfterDiscount,
+					contentIds: [product._id],
+					userAgent:
+						typeof window !== "undefined" ? window.navigator.userAgent : "",
+				});
 			}
-		} catch (analyticsErr) {
-			console.error("Analytics error", analyticsErr);
-		}
+		} catch {}
 
 		openSidebar2();
 		message.success("Added to cart with custom design!");
-		if (activePreviewSession?.previewProductId) {
+		if (previewResult.previewProductId) {
 			setIsPreviewLinkedToCart(true);
 		}
 
@@ -3152,11 +3291,12 @@ export default function CustomizeSelectedProduct() {
 					filter: (node) => !node.classList?.contains("noScreenshot"),
 				};
 				const previewNode = getBareDesignCaptureNode();
-				if (!previewNode) {
-					throw new Error("Preview capture area is not ready yet.");
-				}
-				await prepareCaptureNode(previewNode);
-				const bareBlob = await domtoimage.toBlob(previewNode, domOptions);
+			if (!previewNode) {
+				throw new Error("Preview capture area is not ready yet.");
+			}
+			const domtoimage = await getDomToImage();
+			await prepareCaptureNode(previewNode);
+			const bareBlob = await domtoimage.toBlob(previewNode, domOptions);
 				const bareCanvas = await blobToCanvas(bareBlob);
 				const bareDataURL = await compressCanvas(bareCanvas, {
 					mimeType: "image/png",
@@ -3176,39 +3316,11 @@ export default function CustomizeSelectedProduct() {
 				throw new Error("Could not prepare the design image for preview.");
 			}
 
-			const numOrStr = (value) =>
-				typeof value === "number" ? value : parseInt(value, 10);
-			const colorOpt = findProductOption(product, "color");
-			const sizeOpt = findProductOption(product, "size");
-			const scentOpt = findProductOption(product, "scent");
-
-			const chosenIds = [];
-			if (colorOpt && selectedColor) {
-				const colorValue = colorOpt.values.find(
-					(value) => value.title === selectedColor
-				);
-				if (colorValue) chosenIds.push(numOrStr(colorValue.id));
-			}
-			if (sizeOpt && selectedSize) {
-				const sizeValue = sizeOpt.values.find(
-					(value) => value.title === selectedSize
-				);
-				if (sizeValue) chosenIds.push(numOrStr(sizeValue.id));
-			}
-			if (scentOpt && selectedScent) {
-				const scentValue = scentOpt.values.find(
-					(value) => value.title === selectedScent
-				);
-				if (scentValue) chosenIds.push(numOrStr(scentValue.id));
-			}
-
-			const matchingVariant = product.variants.find((variant) =>
-				chosenIds.every((id) => variant.options.map(numOrStr).includes(id))
-			);
+			const variantContext = buildSelectedVariantContext(product);
 			const previewPayload = {
 				blueprint_id: product.printifyProductDetails?.blueprint_id,
 				print_provider_id: product.printifyProductDetails?.print_provider_id,
-				variant_id: matchingVariant?.id || order.variant_id,
+				variant_id: variantContext.matchingVariant?.id || order.variant_id,
 				design_image_url: bareUrl,
 				bare_design_image_url: bareUrl,
 				design_covers_print_area: true,
@@ -3672,8 +3784,11 @@ export default function CustomizeSelectedProduct() {
 														}}
 													>
 														{colorOpt.values.map((cObj) => (
-															<Option key={cObj.title} value={cObj.title}>
-																{cObj.title}
+															<Option
+																key={cObj.id || cObj.title}
+																value={getOptionDisplayLabel(cObj, cObj.title)}
+															>
+																{getOptionDisplayLabel(cObj, cObj.title)}
 															</Option>
 														))}
 													</Select>
@@ -4120,8 +4235,11 @@ export default function CustomizeSelectedProduct() {
 												}}
 											>
 												{colorOpt.values.map((cObj) => (
-													<Option key={cObj.title} value={cObj.title}>
-														{cObj.title}
+													<Option
+														key={cObj.id || cObj.title}
+														value={getOptionDisplayLabel(cObj, cObj.title)}
+													>
+														{getOptionDisplayLabel(cObj, cObj.title)}
 													</Option>
 												))}
 											</Select>
@@ -4380,8 +4498,11 @@ export default function CustomizeSelectedProduct() {
 										}}
 									>
 										{colorOpt.values.map((cObj) => (
-											<Option key={cObj.title} value={cObj.title}>
-												{cObj.title}
+											<Option
+												key={cObj.id || cObj.title}
+												value={getOptionDisplayLabel(cObj, cObj.title)}
+											>
+												{getOptionDisplayLabel(cObj, cObj.title)}
 											</Option>
 										))}
 									</Select>
