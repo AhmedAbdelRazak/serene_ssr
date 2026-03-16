@@ -3,7 +3,6 @@ import styled from "styled-components";
 import { useParams, useHistory, useLocation } from "react-router-dom";
 import SingleProductNoVariables from "./SingleProductNoVariables";
 import SingleProductWithVariables from "./SingleProductWithVariables";
-import { gettingSingleProduct } from "../../apiCore"; // Adjust the path if needed
 import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 
 const SingleProductMain = () => {
@@ -53,6 +52,7 @@ const SingleProductMain = () => {
 
 			const fetchProduct = async () => {
 				try {
+					const { gettingSingleProduct } = await import("../../apiCore");
 					const product = await gettingSingleProduct(
 						productSlug,
 					categorySlug,

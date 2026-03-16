@@ -2,10 +2,24 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import StarRating from "react-star-ratings";
 import { toast } from "react-toastify";
-import { productStar, comment, uncomment } from "../../apiCore"; // Import API functions
 import { isAuthenticated } from "../../auth";
 import { DeleteOutlined } from "@ant-design/icons";
-import moment from "moment";
+
+const commentDateFormatter = new Intl.DateTimeFormat("en-US", {
+	month: "long",
+	day: "numeric",
+	year: "numeric",
+	hour: "numeric",
+	minute: "2-digit",
+	second: "2-digit",
+});
+
+function formatCommentDate(value) {
+	if (!value) return "";
+	const date = new Date(value);
+	if (Number.isNaN(date.getTime())) return "";
+	return commentDateFormatter.format(date);
+}
 
 const CommentsAndRatings = ({ product, user, token }) => {
 	const [star, setStar] = useState(0);
@@ -25,12 +39,13 @@ const CommentsAndRatings = ({ product, user, token }) => {
 		setComments(safeComments);
 	}, [safeComments, safeRatings, user]);
 
-	const handleStarClick = (newRating) => {
+	const handleStarClick = async (newRating) => {
 		if (!isAuthenticated() || !user?._id || !token) {
 			toast.error("Please sign in to rate this product");
 			return;
 		}
 		setStar(newRating);
+		const { productStar } = await import("../../apiCore");
 		productStar(product._id, newRating, token, user.email, user._id).then(
 			(data) => {
 				if (data.error) {
@@ -42,13 +57,14 @@ const CommentsAndRatings = ({ product, user, token }) => {
 		);
 	};
 
-	const handleAddComment = (e) => {
+	const handleAddComment = async (e) => {
 		e.preventDefault();
 		if (!isAuthenticated()) {
 			toast.error("Please sign in to leave a comment");
 			return;
 		}
 
+		const { comment } = await import("../../apiCore");
 		comment(user._id, token, product._id, { text }).then((data) => {
 			if (data.error) {
 				toast.error(data.error);
@@ -63,8 +79,9 @@ const CommentsAndRatings = ({ product, user, token }) => {
 		});
 	};
 
-	const handleDeleteComment = (comment) => {
+	const handleDeleteComment = async (comment) => {
 		if (window.confirm("Are you sure you want to delete this comment?")) {
+			const { uncomment } = await import("../../apiCore");
 			uncomment(user._id, token, product._id, comment).then((data) => {
 				if (data.error) {
 					toast.error(data.error);
@@ -117,7 +134,7 @@ const CommentsAndRatings = ({ product, user, token }) => {
 									<CommentMeta>
 										Posted by {displayName}
 										{displayInitial ? ` ${displayInitial}.` : ""} on{" "}
-										{moment(comment.created).format("MMMM Do YYYY, h:mm:ss a")}
+										{formatCommentDate(comment.created)}
 									</CommentMeta>
 									{userRating && (
 										<UserRating>

@@ -1,13 +1,14 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import Script from "next/script";
 import { usePathname } from "next/navigation";
 import {
 	GOOGLE_ANALYTICS_ID,
 	FACEBOOK_PIXEL_ID,
 } from "@/lib/config";
-import RouteTracker from "./RouteTracker";
+
+const RouteTracker = lazy(() => import("./RouteTracker"));
 
 const HOME_TRACKER_DELAY_MS = 10000;
 const DEFAULT_TRACKER_DELAY_MS = 8000;

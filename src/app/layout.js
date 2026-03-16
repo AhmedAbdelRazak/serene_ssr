@@ -2,8 +2,7 @@ import "./globals.css";
 import "@/legacy_frontend/App.css";
 import ChromeShell from "@/components/layout/ChromeShell";
 import StyledComponentsRegistry from "@/components/layout/StyledComponentsRegistry";
-import WebVitalsReporter from "@/components/perf/WebVitalsReporter";
-import AnalyticsScripts from "@/components/tracking/AnalyticsScripts";
+import ClientTelemetry from "@/components/perf/ClientTelemetry";
 import JsonLd from "@/components/seo/JsonLd";
 import { createMetadata, organizationSchema } from "@/lib/seo";
 
@@ -87,8 +86,7 @@ export default function RootLayout({ children }) {
 			</head>
 			<body>
 				<StyledComponentsRegistry>
-					<AnalyticsScripts />
-					<WebVitalsReporter />
+					<ClientTelemetry />
 					<JsonLd data={organizationSchema()} />
 					<ChromeShell>{children}</ChromeShell>
 				</StyledComponentsRegistry>

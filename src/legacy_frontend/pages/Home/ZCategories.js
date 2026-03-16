@@ -1,6 +1,5 @@
 import React, { useCallback } from "react";
 import styled from "styled-components";
-import { Link } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import { getCloudinaryOptimizedUrl } from "../../utils/image";
 
@@ -153,7 +152,7 @@ const ZCategories = ({ allCategories }) => {
 							key={category.categorySlug}
 							onClick={() => handleCategoryClick(category.categoryName)}
 						>
-							<Link to={linkTarget}>
+							<a href={linkTarget}>
 								{imageUrl && (
 									<CategoryImageWrapper>
 										{/* 
@@ -189,7 +188,7 @@ const ZCategories = ({ allCategories }) => {
 									</CategoryImageWrapper>
 								)}
 								<CategoryName>{category.categoryName}</CategoryName>
-							</Link>
+							</a>
 						</CategoryCard>
 					);
 				})}

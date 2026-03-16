@@ -21,16 +21,6 @@ import {
 	SET_LOADING,
 	HYDRATE_CART,
 } from "./actions";
-
-import {
-	// eslint-disable-next-line
-	getWebsiteSetup,
-	// eslint-disable-next-line
-	gettingCategoriesAndSubcategories,
-	// eslint-disable-next-line
-	gettingSpecificProducts,
-	cleanupPreviewCustomDesign,
-} from "./apiCore";
 import { useLegacyRouteBootstrap } from "./bootstrap/LegacyRouteBootstrapContext";
 
 // Utility to load cart from localStorage
@@ -143,6 +133,7 @@ export const CartProvider = ({ children }) => {
 			cartItem?.customDesign?.previewShopId ||
 			cartItem?.printifyProductDetails?.shop_id;
 		try {
+			const { cleanupPreviewCustomDesign } = await import("./apiCore");
 			await cleanupPreviewCustomDesign(previewProductId, previewShopId);
 		} catch (error) {
 			console.warn("Failed to clean preview product from cart removal:", error);
@@ -238,6 +229,7 @@ export const CartProvider = ({ children }) => {
 				dispatch({ type: SET_LOADING, payload: true });
 
 				// (A) Website setup
+				const { getWebsiteSetup } = await import("./apiCore");
 				const websiteData = await getWebsiteSetup();
 				dispatch({ type: SET_WEBSITE_SETUP, payload: websiteData });
 

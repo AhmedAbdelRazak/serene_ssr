@@ -2,11 +2,180 @@
 
 import { Suspense, lazy, useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
-import NavbarTop from "@/legacy_frontend/NavbarUpdate/NavbarTop";
+import { useLegacyRouteBootstrap } from "@/legacy_frontend/bootstrap/LegacyRouteBootstrapContext";
+import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
 
+const NavbarTop = lazy(() => import("@/legacy_frontend/NavbarUpdate/NavbarTop"));
 const NavbarBottom = lazy(() => import("@/legacy_frontend/NavbarUpdate/NavbarBottom"));
 const Footer = lazy(() => import("@/legacy_frontend/Footer"));
 const ChatIcon = lazy(() => import("@/legacy_frontend/Chat/ChatIcon"));
+
+function buildFallbackLogoUrl(websiteSetup = null) {
+	const logoUrl = websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	return getCloudinaryOptimizedUrl(logoUrl, {
+		width: 300,
+		quality: "auto",
+	});
+}
+
+function PublicNavbarFallback() {
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const fallbackLogoUrl = buildFallbackLogoUrl(routeBootstrap?.websiteSetup || null);
+
+	return (
+		<>
+			<div className='serene-navbar-fallback-spacer' aria-hidden='true' />
+			<nav className='serene-navbar-fallback' aria-label='Serene Jannat primary'>
+				<a
+					className='serene-navbar-fallback__icon serene-navbar-fallback__icon--menu'
+					href='/our-products'
+					aria-label='Browse products'
+				>
+					<span />
+					<span />
+					<span />
+				</a>
+				<a className='serene-navbar-fallback__logo' href='/'>
+					<img
+						src={fallbackLogoUrl}
+						alt='Serene Jannat Shop'
+						width='441'
+						height='111'
+						decoding='async'
+						fetchPriority='high'
+					/>
+				</a>
+				<div className='serene-navbar-fallback__links'>
+					<a href='/signin'>Login</a>
+					<a href='/signup'>Register</a>
+					<a href='/sellingagent/signup'>Register as a Seller</a>
+				</div>
+				<a
+					className='serene-navbar-fallback__icon serene-navbar-fallback__icon--cart'
+					href='/cart'
+					aria-label='View cart'
+				>
+					<svg viewBox='0 0 24 24' aria-hidden='true' focusable='false'>
+						<path
+							d='M7 4H3v2h2l2.2 7.2c.1.5.6.8 1 .8h8.9c.5 0 .9-.3 1-.8L20 7H8.3l-.5-1.7A1.1 1.1 0 0 0 7 4Zm2.2 12A2.3 2.3 0 1 0 11.5 18a2.3 2.3 0 0 0-2.3-2Zm7 0a2.3 2.3 0 1 0 2.3 2 2.2 2.2 0 0 0-2.3-2Z'
+							fill='currentColor'
+						/>
+					</svg>
+				</a>
+			</nav>
+			<style jsx>{`
+				.serene-navbar-fallback {
+					display: flex;
+					align-items: center;
+					justify-content: space-between;
+					padding: 0.5rem 5rem;
+					background: var(--neutral-light);
+					box-shadow: var(--box-shadow-light);
+					position: relative;
+					z-index: 1200;
+				}
+
+				.serene-navbar-fallback-spacer {
+					display: none;
+				}
+
+				.serene-navbar-fallback__logo {
+					display: flex;
+					text-decoration: none;
+				}
+
+				.serene-navbar-fallback__logo img {
+					height: 50px;
+					width: auto;
+					display: block;
+					object-fit: cover;
+				}
+
+				.serene-navbar-fallback__links {
+					display: flex;
+					align-items: center;
+					gap: 1rem;
+					font-size: 16px;
+					font-weight: 700;
+				}
+
+				.serene-navbar-fallback__links a {
+					color: var(--primary-color-dark);
+					text-decoration: none;
+				}
+
+				.serene-navbar-fallback__icon {
+					display: none;
+					align-items: center;
+					justify-content: center;
+					width: 30px;
+					height: 30px;
+					color: var(--primary-color-dark);
+					text-decoration: none;
+					flex-shrink: 0;
+				}
+
+				.serene-navbar-fallback__icon--menu {
+					flex-direction: column;
+					gap: 4px;
+				}
+
+				.serene-navbar-fallback__icon--menu span {
+					width: 22px;
+					height: 2px;
+					border-radius: 999px;
+					background: currentColor;
+				}
+
+				.serene-navbar-fallback__icon--cart svg {
+					width: 30px;
+					height: 30px;
+				}
+
+				@media (max-width: 768px) {
+					.serene-navbar-fallback {
+						position: fixed;
+						top: 0;
+						left: 0;
+						right: 0;
+						width: 100%;
+						min-height: 66px;
+						padding: 0.5rem;
+						background: rgba(255, 255, 255, 0.98);
+						backdrop-filter: saturate(140%) blur(8px);
+						-webkit-backdrop-filter: saturate(140%) blur(8px);
+						z-index: 1250;
+					}
+
+					.serene-navbar-fallback-spacer {
+						display: block;
+						height: 66px;
+					}
+
+					.serene-navbar-fallback__icon {
+						display: inline-flex;
+					}
+
+					.serene-navbar-fallback__links {
+						display: none;
+					}
+
+					.serene-navbar-fallback__logo {
+						flex: 1;
+						justify-content: center;
+						padding: 0 0.5rem;
+					}
+				}
+
+				@media (min-width: 769px) {
+					.serene-navbar-fallback__icon {
+						display: none;
+					}
+				}
+			`}</style>
+		</>
+	);
+}
 
 export default function PublicStorefrontShell({ children }) {
 	const pathname = usePathname();
@@ -142,7 +311,9 @@ export default function PublicStorefrontShell({ children }) {
 
 	return (
 		<>
-			<NavbarTop />
+			<Suspense fallback={<PublicNavbarFallback />}>
+				<NavbarTop />
+			</Suspense>
 			{shouldRenderDesktopBottomNav ? (
 				<Suspense fallback={null}>
 					<NavbarBottom />
