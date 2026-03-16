@@ -49,7 +49,7 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 	return (
 		<Z1CartDetailsWrapper>
 			<Collapse
-				expandIconPosition='right'
+				expandIconPosition='end'
 				bordered={false}
 				expandIcon={({ isActive }) =>
 					isActive ? <FaChevronUp /> : <FaChevronDown />
@@ -407,7 +407,7 @@ const Z1CartDetails = ({ appliedCoupon, goodCoupon }) => {
 				title={null}
 				closable={true}
 				centered
-				bodyStyle={{ padding: "10px", textAlign: "center" }}
+				styles={{ body: { padding: "10px", textAlign: "center" } }}
 				maskClosable
 				width='auto'
 				zIndex={9999}

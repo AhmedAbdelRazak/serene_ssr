@@ -1,5 +1,12 @@
 // cart_context.js
-import React, { useEffect, useContext, useReducer, useState } from "react";
+import React, {
+	useCallback,
+	useContext,
+	useEffect,
+	useMemo,
+	useReducer,
+	useState,
+} from "react";
 import reducer from "./cart_reducer";
 import {
 	ADD_TO_CART,
@@ -76,30 +83,30 @@ export const CartProvider = ({ children }) => {
 	// ------------------------------------
 	// 1) Existing Cart Logic (unchanged)
 	// ------------------------------------
-	const openSidebar = () => {
+	const openSidebar = useCallback(() => {
 		dispatch({ type: SIDEBAR_OPEN });
-	};
-	const closeSidebar = () => {
+	}, []);
+	const closeSidebar = useCallback(() => {
 		dispatch({ type: SIDEBAR_CLOSE });
-	};
+	}, []);
 
-	const openSidebar2 = () => {
+	const openSidebar2 = useCallback(() => {
 		dispatch({ type: SIDEBAR_OPEN2 });
-	};
-	const closeSidebar2 = () => {
+	}, []);
+	const closeSidebar2 = useCallback(() => {
 		dispatch({ type: SIDEBAR_CLOSE2 });
-	};
+	}, []);
 
-	const openSideFilter = () => {
+	const openSideFilter = useCallback(() => {
 		dispatch({ type: SIDEFILTERS_OPEN });
-	};
-	const closeSideFilter = () => {
+	}, []);
+	const closeSideFilter = useCallback(() => {
 		dispatch({ type: SIDEFILTERS_CLOSE });
-	};
+	}, []);
 
 	// add to cart
 	// NOTE: We add a new argument "customDesign" for POD
-	const addToCart = (
+	const addToCart = useCallback((
 		id,
 		color,
 		amount,
@@ -118,14 +125,14 @@ export const CartProvider = ({ children }) => {
 				customDesign,
 			},
 		});
-	};
+	}, []);
 
 	const isSameCartEntry = (item, id, size, color) =>
 		item.id === id &&
 		(item.size?.toLowerCase() ?? "") + " " + (item.color?.toLowerCase() ?? "") ===
 			(size?.toLowerCase() ?? "") + " " + (color?.toLowerCase() ?? "");
 
-	const cleanupPreviewForCartItem = async (cartItem) => {
+	const cleanupPreviewForCartItem = useCallback(async (cartItem) => {
 		const previewProductId = cartItem?.customDesign?.previewProductId;
 		if (!previewProductId) return;
 
@@ -138,10 +145,10 @@ export const CartProvider = ({ children }) => {
 		} catch (error) {
 			console.warn("Failed to clean preview product from cart removal:", error);
 		}
-	};
+	}, []);
 
 	// remove item
-	const removeItem = async (id, size, color) => {
+	const removeItem = useCallback(async (id, size, color) => {
 		const itemsToRemove = state.cart.filter((item) =>
 			isSameCartEntry(item, id, size, color)
 		);
@@ -149,18 +156,18 @@ export const CartProvider = ({ children }) => {
 			itemsToRemove.map((item) => cleanupPreviewForCartItem(item))
 		);
 		dispatch({ type: REMOVE_CART_ITEM, payload: { id, size, color } });
-	};
+	}, [cleanupPreviewForCartItem, state.cart]);
 
 	// toggle amount
-	const toggleAmount = (id, value, chosenAttribute, newMax) => {
+	const toggleAmount = useCallback((id, value, chosenAttribute, newMax) => {
 		dispatch({
 			type: TOGGLE_CART_ITEM_AMOUNT,
 			payload: { id, value, chosenAttribute, newMax },
 		});
-	};
+	}, []);
 
 	// clear cart
-	const clearCart = async () => {
+	const clearCart = useCallback(async () => {
 		const itemsWithPreview = state.cart.filter(
 			(item) => !!item?.customDesign?.previewProductId
 		);
@@ -168,10 +175,10 @@ export const CartProvider = ({ children }) => {
 			itemsWithPreview.map((item) => cleanupPreviewForCartItem(item))
 		);
 		dispatch({ type: CLEAR_CART });
-	};
+	}, [cleanupPreviewForCartItem, state.cart]);
 
 	// change color
-	const changeColor = (
+	const changeColor = useCallback((
 		id,
 		color,
 		size,
@@ -183,23 +190,23 @@ export const CartProvider = ({ children }) => {
 			type: CHANGE_COLOR,
 			payload: { id, color, size, chosenColorImage, quantity, prevColor },
 		});
-	};
+	}, []);
 
 	// change Size
-	const changeSize = (id, size, color, quantity, prevSize) => {
+	const changeSize = useCallback((id, size, color, quantity, prevSize) => {
 		dispatch({
 			type: CHANGE_SIZE,
 			payload: { id, size, color, quantity, prevSize },
 		});
-	};
+	}, []);
 
-	const addShipmentFee = (ShippingPrice) => {
+	const addShipmentFee = useCallback((ShippingPrice) => {
 		dispatch({ type: SHIPPING_FEES, payload: { ShippingPrice } });
-	};
+	}, []);
 
-	const addShipmentDetails = (chosenShipmentDetails) => {
+	const addShipmentDetails = useCallback((chosenShipmentDetails) => {
 		dispatch({ type: SHIPPING_DETAILS, payload: { chosenShipmentDetails } });
-	};
+	}, []);
 
 	useEffect(() => {
 		dispatch({ type: HYDRATE_CART, payload: getStoredCart() });
@@ -301,26 +308,46 @@ export const CartProvider = ({ children }) => {
 	// ------------------------------------
 	// 3) Provide the Context
 	// ------------------------------------
+	const cartContextValue = useMemo(
+		() => ({
+			...state,
+			addToCart,
+			removeItem,
+			toggleAmount,
+			clearCart,
+			openSidebar,
+			closeSidebar,
+			openSidebar2,
+			closeSidebar2,
+			openSideFilter,
+			closeSideFilter,
+			addShipmentFee,
+			addShipmentDetails,
+			changeColor,
+			changeSize,
+		}),
+		[
+			addShipmentDetails,
+			addShipmentFee,
+			addToCart,
+			changeColor,
+			changeSize,
+			clearCart,
+			closeSideFilter,
+			closeSidebar,
+			closeSidebar2,
+			openSideFilter,
+			openSidebar,
+			openSidebar2,
+			removeItem,
+			state,
+			toggleAmount,
+		]
+	);
+
 	return (
 		<CartContext.Provider
-			value={{
-				...state,
-				// existing cart actions:
-				addToCart,
-				removeItem,
-				toggleAmount,
-				clearCart,
-				openSidebar,
-				closeSidebar,
-				openSidebar2,
-				closeSidebar2,
-				openSideFilter,
-				closeSideFilter,
-				addShipmentFee,
-				addShipmentDetails,
-				changeColor,
-				changeSize,
-			}}
+			value={cartContextValue}
 		>
 			{children}
 		</CartContext.Provider>

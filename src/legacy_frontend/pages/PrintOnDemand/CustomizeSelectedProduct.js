@@ -2949,16 +2949,48 @@ export default function CustomizeSelectedProduct() {
 			bareScreenshotUrl: bareUrl,
 			finalScreenshotUrl: finalUrl,
 			originalPrintifyImageURL: variantImage,
+			occasion: selectedOccasion,
+			giftName: selectedGiftName,
+			giftMessage: buildGiftMessage(selectedOccasion, selectedGiftName),
 			size: selectedSize,
 			color: selectedColor,
 			scent: selectedScent,
 			printArea: "front",
+			placementParams: {
+				x: 0.5,
+				y: 0.5,
+				scale: 1,
+				angle: 0,
+			},
 			PrintifyProductId: product.printifyProductDetails?.id || null,
 			previewProductId: activePreviewSession?.previewProductId || null,
 			previewShopId:
 				activePreviewSession?.shopId ||
 				product.printifyProductDetails?.shop_id ||
 				null,
+			customizations: JSON.parse(
+				JSON.stringify(order.customizations || { texts: [], images: [] })
+			),
+			elements: elements.map((element) => ({
+				id: element.id,
+				type: element.type,
+				text: element.text || "",
+				src: element.src || "",
+				x: element.x,
+				y: element.y,
+				width: element.width,
+				height: element.height,
+				rotation: element.rotation || 0,
+				color: element.color || "",
+				backgroundColor: element.backgroundColor || "",
+				fontFamily: element.fontFamily || "",
+				fontSize: element.fontSize || 0,
+				fontWeight: element.fontWeight || "",
+				fontStyle: element.fontStyle || "",
+				borderRadius: element.borderRadius || 0,
+				bgRemoved: !!element.bgRemoved,
+				wasReset: !!element.wasReset,
+			})),
 			variants: {
 				color: colorOpt
 					? colorOpt.values.find((c) => c.title === selectedColor)

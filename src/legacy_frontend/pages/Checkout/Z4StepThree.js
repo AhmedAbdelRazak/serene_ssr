@@ -1,23 +1,17 @@
-/* ------------------------------------------------------------------
-   Z4StepThree – Order review & Stripe Checkout redirect
-   ------------------------------------------------------------------ */
-
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import styled, { keyframes } from "styled-components";
 import { FaTrashAlt } from "react-icons/fa";
 import { useHistory } from "react-router-dom";
-import { Modal, Spin, Checkbox } from "antd";
+import { Checkbox, Modal } from "antd";
 import { toast } from "react-toastify";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
 import PayPalCheckout from "./PayPalCheckout";
-// eslint-disable-next-line
-import axios from "axios";
-
 import { signup, signin, authenticate, isAuthenticated } from "../../auth";
-import { createStripeCheckoutSession } from "../../apiCore";
-
-/* ─────────────────────────────────────────────────────────────── */
+import {
+	trackCheckoutInitiated,
+	trackPaymentInfoAdded,
+	trackPurchaseCompleted,
+} from "./checkoutAnalytics";
+import { clearCheckoutDraft } from "./checkoutState";
 
 const Z4StepThree = ({
 	step,
@@ -31,63 +25,64 @@ const Z4StepThree = ({
 	cart,
 	total_amount,
 	removeItem,
-	user,
 	setStep,
 	comments,
 	appliedCoupon,
 	goodCoupon,
+	checkoutValue,
 }) => {
 	const [isModalVisible, setIsModalVisible] = useState(false);
-	const [isLoading, setIsLoading] = useState(false);
 	const [isTermsAccepted, setIsTermsAccepted] = useState(false);
+	const checkoutInitiatedRef = useRef(false);
+	const paymentInfoTrackedRef = useRef(false);
 
 	const history = useHistory();
-
 	const [authInfo, setAuthInfo] = useState(isAuthenticated() || {});
 	const token = authInfo.token;
 	const authUser = authInfo.user;
 	const userId = authUser?._id;
 
-	/** Build the order payload ONCE so both Stripe and PayPal share it */
-	const orderData = React.useMemo(
+	const orderData = useMemo(
 		() => ({
 			productsNoVariable: cart
-				.filter((i) => !i.chosenProductAttributes)
-				.map((i) => ({
-					productId: i._id,
-					name: i.name,
-					ordered_quantity: i.amount,
-					price: i.priceAfterDiscount,
-					image: i.image,
-					isPrintifyProduct: i.isPrintifyProduct,
-					printifyProductDetails: i.printifyProductDetails,
-					customDesign: i.customDesign,
-					storeId: i.storeId,
+				.filter((item) => !item.chosenProductAttributes)
+				.map((item) => ({
+					productId: item._id,
+					name: item.name,
+					ordered_quantity: item.amount,
+					price: item.priceAfterDiscount,
+					image: item.image,
+					isPrintifyProduct: item.isPrintifyProduct,
+					printifyProductDetails: item.printifyProductDetails,
+					customDesign: item.customDesign,
+					storeId: item.storeId,
 				})),
 			chosenProductQtyWithVariables: cart
-				.filter((i) => i.chosenProductAttributes)
-				.map((i) => ({
-					productId: i._id,
-					name: i.name,
-					ordered_quantity: i.amount,
-					price: i.priceAfterDiscount,
-					image: i.chosenProductAttributes?.productImages?.[0]?.url || "",
-					chosenAttributes: i.chosenProductAttributes,
-					isPrintifyProduct: i.isPrintifyProduct,
-					printifyProductDetails: i.printifyProductDetails,
-					customDesign: i.customDesign,
+				.filter((item) => item.chosenProductAttributes)
+				.map((item) => ({
+					productId: item._id,
+					name: item.name,
+					ordered_quantity: item.amount,
+					price: item.priceAfterDiscount,
+					image: item.chosenProductAttributes?.productImages?.[0]?.url || "",
+					chosenAttributes: item.chosenProductAttributes,
+					isPrintifyProduct: item.isPrintifyProduct,
+					printifyProductDetails: item.printifyProductDetails,
+					customDesign: item.customDesign,
+					storeId: item.storeId,
 				})),
 			customerDetails: {
 				name: customerDetails.name,
 				email: customerDetails.email,
 				phone: customerDetails.phone,
+				shipToName: customerDetails.shipToName || customerDetails.name,
 				address,
 				city,
 				state,
 				zipcode,
 				userId,
 			},
-			totalOrderQty: cart.reduce((s, i) => s + i.amount, 0),
+			totalOrderQty: cart.reduce((sum, item) => sum + item.amount, 0),
 			status: "Awaiting Payment",
 			onHoldStatus: "None",
 			totalAmount: total_amount,
@@ -106,42 +101,69 @@ const Z4StepThree = ({
 			freeShipping: false,
 			shippingFees: shipmentChosen?.shippingPrice || 10,
 			paymentStatus: "Pending",
+			paymentProvider: "PayPal",
 			orderComment: comments,
 			privacyPolicyAgreement: isTermsAccepted,
+			checkoutFunnel: {
+				stage: "review",
+				checkoutStep: step,
+				checkoutValue,
+				paymentMethod: "PayPal",
+				couponCode:
+					appliedCoupon?.coupon ||
+					appliedCoupon?.name ||
+					(goodCoupon ? "applied" : ""),
+				openedAt: new Date().toISOString(),
+			},
 		}),
 		[
-			cart,
-			customerDetails,
 			address,
-			city,
-			state,
-			zipcode,
-			userId,
-			total_amount,
 			appliedCoupon,
-			goodCoupon,
-			shipmentChosen,
+			cart,
+			checkoutValue,
+			city,
 			comments,
+			customerDetails,
+			goodCoupon,
 			isTermsAccepted,
+			shipmentChosen,
+			state,
+			step,
+			total_amount,
+			userId,
+			zipcode,
 		]
 	);
 
-	const cleanOrderData = React.useMemo(() => {
+	const cleanOrderData = useMemo(() => {
 		const clone = JSON.parse(JSON.stringify(orderData));
-
 		if (clone.chosenShippingOption) {
-			const keep = ["carrierName", "shippingPrice"]; // fields the backend expects
-			Object.keys(clone.chosenShippingOption).forEach((k) => {
-				if (!keep.includes(k)) delete clone.chosenShippingOption[k];
+			const keep = ["carrierName", "shippingPrice"];
+			Object.keys(clone.chosenShippingOption).forEach((key) => {
+				if (!keep.includes(key)) delete clone.chosenShippingOption[key];
 			});
 		}
 		return clone;
 	}, [orderData]);
-	/* ───────── helpers ───────── */
 
-	/* quick validations then open modal */
+	useEffect(() => {
+		if (!isModalVisible || checkoutInitiatedRef.current) return;
+		checkoutInitiatedRef.current = true;
+		trackCheckoutInitiated({
+			cart,
+			value: checkoutValue,
+			email: customerDetails.email,
+			phone: customerDetails.phone,
+		});
+	}, [
+		cart,
+		checkoutValue,
+		customerDetails.email,
+		customerDetails.phone,
+		isModalVisible,
+	]);
+
 	const handleProceedToCheckout = async () => {
-		/* ➊  Shipping block validations */
 		if (
 			!address ||
 			!city ||
@@ -153,75 +175,101 @@ const Z4StepThree = ({
 			return toast.error("Please complete the shipping section.");
 		}
 
-		/* ➋  Guest‑only field validations */
 		if (!authInfo.user) {
 			const { name, email, phone, password, confirmPassword } = customerDetails;
 			if (!name || !email || !phone || !password || !confirmPassword) {
 				setStep(1);
 				return toast.error("Please complete all customer fields.");
 			}
-			if (name.trim().split(" ").length < 2)
-				return toast.error("First & last name required.");
-			if (!/\S+@\S+\.\S+/.test(email))
-				return toast.error("Invalid e‑mail address.");
-			if (!/^\d{10}$/.test(phone))
+			if (name.trim().split(" ").length < 2) {
+				return toast.error("First and last name are required.");
+			}
+			if (!/\S+@\S+\.\S+/.test(email)) {
+				return toast.error("Invalid email address.");
+			}
+			if (!/^\d{10}$/.test(phone)) {
 				return toast.error("Phone must be 10 digits.");
-			if (password.length < 6)
-				return toast.error("Password must be ≥ 6 characters.");
-			if (password !== confirmPassword)
+			}
+			if (password.length < 6) {
+				return toast.error("Password must be at least 6 characters.");
+			}
+			if (password !== confirmPassword) {
 				return toast.error("Passwords do not match.");
+			}
 		}
 
-		/* ➌  Ensure the guest really has an account before payment */
 		if (!authInfo.user) {
-			const ok = await handleSignupAndSignin();
-			if (!ok) return; // abort if signup/login failed
+			const authOk = await handleSignupAndSignin();
+			if (!authOk) return;
 		}
 
-		/* ➍  Open PayPal / Stripe modal */
 		setIsModalVisible(true);
 	};
 
-	/* guest account helper */
 	const handleSignupAndSignin = async () => {
-		// Already logged‑in – nothing to do
 		if (authInfo.user) return true;
 
 		const { name, email, phone, password } = customerDetails;
 
 		try {
-			/* 1) Try to sign‑in (maybe the e‑mail already exists) */
 			const signInRes = await signin({ emailOrPhone: email, password });
 			if (!signInRes.error) {
 				authenticate(signInRes, () => {});
-				setAuthInfo(isAuthenticated() || {}); // ← refresh token + _id
+				setAuthInfo(isAuthenticated() || {});
 				return true;
 			}
 
-			/* 2) Create the account */
 			const signUpRes = await signup({ name, email, password, phone });
 			if (signUpRes.error) {
 				toast.error(signUpRes.error);
 				return false;
 			}
 
-			/* 3) Log‑in the newly created account */
 			const secondSignIn = await signin({ emailOrPhone: email, password });
 			if (secondSignIn.error) {
 				toast.error(secondSignIn.error);
 				return false;
 			}
+
 			authenticate(secondSignIn, () => {});
 			setAuthInfo(isAuthenticated() || {});
 			return true;
-		} catch (err) {
-			console.error("Auth error:", err);
+		} catch (error) {
+			console.error("Auth error:", error);
 			toast.error("Cannot create or log in.");
 			return false;
 		}
 	};
 
-	/* coupon */
+	const handleTermsChange = async (event) => {
+		const accepted = event.target.checked;
+		setIsTermsAccepted(accepted);
+
+		if (accepted && !paymentInfoTrackedRef.current) {
+			paymentInfoTrackedRef.current = true;
+			await trackPaymentInfoAdded({
+				cart,
+				value: checkoutValue,
+				email: customerDetails.email,
+				phone: customerDetails.phone,
+				paymentType: "PayPal",
+			});
+		}
+	};
+
+	const handlePaymentSuccess = useCallback(async (paidOrder) => {
+		await trackPurchaseCompleted({
+			order: paidOrder || cleanOrderData,
+			email: customerDetails.email,
+			phone: customerDetails.phone,
+		});
+		clearCheckoutDraft();
+	}, [cleanOrderData, customerDetails.email, customerDetails.phone]);
+
+	const handlePaymentError = useCallback((msg) => {
+		toast.error(msg);
+	}, []);
+
 	const totalAmountAdjusted = goodCoupon
 		? (
 				total_amount -
@@ -229,66 +277,22 @@ const Z4StepThree = ({
 			).toFixed(2)
 		: total_amount;
 
-	/* ─────────  Stripe call  ───────── */
-	// eslint-disable-next-line
-	const startStripeCheckout = async () => {
-		try {
-			const authOk = await handleSignupAndSignin();
-			if (!authOk) return;
-
-			setIsLoading(true);
-			const { token, user: authUser } = isAuthenticated();
-			// eslint-disable-next-line
-			const userId = authUser?._id;
-
-			/* build backend payload */
-			const payload = cleanOrderData;
-
-			/* analytics */
-			ReactGA.event({ category: "Stripe Checkout", action: "Redirect" });
-			const fbEventId = `checkout-${Date.now()}`;
-			ReactPixel.track(
-				"InitiateCheckout",
-				{
-					currency: "USD",
-					value: Number(totalAmountAdjusted),
-					num_items: cart.length,
-					content_type: "product",
-					contents: cart.map((i) => ({ id: i._id, quantity: i.amount })),
-				},
-				{ eventID: fbEventId }
-			);
-
-			/* server call */
-			const resp = await createStripeCheckoutSession(token, payload);
-			console.log("Stripe response:", resp);
-
-			const redirectUrl = resp.redirectUrl || resp.url; // accept either
-			if (!redirectUrl) throw new Error("No redirect URL from server");
-
-			window.location.href = redirectUrl;
-		} catch (err) {
-			console.error("Stripe checkout error:", err);
-			toast.error("Unable to start payment. Please try again.");
-			setIsLoading(false);
-		}
-	};
-
-	/* UI ‑‑ unchanged below this line */
 	return (
 		<>
 			{step === 3 && (
 				<Step>
-					{/* title */}
 					<StepTitle>Review</StepTitle>
 
-					{/* customer / shipping */}
 					<ReviewDetails>
 						<ReviewItem>
 							<strong>Name:</strong> {customerDetails.name}
 						</ReviewItem>
 						<ReviewItem>
 							<strong>Phone:</strong> {customerDetails.phone}
+						</ReviewItem>
+						<ReviewItem>
+							<strong>Ship to Name:</strong>{" "}
+							{customerDetails.shipToName || customerDetails.name}
 						</ReviewItem>
 						<ReviewItem>
 							<strong>Ship to State:</strong> {state}
@@ -307,10 +311,9 @@ const Z4StepThree = ({
 						</ReviewItem>
 					</ReviewDetails>
 
-					{/* cart */}
 					<CartItems>
-						{cart.map((item, i) => (
-							<CartItem key={i}>
+						{cart.map((item, index) => (
+							<CartItem key={index}>
 								<ItemImage src={item.image} alt={item.name} />
 								<ItemDetails>
 									<ItemName>Product: {item.name}</ItemName>
@@ -328,7 +331,6 @@ const Z4StepThree = ({
 						))}
 					</CartItems>
 
-					{/* totals */}
 					<TotalAmount>
 						{goodCoupon ? (
 							<DiscountedTotal>
@@ -344,66 +346,48 @@ const Z4StepThree = ({
 						<hr className='col-md-6' />
 					</TotalAmount>
 
-					{/* buttons */}
 					<ButtonWrapper>
 						<BackButton onClick={handlePreviousStep}>Back</BackButton>
 						<CheckoutButton onClick={handleProceedToCheckout}>
 							Proceed to Checkout
 						</CheckoutButton>
 						<ClearCartButton onClick={() => history.push("/our-products")}>
-							Continue Shopping…
+							Continue Shopping...
 						</ClearCartButton>
 					</ButtonWrapper>
 
-					{/* modal */}
 					<Modal
 						title='Confirm & Pay Securely'
 						open={isModalVisible}
 						onCancel={() => setIsModalVisible(false)}
 						footer={null}
 					>
-						{isLoading ? (
-							<Spin />
-						) : isTermsAccepted ? (
-							<>
-								{/* Stripe button (unchanged) */}
-								{/* <PayNowButton onClick={startStripeCheckout}>
-									Pay with Card — Secure Stripe Checkout
-								</PayNowButton> */}
+						<TermsWrapper>
+							<Checkbox checked={isTermsAccepted} onChange={handleTermsChange}>
+								I agree to the terms and conditions
+							</Checkbox>
+							<TermsLink
+								href='/privacy-policy-terms-conditions'
+								target='_blank'
+								rel='noreferrer'
+							>
+								Click here to read our terms and conditions
+							</TermsLink>
+							<TermsNote>
+								Accept the terms to load the secure payment options below.
+							</TermsNote>
+						</TermsWrapper>
 
-								{/* PayPal wallet + inline card */}
-								<div style={{ marginTop: 20 }}>
-									{/* {isLoading && <Spin style={{ marginBottom: 16 }} />} */}
-									<PayPalCheckout
-										orderData={cleanOrderData}
-										authToken={token}
-										onLoading={setIsLoading}
-										onError={(msg) => toast.error(msg)}
-									/>
-								</div>
-							</>
-						) : (
-							<TermsWrapper>
-								<Checkbox
-									checked={isTermsAccepted}
-									onChange={(e) => {
-										ReactGA.event({
-											category: "User Accepted Terms And Conditions",
-											action: "User Accepted Terms And Conditions",
-										});
-										setIsTermsAccepted(e.target.checked);
-									}}
-								>
-									I agree to the terms and conditions
-								</Checkbox>
-								<TermsLink
-									href='/privacy-policy-terms-conditions'
-									target='_blank'
-								>
-									Click here to read our terms and conditions
-								</TermsLink>
-							</TermsWrapper>
-						)}
+						{isTermsAccepted ? (
+							<div style={{ marginTop: 20 }}>
+								<PayPalCheckout
+									orderData={cleanOrderData}
+									authToken={token}
+									onError={handlePaymentError}
+									onSuccess={handlePaymentSuccess}
+								/>
+							</div>
+						) : null}
 					</Modal>
 				</Step>
 			)}
@@ -413,16 +397,17 @@ const Z4StepThree = ({
 
 export default Z4StepThree;
 
-/* ───────── styled components (unchanged) ───────── */
 const fadeIn = keyframes`
   from { opacity:0; transform:translateX(100%);} 
   to   { opacity:1; transform:translateX(0);}
 `;
+
 const Step = styled.div`
 	display: flex;
 	flex-direction: column;
 	animation: ${fadeIn} 0.5s forwards;
 `;
+
 const StepTitle = styled.h2`
 	text-align: center;
 	margin-bottom: 20px;
@@ -433,13 +418,16 @@ const StepTitle = styled.h2`
 	margin-left: auto;
 	margin-right: auto;
 	padding-bottom: 5px;
+
 	@media (max-width: 790px) {
 		width: 80%;
 	}
 `;
+
 const CartItems = styled.div`
 	margin-top: 20px;
 `;
+
 const CartItem = styled.div`
 	display: flex;
 	align-items: center;
@@ -447,6 +435,7 @@ const CartItem = styled.div`
 	border-bottom: 1px solid #ccc;
 	padding-bottom: 15px;
 `;
+
 const ItemImage = styled.img`
 	width: 80px;
 	height: 80px;
@@ -454,28 +443,33 @@ const ItemImage = styled.img`
 	border-radius: 8px;
 	margin-right: 15px;
 `;
+
 const ItemDetails = styled.div`
 	display: flex;
 	flex-direction: column;
 	width: 100%;
 	position: relative;
 `;
+
 const ItemName = styled.p`
 	font-weight: bold;
 	margin: 0 0 5px;
 	text-transform: capitalize;
 	font-size: 0.9rem;
 `;
+
 const ItemQuantity = styled.p`
 	margin: 0 10px;
 	font-size: 0.9rem;
 	font-weight: bold;
 `;
+
 const ItemPrice = styled.p`
 	font-weight: bold;
 	color: #0c1d2d;
 	font-size: 0.9rem;
 `;
+
 const RemoveButton = styled.button`
 	position: absolute;
 	right: 0;
@@ -485,10 +479,12 @@ const RemoveButton = styled.button`
 	color: red;
 	font-size: 18px;
 	cursor: pointer;
+
 	&:hover {
 		color: darkred;
 	}
 `;
+
 const TotalAmount = styled.div`
 	margin-top: 20px;
 	font-size: 1.2rem;
@@ -496,15 +492,18 @@ const TotalAmount = styled.div`
 	color: #0c1d2d;
 	text-align: center;
 `;
+
 const ButtonWrapper = styled.div`
 	display: flex;
 	justify-content: space-between;
 	margin-top: 20px;
+
 	@media (max-width: 768px) {
 		flex-direction: column;
 		align-items: center;
 	}
 `;
+
 const BackButton = styled.button`
 	padding: 10px 20px;
 	background: #ddd;
@@ -515,14 +514,17 @@ const BackButton = styled.button`
 	border-radius: 5px;
 	width: 25%;
 	cursor: pointer;
+
 	&:hover {
 		background: #ccc;
 	}
+
 	@media (max-width: 768px) {
 		width: 100%;
 		margin-bottom: 10px;
 	}
 `;
+
 const CheckoutButton = styled.button`
 	padding: 10px 20px;
 	background: black;
@@ -533,14 +535,17 @@ const CheckoutButton = styled.button`
 	width: 25%;
 	border-radius: 5px;
 	cursor: pointer;
+
 	&:hover {
 		background: #005f4e;
 	}
+
 	@media (max-width: 768px) {
 		width: 100%;
 		margin-bottom: 10px;
 	}
 `;
+
 const ClearCartButton = styled.button`
 	padding: 10px 20px;
 	background: #4c1414;
@@ -551,41 +556,56 @@ const ClearCartButton = styled.button`
 	width: 25%;
 	border-radius: 5px;
 	cursor: pointer;
+
 	&:hover {
 		background: darkred;
 	}
+
 	@media (max-width: 768px) {
 		width: 100%;
 	}
 `;
+
 const ReviewDetails = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
 	margin-bottom: 20px;
+
 	strong {
 		font-weight: bold;
 	}
 `;
+
 const ReviewItem = styled.p`
 	font-size: 1rem;
 	color: #333;
 `;
+
 const TermsWrapper = styled.div`
-	margin-top: 20px;
+	margin-top: 8px;
 	display: flex;
 	flex-direction: column;
 	align-items: flex-start;
+	gap: 8px;
 `;
+
 const TermsLink = styled.a`
 	color: var(--primary-color);
 	text-decoration: underline;
-	margin-top: 10px;
 	cursor: pointer;
+
 	&:hover {
 		color: var(--primary-color-dark);
 	}
 `;
+
+const TermsNote = styled.p`
+	margin: 0;
+	font-size: 0.9rem;
+	color: #5c5c5c;
+`;
+
 const DiscountedTotal = styled.div`
 	display: flex;
 	justify-content: center;
@@ -594,24 +614,8 @@ const DiscountedTotal = styled.div`
 	font-weight: bold;
 	color: #0c1d2d;
 `;
+
 const DiscountedPrice = styled.span`
 	margin-left: 10px;
 	font-weight: bold;
-`;
-
-// eslint-disable-next-line
-const PayNowButton = styled.button`
-	padding: 10px 20px;
-	background: var(--button-bg-primary, #25a26f);
-	color: white;
-	border: none;
-	font-size: 14px;
-	transition: 0.3s;
-	width: 100%;
-	border-radius: 5px;
-	cursor: pointer;
-	margin-top: 15px;
-	&:hover {
-		background: #14885c;
-	}
 `;

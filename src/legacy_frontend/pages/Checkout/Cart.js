@@ -1,47 +1,92 @@
-﻿import React, { useState, useEffect } from "react";
+import React, { useEffect, useState } from "react";
 import styled, { css, keyframes } from "styled-components";
+import { useHistory, useLocation } from "react-router-dom";
+import { message } from "antd";
+import { Helmet } from "react-helmet-async";
 import { useCartContext } from "../../cart_context";
+import { isAuthenticated } from "../../auth";
 import { getShippingOptions, readSingleCoupon } from "../../apiCore";
 import Z1CartDetails from "./Z1CartDetails";
 import Z2StepOne from "./Z2StepOne";
 import Z3StepTwo from "./Z3StepTwo";
 import Z4StepThree from "./Z4StepThree";
-import { useHistory } from "react-router-dom";
-import { isAuthenticated } from "../../auth";
-import { Modal, message } from "antd";
-import ReactGA from "react-ga4";
-import { Helmet } from "react-helmet-async";
-import ReactPixel from "react-facebook-pixel";
-import axios from "axios";
+import {
+	trackCheckoutContactInfoSubmitted,
+	trackCheckoutShippingInfoAdded,
+	trackCheckoutStepView,
+} from "./checkoutAnalytics";
+import {
+	buildCheckoutSearch,
+	clearCheckoutDraft,
+	parseCheckoutStep,
+	readCheckoutDraft,
+	writeCheckoutDraft,
+} from "./checkoutState";
+
+const EMPTY_CUSTOMER_DETAILS = {
+	name: "",
+	email: "",
+	phone: "",
+	password: "",
+	confirmPassword: "",
+	shipToName: "",
+};
+
+function getInitialDraft() {
+	return readCheckoutDraft() || {};
+}
+
+function clampStep(value) {
+	return Math.min(3, Math.max(1, Number(value) || 1));
+}
 
 const Cart = () => {
-	const [step, setStep] = useState(1);
-	const [customerDetails, setCustomerDetails] = useState({
-		name: "",
-		email: "",
-		phone: "",
-		password: "",
-		confirmPassword: "",
-		shipToName: "", // Added on 2024-07-13
-	});
-	const [passwordError, setPasswordError] = useState("");
-	const [allShippingOptions, setAllShippingOptions] = useState([]);
-	const [goodCoupon, setGoodCoupon] = useState(false);
-	const [appliedCoupon, setAppliedCoupon] = useState(null);
-	const [state, setState] = useState("");
-	const [address, setAddress] = useState("");
-	const [city, setCity] = useState("");
-	const [zipcode, setZipCode] = useState("");
-	const [comments, setComments] = useState("");
-	const [coupon, setCoupon] = useState("");
-	const [isModalVisible, setIsModalVisible] = useState(false);
-	const [accountType, setAccountType] = useState("");
-
-	// eslint-disable-next-line
+	const initialDraft = getInitialDraft();
 	const history = useHistory();
+	const location = useLocation();
 	const { user } = isAuthenticated();
 	const { cart, total_amount, addShipmentDetails, shipmentChosen, removeItem } =
 		useCartContext();
+
+	const [step, setStep] = useState(() =>
+		parseCheckoutStep(
+			typeof window !== "undefined" ? window.location.search : "",
+			initialDraft.step || (user?.name && user?.phone ? 2 : 1)
+		)
+	);
+	const [customerDetails, setCustomerDetails] = useState(() => ({
+		...EMPTY_CUSTOMER_DETAILS,
+		...(initialDraft.customerDetails || {}),
+	}));
+	const [passwordError, setPasswordError] = useState("");
+	const [allShippingOptions, setAllShippingOptions] = useState([]);
+	const [goodCoupon, setGoodCoupon] = useState(() => Boolean(initialDraft.goodCoupon));
+	const [appliedCoupon, setAppliedCoupon] = useState(
+		() => initialDraft.appliedCoupon || null
+	);
+	const [state, setState] = useState(() => initialDraft.state || "");
+	const [address, setAddress] = useState(() => initialDraft.address || "");
+	const [city, setCity] = useState(() => initialDraft.city || "");
+	const [zipcode, setZipCode] = useState(() => initialDraft.zipcode || "");
+	const [comments, setComments] = useState(() => initialDraft.comments || "");
+	const [coupon, setCoupon] = useState(() => initialDraft.coupon || "");
+	const [accountType, setAccountType] = useState(
+		() => initialDraft.accountType || ""
+	);
+
+	const checkoutValue =
+		goodCoupon && appliedCoupon
+			? Number(
+					total_amount - Number(total_amount) * (appliedCoupon.discount / 100)
+				)
+			: Number(total_amount);
+
+	const updateStep = (nextStep) => {
+		setStep((prevStep) => {
+			const resolved = clampStep(nextStep);
+			return prevStep === resolved ? prevStep : resolved;
+		});
+	};
 
 	const handleApplyCoupon = () => {
 		readSingleCoupon(coupon)
@@ -67,41 +112,139 @@ const Cart = () => {
 	};
 
 	useEffect(() => {
+		let isMounted = true;
 		getShippingOptions().then((data) => {
+			if (!isMounted) return;
 			if (data.error) {
 				console.log(data.error);
-			} else {
-				setAllShippingOptions(data);
+				return;
+			}
+			setAllShippingOptions(data);
+
+			const draft = readCheckoutDraft();
+			if (!draft?.shipmentChosen) return;
+
+			const matchingOption = data.find(
+				(option) => option._id === draft.shipmentChosen?._id
+			);
+			if (matchingOption) {
+				addShipmentDetails({
+					...matchingOption,
+					shippingPrice:
+						draft.shipmentChosen?.shippingPrice ?? matchingOption.shippingPrice,
+				});
+				return;
+			}
+
+			if (draft.shipmentChosen?.carrierName) {
+				addShipmentDetails(draft.shipmentChosen);
 			}
 		});
 
-		if (user && user.name && user.phone) {
-			// skip step 1
-			setStep(2);
-			setCustomerDetails({
-				...customerDetails,
-				name: user.name,
-				email: user.email,
-				phone: user.phone,
-			});
-		}
-		// If user is logged in but phone might be missing:
-		else if (user && user.name) {
-			// Keep user on step 1 so they can fill in phone
-			setStep(1);
-			setCustomerDetails({
-				...customerDetails,
-				name: user.name,
-				email: user.email,
-				phone: "",
-			});
+		return () => {
+			isMounted = false;
+		};
+	}, [addShipmentDetails]);
+
+	useEffect(() => {
+		if (!user?.name) return;
+
+		setCustomerDetails((prevDetails) => {
+			const nextName = prevDetails.name || user.name;
+			const nextEmail = prevDetails.email || user.email || "";
+			const nextPhone = prevDetails.phone || user.phone || "";
+			const nextShipToName = prevDetails.shipToName || user.name || "";
+			const sameDetails =
+				prevDetails.name === nextName &&
+				prevDetails.email === nextEmail &&
+				prevDetails.phone === nextPhone &&
+				prevDetails.shipToName === nextShipToName;
+
+			if (sameDetails) {
+				return prevDetails;
+			}
+
+			return {
+				...prevDetails,
+				name: nextName,
+				email: nextEmail,
+				phone: nextPhone,
+				shipToName: nextShipToName,
+			};
+		});
+	}, [user?.email, user?.name, user?.phone]);
+
+	useEffect(() => {
+		const params = new URLSearchParams(
+			location.search.startsWith("?")
+				? location.search.slice(1)
+				: location.search
+		);
+		if (!params.has("step")) {
+			return;
 		}
 
-		// eslint-disable-next-line
-	}, []);
+		const stepFromSearch = parseCheckoutStep(location.search, 1);
+		setStep((prevStep) => (prevStep === stepFromSearch ? prevStep : stepFromSearch));
+	}, [location.search]);
+
+	useEffect(() => {
+		const nextSearch = buildCheckoutSearch(location.search, step);
+		if (nextSearch !== location.search) {
+			history.replace({
+				pathname: location.pathname,
+				search: nextSearch,
+			});
+		}
+	}, [history, location.pathname, location.search, step]);
+
+	useEffect(() => {
+		if (!cart?.length) {
+			clearCheckoutDraft();
+			return;
+		}
+
+		writeCheckoutDraft({
+			step,
+			customerDetails,
+			goodCoupon,
+			appliedCoupon,
+			state,
+			address,
+			city,
+			zipcode,
+			comments,
+			coupon,
+			accountType,
+			shipmentChosen:
+				shipmentChosen && shipmentChosen.carrierName ? shipmentChosen : null,
+		});
+	}, [
+		accountType,
+		address,
+		appliedCoupon,
+		cart,
+		city,
+		comments,
+		coupon,
+		customerDetails,
+		goodCoupon,
+		shipmentChosen,
+		state,
+		step,
+		zipcode,
+	]);
+
+	useEffect(() => {
+		if (!cart?.length) return;
+		trackCheckoutStepView({
+			step,
+			cart,
+			value: checkoutValue,
+		});
+	}, [cart, checkoutValue, step]);
 
 	const handleNextStep = () => {
-		// Step 1 validation
 		if (step === 1) {
 			const { name, email, phone, password, confirmPassword } = customerDetails;
 
@@ -136,48 +279,12 @@ const Cart = () => {
 			}
 
 			setPasswordError("");
-
-			// 1) Google Analytics
-			ReactGA.event({
-				category: "Checkout Page Customer Added Info",
-				action: "Checkout Page Customer Added Info",
+			trackCheckoutContactInfoSubmitted({
+				cart,
+				value: checkoutValue,
 			});
-
-			// 2) Facebook Pixel
-			const eventIdStep1 = `checkoutStep1-${Date.now()}`;
-			ReactPixel.track(
-				"Checkout Page Customer Added Info",
-				{
-					action: "Checkout Page Customer Added Info",
-					page: "Cart Page",
-				},
-				{
-					eventID: eventIdStep1,
-				}
-			);
-
-			// 3) Server-Side Conversions API
-			axios
-				.post(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
-					eventName: "Checkout Page Customer Added Info",
-					eventId: eventIdStep1,
-					email: isAuthenticated()?.user?.email || null,
-					phone: isAuthenticated()?.user?.phone || null,
-					currency: "USD",
-					value: 0,
-					contentIds: ["checkoutStep1"], // just a placeholder
-					userAgent: window.navigator.userAgent,
-					// omit clientIpAddress so the server can pick it up from req.ip
-				})
-				.then(() => {
-					// optional: console.log("Step 1 Conversions API call success");
-				})
-				.catch((err) => {
-					console.error("Step 1 Conversions API call error:", err);
-				});
 		}
 
-		// Step 2 validation
 		if (step === 2) {
 			if (
 				!customerDetails.shipToName ||
@@ -204,92 +311,18 @@ const Cart = () => {
 				return;
 			}
 
-			// 1) Google Analytics
-			ReactGA.event({
-				category: "Checkout Page Customer Added Shipping Details",
-				action: "Checkout Page Customer Added Shipping Details",
+			trackCheckoutShippingInfoAdded({
+				cart,
+				value: checkoutValue,
+				shippingTier: shipmentChosen?.carrierName || "",
 			});
-
-			// 2) Facebook Pixel
-			const eventIdStep2 = `checkoutStep2-${Date.now()}`;
-			ReactPixel.track(
-				"Checkout Page Customer Added Shipping Details",
-				{
-					action: "Checkout Page Customer Added Shipping Details",
-					page: "Cart Page",
-				},
-				{
-					eventID: eventIdStep2,
-				}
-			);
-
-			// 3) Server-Side Conversions API
-			axios
-				.post(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
-					eventName: "Checkout Page Customer Added Shipping Details",
-					eventId: eventIdStep2,
-					email: isAuthenticated()?.user?.email || null,
-					phone: isAuthenticated()?.user?.phone || null,
-					currency: "USD",
-					value: 0,
-					contentIds: ["checkoutStep2"],
-					userAgent: window.navigator.userAgent,
-				})
-				.then(() => {
-					// optional: console.log("Step 2 Conversions API call success");
-				})
-				.catch((err) => {
-					console.error("Step 2 Conversions API call error:", err);
-				});
 		}
 
-		// Step 3
-		if (step === 3) {
-			// 1) Google Analytics
-			ReactGA.event({
-				category: "Checkout Page Customer Reviewing Order",
-				action: "Checkout Page Customer Reviewing Order",
-			});
-
-			// 2) Facebook Pixel
-			const eventIdStep3 = `checkoutStep3-${Date.now()}`;
-			ReactPixel.track(
-				"Checkout Page Customer Reviewing Order",
-				{
-					action: "Checkout Page Customer Reviewing Order",
-					page: "Cart Page",
-				},
-				{
-					eventID: eventIdStep3,
-				}
-			);
-
-			// 3) Server-Side Conversions API
-			axios
-				.post(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
-					eventName: "Checkout Page Customer Reviewing Order",
-					eventId: eventIdStep3,
-					email: isAuthenticated()?.user?.email || null,
-					phone: isAuthenticated()?.user?.phone || null,
-					currency: "USD",
-					value: 0,
-					contentIds: ["checkoutStep3"],
-					userAgent: window.navigator.userAgent,
-				})
-				.then(() => {
-					// optional: console.log("Step 3 Conversions API call success");
-				})
-				.catch((err) => {
-					console.error("Step 3 Conversions API call error:", err);
-				});
-		}
-
-		// Finally, move on to the next step
-		setStep(step + 1);
+		updateStep(step + 1);
 	};
 
 	const handlePreviousStep = () => {
-		setStep(step - 1);
+		updateStep(step - 1);
 	};
 
 	const handleCustomerDetailChange = (e) => {
@@ -308,79 +341,15 @@ const Cart = () => {
 				password: "SereneJannat123!",
 				confirmPassword: "SereneJannat123!",
 			}));
-		} else {
-			setCustomerDetails((prevDetails) => ({
-				...prevDetails,
-				password: "",
-				confirmPassword: "",
-			}));
-		}
-	};
-
-	// eslint-disable-next-line
-	const handleProceedToCheckout = () => {
-		if (
-			!address ||
-			!city ||
-			!state ||
-			!/^\d{5}$/.test(zipcode) ||
-			!shipmentChosen ||
-			!shipmentChosen.carrierName
-		) {
-			if (!address) {
-				message.error("Please provide a valid address.");
-			} else if (!city) {
-				message.error("Please provide a valid city.");
-			} else if (!state) {
-				message.error("Please select your state.");
-			} else if (!/^\d{5}$/.test(zipcode)) {
-				message.error("Please enter a valid 5-digit zipcode.");
-			} else if (!shipmentChosen || !shipmentChosen.carrierName) {
-				message.error("Please choose a shipping option.");
-			}
-			setStep(2);
 			return;
 		}
 
-		if (!user) {
-			const { name, email, phone, password, confirmPassword } = customerDetails;
-			if (!name) {
-				message.error("Please enter your name.");
-			} else if (!email) {
-				message.error("Please enter your email.");
-			} else if (!phone) {
-				message.error("Please enter your phone number.");
-			} else if (!password) {
-				message.error("Please enter your password.");
-			} else if (!confirmPassword) {
-				message.error("Please confirm your password.");
-			} else if (!/^\S+\s+\S+$/.test(name)) {
-				message.error("Please enter both first and last names.");
-			} else if (!/\S+@\S+\.\S+/.test(email)) {
-				message.error("Please enter a valid email address.");
-			} else if (!/^\d{10}$/.test(phone)) {
-				message.error("Please enter a valid 10-digit phone number.");
-			} else if (password.length < 6) {
-				message.error("Password should be at least 6 characters long.");
-			} else if (password !== confirmPassword) {
-				message.error("Passwords do not match.");
-			} else if (!/\s/.test(address)) {
-				message.error("Please ensure that the address is correct.");
-			} else {
-				message.error("Please complete all required fields.");
-			}
-			setStep(1);
-			return;
-		}
-
-		setIsModalVisible(true);
+		setCustomerDetails((prevDetails) => ({
+			...prevDetails,
+			password: "",
+			confirmPassword: "",
+		}));
 	};
-
-	useEffect(() => {
-		ReactGA.send(window.location.pathname + window.location.search);
-
-		// eslint-disable-next-line
-	}, [window.location.pathname]);
 
 	return (
 		<CartWrapper>
@@ -486,7 +455,7 @@ const Cart = () => {
 							shipmentChosen={shipmentChosen}
 							zipcode={zipcode}
 							handleZipCodeChange={(e) => setZipCode(e.target.value)}
-							customerDetails={customerDetails} // Pass customerDetails
+							customerDetails={customerDetails}
 							handleCustomerDetailChange={handleCustomerDetailChange}
 						/>
 						<Z4StepThree
@@ -502,27 +471,16 @@ const Cart = () => {
 							total_amount={total_amount}
 							removeItem={(id, size, color) => removeItem(id, size, color)}
 							user={user}
-							setStep={setStep}
+							setStep={updateStep}
 							comments={comments}
 							coupon={coupon}
 							appliedCoupon={appliedCoupon}
 							goodCoupon={goodCoupon}
+							checkoutValue={checkoutValue}
 						/>
 					</StepTransition>
 				</>
 			)}
-
-			<Modal
-				title='Thank You for Your Order!'
-				open={isModalVisible}
-				onOk={() => setIsModalVisible(false)}
-				onCancel={() => setIsModalVisible(false)}
-			>
-				<p>
-					Thank you for ordering. Your account has been created and you have
-					been logged in.
-				</p>
-			</Modal>
 		</CartWrapper>
 	);
 };
@@ -625,4 +583,3 @@ const ApplyCouponButton = styled.button`
 		margin: auto;
 	}
 `;
-
