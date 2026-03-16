@@ -1,98 +1,90 @@
 import PodListRouteClient from "@/components/public/routes/PodListRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
 import { absoluteUrl } from "@/lib/config";
+import { buildPodCollectionSeo } from "@/lib/collection-seo";
 import { getPodProducts } from "@/lib/api";
 import {
+	buildPodSelectionQuery,
 	buildProductPath,
 	getPrimaryProductImage,
 	getProductDisplayName,
 	getProductPrice,
 } from "@/lib/product-helpers";
-import { createMetadata, itemListSchema } from "@/lib/seo";
+import { breadcrumbSchema, createMetadata, itemListSchema } from "@/lib/seo";
 
 export const revalidate = 300;
 
-function getSafeSearchParamValue(source, key) {
-	const raw = source?.[key];
-	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();
-	if (typeof raw === "symbol") return "";
-	return `${raw ?? ""}`.trim();
-}
-
-function createSeoCard(product = {}) {
+function createSeoCard(product = {}, occasion = "") {
 	const title = getProductDisplayName(product);
 	const href = buildProductPath(product);
+	const query = buildPodSelectionQuery(occasion ? { occasion } : {});
 	return {
 		productId: product?._id || "",
 		title,
 		priceText: `$${getProductPrice(product).toFixed(2)}`,
-		href,
-		imageUrl: getPrimaryProductImage(product),
+		href: query ? `${href}?${query}` : href,
+		imageUrl: getPrimaryProductImage(product, occasion ? { occasion } : {}),
 		isPod: true,
 	};
 }
 
 export async function generateMetadata({ searchParams }) {
 	const resolvedSearchParams = await searchParams;
-	const occasion = getSafeSearchParamValue(resolvedSearchParams, "occasion");
-	const name = getSafeSearchParamValue(resolvedSearchParams, "name");
-	const color = getSafeSearchParamValue(resolvedSearchParams, "color");
-	const size = getSafeSearchParamValue(resolvedSearchParams, "size");
-	const scent = getSafeSearchParamValue(resolvedSearchParams, "scent");
-	const page = getSafeSearchParamValue(resolvedSearchParams, "page");
-	const hasActiveFilters = [occasion, name, color, size, scent, page].some(Boolean);
-	const personalization = [occasion, name].filter(Boolean).join(" - ");
-	const filtersSummary = [
-		color && `color: ${color}`,
-		size && `size: ${size}`,
-		scent && `scent: ${scent}`,
-		page && `page: ${page}`,
-	]
-		.filter(Boolean)
-		.join(" | ");
-	const titleSuffix = [personalization, filtersSummary].filter(Boolean).join(" | ");
+	const seoState = buildPodCollectionSeo(resolvedSearchParams);
 	return createMetadata({
-		title: titleSuffix
-			? `Custom Gifts | ${titleSuffix}`
-			: "Custom Gifts | Print On Demand",
-		description:
-			"Choose a product, personalize with your occasion and name, and preview premium Print On Demand gifts.",
+		title: seoState.title,
+		description: seoState.description,
 		pathname: "/custom-gifts",
-		keywords: [
-			"custom gifts",
-			"print on demand",
-			"personalized gifts",
-			occasion || "",
-			color || "",
-			size || "",
-			scent || "",
-		].filter(Boolean),
-		noindex: hasActiveFilters,
+		searchParams: seoState.canonicalSearchParams,
+		keywords: seoState.keywords,
+		noindex: seoState.noindex,
 	});
 }
 
-export default async function CustomGiftsPage() {
+export default async function CustomGiftsPage({ searchParams }) {
+	const resolvedSearchParams = await searchParams;
+	const seoState = buildPodCollectionSeo(resolvedSearchParams);
 	let seoCards = [];
 	try {
 		const products = await getPodProducts({ revalidate: 180, limit: 12, lite: true });
 		seoCards = Array.isArray(products)
-			? products.slice(0, 12).map(createSeoCard).filter((card) => card.href)
+			? products
+					.slice(0, 12)
+					.map((product) => createSeoCard(product, seoState.occasion))
+					.filter((card) => card.href)
 			: [];
 	} catch {}
 
+	const canonicalSuffix = seoState.canonicalSearchParams.toString();
 	const schema = itemListSchema({
-		name: "Serene Jannat Custom Gifts",
-		url: absoluteUrl("/custom-gifts"),
+		name: seoState.schemaName,
+		url: absoluteUrl(
+			canonicalSuffix ? `/custom-gifts?${canonicalSuffix}` : "/custom-gifts"
+		),
 		items: seoCards.map((card) => ({
 			name: card.title,
 			url: absoluteUrl(card.href),
 			image: card.imageUrl,
 		})),
 	});
+	const breadcrumbs =
+		seoState.occasion && !seoState.noindex
+			? breadcrumbSchema([
+					{ name: "Home", url: absoluteUrl("/") },
+					{ name: "Custom Gifts", url: absoluteUrl("/custom-gifts") },
+					{
+						name: seoState.occasion,
+						url: absoluteUrl(
+							canonicalSuffix ? `/custom-gifts?${canonicalSuffix}` : "/custom-gifts"
+						),
+					},
+			  ])
+			: null;
 
 	return (
 		<>
 			<JsonLd data={schema} />
+			<JsonLd data={breadcrumbs} />
 			<PodListRouteClient />
 		</>
 	);

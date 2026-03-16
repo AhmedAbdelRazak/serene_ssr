@@ -57,8 +57,13 @@ export default function RootLayout({ children }) {
 						__html: `
 							(function () {
 								var path = (window.location && window.location.pathname || '/').toLowerCase();
-								// Keep homepage lean for PSI; bootstrap is injected later on interaction/client routing.
-								if (path === '/') return;
+								// Keep public storefront routes lean for PSI; bootstrap is injected only where legacy utility classes are still needed.
+								if (
+									path === '/' ||
+									path === '/our-products' ||
+									path.startsWith('/single-product') ||
+									path.startsWith('/custom-gifts')
+								) return;
 								if (document.getElementById('serene-bootstrap-css')) return;
 								var link = document.createElement('link');
 								link.id = 'serene-bootstrap-css';

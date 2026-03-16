@@ -67,20 +67,13 @@ const NavbarTop = memo(() => {
 	}, [navigate]);
 
 	// If we have a Cloudinary logo URL, generate an optimized version + WebP version
-	let optimizedLogoUrl = "";
-	let webpLogoUrl = "";
-
-	if (websiteSetup?.sereneJannatLogo?.url) {
-		const originalLogoUrl = websiteSetup.sereneJannatLogo.url;
-		optimizedLogoUrl = getCloudinaryOptimizedUrl(originalLogoUrl, {
-			width: 300,
-		});
-		// Force WebP
-		webpLogoUrl = optimizedLogoUrl.replace(
-			"/f_auto,q_auto",
-			"/f_auto,q_auto,f_webp"
-		);
-	}
+	const originalLogoUrl = websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const optimizedLogoUrl = getCloudinaryOptimizedUrl(originalLogoUrl, {
+		width: 300,
+	});
+	const webpLogoUrl = optimizedLogoUrl?.includes("/f_auto,q_auto")
+		? optimizedLogoUrl.replace("/f_auto,q_auto", "/f_auto,q_auto,f_webp")
+		: optimizedLogoUrl;
 
 	useEffect(() => {
 		setAuthState(isAuthenticated() || null);
@@ -116,22 +109,19 @@ const NavbarTop = memo(() => {
 				{/* Hamburger menu icon (mobile) */}
 				<MenuIcon onClick={() => setIsSidebarOpen(true)} />
 
-				{/* Logo (only if we have a URL) */}
-				{optimizedLogoUrl && (
-					<Link to='/' style={{ textDecoration: "none", display: "flex" }}>
-						<picture>
-							<source srcSet={webpLogoUrl} type='image/webp' />
-							<Logo
-								src={optimizedLogoUrl}
-								alt='Serene Jannat Shop'
-								width={441}
-								height={111}
-								decoding='async'
-								fetchPriority='high'
-							/>
-						</picture>
-					</Link>
-				)}
+				<Link to='/' style={{ textDecoration: "none", display: "flex" }}>
+					<picture>
+						<source srcSet={webpLogoUrl} type='image/webp' />
+						<Logo
+							src={optimizedLogoUrl}
+							alt='Serene Jannat Shop'
+							width={441}
+							height={111}
+							decoding='async'
+							fetchPriority='high'
+						/>
+					</picture>
+				</Link>
 
 				{/* Nav links (desktop) */}
 				<NavLinks>

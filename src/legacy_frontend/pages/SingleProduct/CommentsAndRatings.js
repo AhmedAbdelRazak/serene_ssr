@@ -97,8 +97,8 @@ const CommentsAndRatings = ({ product, user, token }) => {
 	};
 
 	return (
-		<CommentsAndRatingsWrapper className='container py-3 mb-5'>
-			<CommentsTitle className='mb-3'>Rate this product</CommentsTitle>
+		<CommentsAndRatingsWrapper>
+			<CommentsTitle $withBottomSpacing>Rate this product</CommentsTitle>
 			<RatingSection>
 				<StarRating
 					starDimension='25px'
@@ -177,10 +177,14 @@ export default CommentsAndRatings;
 
 const CommentsAndRatingsWrapper = styled.div`
 	margin-top: 20px;
+	margin-bottom: 3rem;
+	max-width: 1140px;
 	padding: 20px;
 	background: var(--background-light);
 	border-radius: 10px;
 	box-shadow: var(--box-shadow-light);
+	margin-left: auto;
+	margin-right: auto;
 	h3 {
 		font-weight: bold;
 		font-size: 1.3rem;
@@ -200,6 +204,7 @@ const CommentsSection = styled.div`
 const CommentsTitle = styled.h3`
 	font-size: 20px;
 	color: var(--text-color-primary);
+	margin-bottom: ${(props) => (props.$withBottomSpacing ? "1rem" : "0")};
 `;
 
 const CommentLoadingText = styled.p`

@@ -1,7 +1,11 @@
 import ShopRouteClient from "@/components/public/routes/ShopRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
 import { absoluteUrl } from "@/lib/config";
-import { getFilteredProducts } from "@/lib/api";
+import { getCategoriesAndSubcategories, getFilteredProducts } from "@/lib/api";
+import {
+	buildShopCollectionSeo,
+	getSafeSearchParamValue,
+} from "@/lib/collection-seo";
 import {
 	buildProductPath,
 	getPrimaryProductImage,
@@ -9,16 +13,9 @@ import {
 	getProductPrice,
 	isPodProduct,
 } from "@/lib/product-helpers";
-import { createMetadata, itemListSchema } from "@/lib/seo";
+import { breadcrumbSchema, createMetadata, itemListSchema } from "@/lib/seo";
 
 export const revalidate = 300;
-
-function getSafeSearchParamValue(source, key) {
-	const raw = source?.[key];
-	if (Array.isArray(raw)) return `${raw[0] ?? ""}`.trim();
-	if (typeof raw === "symbol") return "";
-	return `${raw ?? ""}`.trim();
-}
 
 function appendMultiValueParams(params, key, value) {
 	if (Array.isArray(value)) {
@@ -64,69 +61,63 @@ function createSeoCard(product = {}) {
 
 export async function generateMetadata({ searchParams }) {
 	const resolvedSearchParams = await searchParams;
-	const readableFilters = [];
-	const filterKeys = [
-		"category",
-		"color",
-		"size",
-		"gender",
-		"store",
-		"searchTerm",
-		"offers",
-		"priceMin",
-		"priceMax",
-		"page",
-	];
-	filterKeys.forEach((key) => {
-		const value = getSafeSearchParamValue(resolvedSearchParams, key);
-		if (!value) return;
-		readableFilters.push(`${key}: ${value}`);
-	});
-	const hasActiveFilters = readableFilters.length > 0;
-	const suffix = readableFilters.length ? ` | ${readableFilters.join(" | ")}` : "";
-	const dynamicKeywords = [
-		"our products",
-		"shop by category",
-		"shop by color",
-		"shop by size",
-		...readableFilters,
-	].filter(Boolean);
+	const categoriesPayload = await getCategoriesAndSubcategories({
+		revalidate: 1800,
+	}).catch(() => null);
+	const seoState = buildShopCollectionSeo(
+		resolvedSearchParams,
+		Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []
+	);
 	return createMetadata({
-		title: `Our Products${suffix}`,
-		description:
-			"Browse all products with advanced filtering by category, size, color, price, and store.",
+		title: seoState.title,
+		description: seoState.description,
 		pathname: "/our-products",
-		keywords: dynamicKeywords,
-		noindex: hasActiveFilters,
+		searchParams: seoState.canonicalSearchParams,
+		keywords: seoState.keywords,
+		noindex: seoState.noindex,
 	});
 }
 
 export default async function OurProductsPage({ searchParams }) {
 	const resolvedSearchParams = await searchParams;
-	const filters = buildFiltersQuery(resolvedSearchParams);
-	const page = Math.max(
-		1,
-		Number.parseInt(getSafeSearchParamValue(resolvedSearchParams, "page") || "1", 10) || 1
+	const categoriesPayload = await getCategoriesAndSubcategories({
+		revalidate: 1800,
+	}).catch(() => null);
+	const seoState = buildShopCollectionSeo(
+		resolvedSearchParams,
+		Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []
 	);
+	const filterSource =
+		seoState.categoryId && !getSafeSearchParamValue(resolvedSearchParams, "category")
+			? { ...resolvedSearchParams, category: seoState.categoryId }
+			: resolvedSearchParams;
+	const filters = buildFiltersQuery(filterSource);
+	const page = seoState.page;
 
 	let seoCards = [];
+	let initialRouteData = null;
 	try {
 		const productsPayload = await getFilteredProducts({
 			filters: filters || "all",
 			page,
-			records: 12,
+			records: 30,
 			revalidate: 180,
 		});
 		seoCards = Array.isArray(productsPayload?.products)
 			? productsPayload.products.slice(0, 12).map(createSeoCard).filter((card) => card.href)
 			: [];
+		initialRouteData = {
+			type: "shop",
+			filters: filters || "all",
+			page,
+			records: 30,
+			payload: productsPayload,
+		};
 	} catch {}
 
-	const canonicalSearch = new URLSearchParams(filters);
-	if (page > 1) canonicalSearch.set("page", String(page));
-	const canonicalSuffix = canonicalSearch.toString();
+	const canonicalSuffix = seoState.canonicalSearchParams.toString();
 	const schema = itemListSchema({
-		name: "Serene Jannat Our Products",
+		name: seoState.schemaName,
 		url: absoluteUrl(canonicalSuffix ? `/our-products?${canonicalSuffix}` : "/our-products"),
 		items: seoCards.map((card) => ({
 			name: card.title,
@@ -134,11 +125,25 @@ export default async function OurProductsPage({ searchParams }) {
 			image: card.imageUrl,
 		})),
 	});
+	const breadcrumbs =
+		seoState.categoryName && !seoState.noindex
+			? breadcrumbSchema([
+					{ name: "Home", url: absoluteUrl("/") },
+					{ name: "Our Products", url: absoluteUrl("/our-products") },
+					{
+						name: seoState.categoryName,
+						url: absoluteUrl(
+							canonicalSuffix ? `/our-products?${canonicalSuffix}` : "/our-products"
+						),
+					},
+			  ])
+			: null;
 
 	return (
 		<>
 			<JsonLd data={schema} />
-			<ShopRouteClient />
+			<JsonLd data={breadcrumbs} />
+			<ShopRouteClient initialRouteData={initialRouteData} />
 		</>
 	);
 }

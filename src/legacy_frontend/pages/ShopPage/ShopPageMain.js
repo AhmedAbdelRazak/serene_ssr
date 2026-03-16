@@ -1,19 +1,14 @@
 ﻿import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import styled, { keyframes } from "styled-components";
+import { Suspense, lazy } from "react";
 import {
 	Select,
-	Input,
 	Slider,
-	Row,
-	Col,
-	Card,
-	Pagination,
 	Drawer,
-	Button,
 	ConfigProvider,
 	Modal,
 } from "antd";
-import { useHistory, useLocation } from "react-router-dom";
+import { Link, useHistory, useLocation } from "react-router-dom";
 import {
 	ShoppingCartOutlined,
 	FilterOutlined,
@@ -21,11 +16,7 @@ import {
 } from "@ant-design/icons";
 import { gettingFilteredProducts, getColors, readProduct } from "../../apiCore";
 import { useCartContext } from "../../cart_context";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
-
-import ShopPageHelmet from "./ShopPageHelmet";
-import axios from "axios";
+import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 import { isAuthenticated } from "../../auth";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageSources } from "../../utils/image";
@@ -40,12 +31,42 @@ import {
 	parsePersonalizationFromSearch,
 } from "../PrintOnDemand/podPersonalization";
 
-const { Meta } = Card;
 const { Option } = Select;
-const { Search } = Input;
+const ShopPageHelmet = lazy(() => import("./ShopPageHelmet"));
 
 const MULTI_SELECT_FILTER_KEYS = ["color", "category", "size"];
 const PRICE_EPSILON = 0.01;
+
+function emitGaEvent(payload = {}) {
+	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+	try {
+		window.gtag("event", `${payload.action || "event"}`.trim(), {
+			event_category: payload.category,
+			event_label: payload.label,
+			value: payload.value,
+		});
+	} catch {}
+}
+
+function emitFbTrack(eventName, payload = {}, options = {}) {
+	if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+	try {
+		window.fbq("track", eventName, payload, options);
+	} catch {}
+}
+
+async function postFacebookConversion(payload = {}) {
+	try {
+		await fetch(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {}
+}
 
 function createDefaultFilters() {
 	return {
@@ -225,6 +246,28 @@ function isFullPriceSelection(range = [0, 0], bounds = [0, 0]) {
 	return isNearlyEqualPrice(range[0], bounds[0]) && isNearlyEqualPrice(range[1], bounds[1]);
 }
 
+function buildPaginationModel(currentPage = 1, totalPages = 1, maxVisible = 5) {
+	if (totalPages <= 1) return [1];
+	if (totalPages <= maxVisible + 2) {
+		return Array.from({ length: totalPages }, (_, index) => index + 1);
+	}
+
+	const safeCurrent = Math.min(Math.max(1, currentPage), totalPages);
+	const windowSize = Math.max(1, maxVisible);
+	let start = Math.max(2, safeCurrent - Math.floor(windowSize / 2));
+	let end = Math.min(totalPages - 1, start + windowSize - 1);
+	start = Math.max(2, end - windowSize + 1);
+
+	const items = [1];
+	if (start > 2) items.push("start-ellipsis");
+	for (let value = start; value <= end; value += 1) {
+		items.push(value);
+	}
+	if (end < totalPages - 1) items.push("end-ellipsis");
+	items.push(totalPages);
+	return items;
+}
+
 function clampPriceRange(range = [0, 1000], bounds = [0, 1000]) {
 	const minBound = Number(bounds?.[0] ?? 0);
 	const maxBound = Number(bounds?.[1] ?? 1000);
@@ -250,32 +293,160 @@ function resolvePreferredImageSources(image) {
 	return { primary: primary || "", fallback: fallback || primary || "" };
 }
 
+function expandProductsForShop(rawProducts = [], legacyCategorySlug = "") {
+	const uniqueProductMap = {};
+	const processed = (Array.isArray(rawProducts) ? rawProducts : [])
+		.map((product) => {
+			const isPOD = product?.printifyProductDetails?.POD;
+			const productAttributes = product?.productAttributes || [];
+
+			if (isPOD && productAttributes.length > 0) {
+				const colorGroups = {};
+				productAttributes.forEach((attr) => {
+					const colorCode = attr?.color || "unknown";
+					if (!colorGroups[colorCode]) {
+						colorGroups[colorCode] = [];
+					}
+					colorGroups[colorCode].push(attr);
+				});
+
+				return Object.keys(colorGroups).map((colorCode) => {
+					const attrList = colorGroups[colorCode];
+					const firstAttr = attrList?.[0] || {};
+					const colorTotalQty = attrList.reduce(
+						(acc, attr) => acc + Number(attr?.quantity || 0),
+						0
+					);
+
+					const subPrice = firstAttr?.price || 0;
+					const subPriceAfterDiscount =
+						firstAttr?.priceAfterDiscount && firstAttr.priceAfterDiscount > 0
+							? firstAttr.priceAfterDiscount
+							: subPrice;
+
+					const subProduct = {
+						...product,
+						productAttributes: attrList,
+						subColorCode: colorCode,
+						price: subPrice,
+						priceAfterDiscount: subPriceAfterDiscount,
+						quantity: colorTotalQty,
+					};
+
+					subProduct.displayImages = firstAttr?.productImages?.length
+						? firstAttr.productImages
+						: product?.thumbnailImage?.[0]?.images || [];
+
+					uniqueProductMap[`${product._id}-${colorCode}`] = subProduct;
+					return subProduct;
+				});
+			}
+
+			if (productAttributes.length > 0) {
+				const uniqueAttributes = productAttributes.reduce((acc, attr) => {
+					if (!acc[attr.color]) {
+						acc[attr.color] = {
+							...product,
+							productAttributes: [attr],
+							thumbnailImage: product?.thumbnailImage,
+						};
+					}
+					return acc;
+				}, {});
+
+				const subProducts = Object.values(uniqueAttributes);
+				subProducts.forEach((subProd) => {
+					const colorCode = subProd?.productAttributes?.[0]?.color || "default";
+					uniqueProductMap[`${product._id}-${colorCode}`] = subProd;
+				});
+				return subProducts;
+			}
+
+			uniqueProductMap[product._id] = product;
+			return [product];
+		})
+		.flat();
+
+	return legacyCategorySlug
+		? processed.filter((product) => product?.category?.categorySlug === legacyCategorySlug)
+		: processed;
+}
+
+function buildShopStateFromPayload(payload = {}, legacyCategorySlug = "") {
+	return {
+		products: expandProductsForShop(payload?.products || [], legacyCategorySlug),
+		totalRecords: Number(payload?.totalRecords || 0),
+		colors: Array.isArray(payload?.colors) ? payload.colors : [],
+		sizes: Array.isArray(payload?.sizes) ? payload.sizes : [],
+		categories: Array.isArray(payload?.categories) ? payload.categories : [],
+		genders: Array.isArray(payload?.genders) ? payload.genders : [],
+		stores: Array.isArray(payload?.stores) ? payload.stores : [],
+		priceRange: [
+			Number(payload?.priceRange?.minPrice ?? 0),
+			Number(payload?.priceRange?.maxPrice ?? 1000),
+		],
+	};
+}
+
 function ShopPageMain() {
 	const history = useHistory();
 	const location = useLocation();
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const initialShopBootstrap = routeBootstrap?.type === "shop" ? routeBootstrap : null;
+	const initialFilters = parseShopFiltersFromSearch(location.search);
+	const initialPageFromLocation = Number(
+		new URLSearchParams(location.search).get("page")
+	);
+	const initialPage =
+		Number.isFinite(initialPageFromLocation) && initialPageFromLocation > 0
+			? Math.floor(initialPageFromLocation)
+			: 1;
+	const legacyCategorySlug = useMemo(() => {
+		const params = new URLSearchParams(location.search);
+		const explicitSlug = `${params.get("categorySlug") || ""}`.trim();
+		if (explicitSlug) return explicitSlug;
+
+		const rawCategory = params.getAll("category");
+		const firstCategory = rawCategory.length ? rawCategory[0] : params.get("category");
+		const firstCategoryValue = `${firstCategory || ""}`
+			.split(",")[0]
+			.trim();
+		if (firstCategoryValue && !OBJECT_ID_REGEX.test(firstCategoryValue)) {
+			return firstCategoryValue;
+		}
+		return "";
+	}, [location.search]);
+	const initialShopState = useMemo(
+		() =>
+			initialShopBootstrap?.payload
+				? buildShopStateFromPayload(initialShopBootstrap.payload, legacyCategorySlug)
+				: null,
+		[initialShopBootstrap, legacyCategorySlug]
+	);
 
 	// Keep these states as arrays/strings by default to avoid any .map errors.
-	const [products, setProducts] = useState([]);
-	const [totalRecords, setTotalRecords] = useState(0);
+	const [products, setProducts] = useState(() => initialShopState?.products || []);
+	const [totalRecords, setTotalRecords] = useState(
+		() => initialShopState?.totalRecords || 0
+	);
 
-	const [colors, setColors] = useState([]);
-	const [sizes, setSizes] = useState([]);
-	const [categories, setCategories] = useState([]);
-	const [genders, setGenders] = useState([]);
-	const [stores, setStores] = useState([]);
-	const [priceRange, setPriceRange] = useState([0, 1000]);
+	const [colors, setColors] = useState(() => initialShopState?.colors || []);
+	const [sizes, setSizes] = useState(() => initialShopState?.sizes || []);
+	const [categories, setCategories] = useState(
+		() => initialShopState?.categories || []
+	);
+	const [genders, setGenders] = useState(() => initialShopState?.genders || []);
+	const [stores, setStores] = useState(() => initialShopState?.stores || []);
+	const [priceRange, setPriceRange] = useState(
+		() => initialShopState?.priceRange || [0, 1000]
+	);
 	const [allColors, setAllColors] = useState([]);
 
-	const initialFilters = parseShopFiltersFromSearch(location.search);
 	const [filters, setFilters] = useState(() => initialFilters);
 
-	const [page, setPage] = useState(() => {
-		const initialPage = Number(new URLSearchParams(location.search).get("page"));
-		return Number.isFinite(initialPage) && initialPage > 0
-			? Math.floor(initialPage)
-			: 1;
-	});
+	const [page, setPage] = useState(() => initialPage);
 	const [drawerVisible, setDrawerVisible] = useState(false);
+	const [isDesktopViewport, setIsDesktopViewport] = useState(false);
 
 	const initialPersonalization = resolvePodPersonalization(location.search);
 	const [podOccasion, setPodOccasion] = useState(
@@ -297,10 +468,27 @@ function ShopPageMain() {
 	const lastFetchKeyRef = useRef("");
 	const inFlightFetchKeyRef = useRef("");
 	const priceSliderInteractingRef = useRef(false);
-	const didAutoOpenPodModalRef = useRef(false);
+	const hasAppliedBootstrapRequestKeyRef = useRef(false);
 
 	// How many products per page:
-	const records = 30;
+	const records = Number(initialShopBootstrap?.records || 30) || 30;
+	const totalPages = Math.max(1, Math.ceil(totalRecords / records));
+	const paginationItems = useMemo(
+		() => buildPaginationModel(page, totalPages),
+		[page, totalPages]
+	);
+	const antTheme = useMemo(
+		() => ({
+			token: {
+				colorPrimary: "var(--primary-color)",
+				colorPrimaryHover: "var(--primary-color-dark)",
+				colorText: "var(--text-color-primary)",
+				colorBgContainer: "white",
+				borderRadius: 8,
+			},
+		}),
+		[]
+	);
 
 	const { openSidebar2, addToCart } = useCartContext();
 	const auth = isAuthenticated() || {};
@@ -318,9 +506,39 @@ function ShopPageMain() {
 	}, []);
 
 	useEffect(() => {
-		const resolved = resolvePodPersonalization(location.search);
-		setPodOccasion(resolved.occasion);
-		setPodName(resolved.name);
+		if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+			return undefined;
+		}
+
+		const mediaQuery = window.matchMedia("(min-width: 577px)");
+		const syncViewport = () => {
+			setIsDesktopViewport(mediaQuery.matches);
+		};
+
+		syncViewport();
+		if (typeof mediaQuery.addEventListener === "function") {
+			mediaQuery.addEventListener("change", syncViewport);
+			return () => {
+				mediaQuery.removeEventListener("change", syncViewport);
+			};
+		}
+
+		mediaQuery.addListener(syncViewport);
+		return () => {
+			mediaQuery.removeListener(syncViewport);
+		};
+	}, []);
+
+	useEffect(() => {
+		if (!location.pathname.includes("/our-products")) return;
+		const resolvedFromSearch = parsePersonalizationFromSearch(location.search);
+		if (!resolvedFromSearch) return;
+		setPodOccasion((prev) =>
+			prev === resolvedFromSearch.occasion ? prev : resolvedFromSearch.occasion
+		);
+		setPodName((prev) =>
+			prev === resolvedFromSearch.name ? prev : resolvedFromSearch.name
+		);
 	}, [location.search]);
 
 	const commitPodPersonalization = useCallback((occasion, name) => {
@@ -338,35 +556,11 @@ function ShopPageMain() {
 	}, [location.pathname, location.search]);
 
 	useEffect(() => {
-		if (!location.pathname.includes("/our-products")) return;
-		if (didAutoOpenPodModalRef.current) return;
-		didAutoOpenPodModalRef.current = true;
-		setPendingPodProduct(null);
-		setShowPodWelcomeModal(true);
-	}, [location.pathname]);
-
-	useEffect(() => {
 		if (showPodWelcomeModal) {
 			// Re-mount wrappers so the two-beat animation always replays on open.
 			setPodFieldPulseKey((prev) => prev + 1);
 		}
 	}, [showPodWelcomeModal]);
-
-	const legacyCategorySlug = useMemo(() => {
-		const params = new URLSearchParams(location.search);
-		const explicitSlug = `${params.get("categorySlug") || ""}`.trim();
-		if (explicitSlug) return explicitSlug;
-
-		const rawCategory = params.getAll("category");
-		const firstCategory = rawCategory.length ? rawCategory[0] : params.get("category");
-		const firstCategoryValue = `${firstCategory || ""}`
-			.split(",")[0]
-			.trim();
-		if (firstCategoryValue && !OBJECT_ID_REGEX.test(firstCategoryValue)) {
-			return firstCategoryValue;
-		}
-		return "";
-	}, [location.search]);
 
 	const handlePodWelcomeClose = () => {
 		commitPodPersonalization(podOccasion, podName);
@@ -421,132 +615,44 @@ function ShopPageMain() {
 				lastFetchKeyRef.current = "";
 			} else {
 				lastFetchKeyRef.current = requestKey;
-				// We'll use a map to ensure uniqueness
-				const uniqueProductMap = {};
-
-				const processed = (data.products || [])
-					.map((product) => {
-						const isPOD = product?.printifyProductDetails?.POD;
-						const productAttributes = product?.productAttributes || [];
-
-						// ==========================
-						// 1) POD PRODUCTS (isPOD)
-						// ==========================
-						if (isPOD && productAttributes.length > 0) {
-							// Group attributes by color code
-							const colorGroups = {};
-							productAttributes.forEach((attr) => {
-								const c = attr?.color || "unknown"; // fallback
-								if (!colorGroups[c]) {
-									colorGroups[c] = [];
-								}
-								colorGroups[c].push(attr);
-							});
-
-							// For each color group, create a sub-product
-							return Object.keys(colorGroups).map((colorCode) => {
-								const attrList = colorGroups[colorCode];
-								const firstAttr = attrList?.[0] || {};
-								const colorTotalQty = attrList.reduce(
-									(acc, a) => acc + (a.quantity || 0),
-									0
-								);
-
-								// Decide a price from first attribute
-								const subPrice = firstAttr?.price || 0;
-								const subPriceAfterDiscount =
-									firstAttr?.priceAfterDiscount &&
-									firstAttr.priceAfterDiscount > 0
-										? firstAttr.priceAfterDiscount
-										: subPrice;
-
-								// Build a sub-product
-								const subProduct = {
-									...product,
-									productAttributes: attrList,
-									subColorCode: colorCode,
-									price: subPrice,
-									priceAfterDiscount: subPriceAfterDiscount,
-									quantity: colorTotalQty,
-								};
-
-								// If the attribute has images, use them; otherwise fallback
-								const imagesToShow = firstAttr?.productImages?.length
-									? firstAttr.productImages
-									: product?.thumbnailImage?.[0]?.images || [];
-
-								subProduct.displayImages = imagesToShow;
-
-								// Store in unique map
-								const key = `${product._id}-${colorCode}`;
-								uniqueProductMap[key] = subProduct;
-								return subProduct;
-							});
-						}
-
-						// ==========================
-						// 2) NON-POD PRODUCTS
-						// ==========================
-							if (productAttributes.length > 0) {
-								// Expand by color, 1 card per color
-								const uniqueAttributes = productAttributes.reduce((acc, attr) => {
-									if (!acc[attr.color]) {
-										acc[attr.color] = {
-											...product,
-											productAttributes: [attr],
-										thumbnailImage: product?.thumbnailImage,
-									};
-								}
-								return acc;
-							}, {});
-
-							const subArray = Object.values(uniqueAttributes);
-							subArray.forEach((subProd) => {
-								const colorCode =
-									subProd?.productAttributes?.[0]?.color || "default";
-								const key = `${product._id}-${colorCode}`;
-								uniqueProductMap[key] = subProd;
-							});
-							return subArray;
-						} else {
-							// Simple product
-							uniqueProductMap[product._id] = product;
-							return [product];
-						}
-					})
-					.flat();
-
-				const shouldApplyLegacySlugFilter =
-					legacyCategorySlug && (!filters?.category || filters.category.length === 0);
-				const finalProducts = shouldApplyLegacySlugFilter
-					? processed.filter(
-							(p) => p?.category?.categorySlug === legacyCategorySlug
-						)
-					: processed;
-
-				setProducts(finalProducts);
-				setTotalRecords(data?.totalRecords || 0);
-				setColors(data?.colors || []);
-				setSizes(data?.sizes || []);
-				setCategories(data?.categories || []);
-				setGenders(data?.genders || []);
-				setStores(data?.stores || []);
-				const nextPriceRange = [
-					Number(data?.priceRange?.minPrice ?? 0),
-					Number(data?.priceRange?.maxPrice ?? 1000),
-				];
+				const nextShopState = buildShopStateFromPayload(data, legacyCategorySlug);
+				setProducts(nextShopState.products);
+				setTotalRecords(nextShopState.totalRecords);
+				setColors(nextShopState.colors);
+				setSizes(nextShopState.sizes);
+				setCategories(nextShopState.categories);
+				setGenders(nextShopState.genders);
+				setStores(nextShopState.stores);
 				setPriceRange((prevRange) => {
 					if (
-						prevRange[0] === nextPriceRange[0] &&
-						prevRange[1] === nextPriceRange[1]
+						prevRange[0] === nextShopState.priceRange[0] &&
+						prevRange[1] === nextShopState.priceRange[1]
 					) {
 						return prevRange;
 					}
-					return nextPriceRange;
+					return nextShopState.priceRange;
 				});
 			}
 		});
 	}, [filters, isPriceFilterActive, legacyCategorySlug, page, records]);
+
+	useEffect(() => {
+		if (!initialShopBootstrap?.payload) return;
+		if (hasAppliedBootstrapRequestKeyRef.current) return;
+		const queryParams = new URLSearchParams(buildApiFilterQueryString(filters));
+		if (isPriceFilterActive) {
+			const safeMin = Number(filters.priceMin);
+			const safeMax = Number(filters.priceMax);
+			if (Number.isFinite(safeMin)) {
+				queryParams.set("priceMin", String(safeMin));
+			}
+			if (Number.isFinite(safeMax)) {
+				queryParams.set("priceMax", String(safeMax));
+			}
+		}
+		lastFetchKeyRef.current = `${queryParams.toString()}|${page}|${records}`;
+		hasAppliedBootstrapRequestKeyRef.current = true;
+	}, [filters, initialShopBootstrap, isPriceFilterActive, page, records]);
 
 	// 1) We only fetch products on filters/page changes
 	useEffect(() => {
@@ -559,18 +665,6 @@ function ShopPageMain() {
 			setPage(totalPages);
 		}
 	}, [page, records, totalRecords]);
-
-	// 2) We only scroll to top once on initial mount
-	useEffect(() => {
-		const timer = window.setTimeout(() => {
-			window.scrollTo({ top: 0, behavior: "smooth" });
-		}, 200);
-
-		// Cleanup the timer when unmounting
-		return () => {
-			window.clearTimeout(timer);
-		};
-	}, []);
 
 	const formatReadableColor = useCallback(
 		(rawColor = "") => {
@@ -660,6 +754,7 @@ function ShopPageMain() {
 	const buildShopSearchFromFilters = useCallback(
 		(nextFilters, nextPage) => {
 			const params = new URLSearchParams();
+			const currentSearchParams = new URLSearchParams(location.search);
 			if (legacyCategorySlug && (!nextFilters.category || nextFilters.category.length === 0)) {
 				params.set("categorySlug", legacyCategorySlug);
 			}
@@ -685,14 +780,19 @@ function ShopPageMain() {
 				}
 			}
 			if (nextPage > 1) params.set("page", String(nextPage));
+			const currentOccasion = currentSearchParams.get("occasion");
+			const currentName = currentSearchParams.get("name");
+			if (currentOccasion) params.set("occasion", currentOccasion);
+			if (currentName) params.set("name", currentName);
 
 			const serialized = params.toString();
 			return serialized ? `?${serialized}` : "";
 		},
-		[isPriceFilterActive, legacyCategorySlug, priceRange]
+		[isPriceFilterActive, legacyCategorySlug, location.search, priceRange]
 	);
 
 	useEffect(() => {
+		if (!location.pathname.includes("/our-products")) return;
 		const nextFilters = parseShopFiltersFromSearch(location.search);
 		setFilters((prev) => {
 			const same =
@@ -718,7 +818,7 @@ function ShopPageMain() {
 		setIsPriceFilterActive((prevActive) =>
 			prevActive === hasPriceParams ? prevActive : hasPriceParams
 		);
-	}, [location.search]);
+	}, [location.pathname, location.search]);
 
 	useEffect(() => {
 		setSearchInput((prevInput) =>
@@ -738,6 +838,7 @@ function ShopPageMain() {
 	}, [colors, filters.color, resolveColorFilterValue]);
 
 	useEffect(() => {
+		if (!location.pathname.includes("/our-products")) return;
 		const nextSearch = buildShopSearchFromFilters(filters, page);
 		if (nextSearch !== location.search) {
 			history.replace({ pathname: location.pathname, search: nextSearch });
@@ -797,6 +898,17 @@ function ShopPageMain() {
 				: { ...prev, searchTerm: normalizedSearch }
 		);
 		setPage(1);
+	}, []);
+
+	const getPaginationSearch = useCallback(
+		(nextPage) => buildShopSearchFromFilters(filters, nextPage),
+		[buildShopSearchFromFilters, filters]
+	);
+
+	const handlePaginationLinkClick = useCallback(() => {
+		if (typeof window !== "undefined") {
+			window.scrollTo({ top: 0, behavior: "smooth" });
+		}
 	}, []);
 
 	const handlePriceRangeCommit = useCallback(
@@ -914,26 +1026,18 @@ function ShopPageMain() {
 	}
 
 	return (
-		<ConfigProvider
-			theme={{
-				token: {
-					colorPrimary: "var(--primary-color)",
-					colorPrimaryHover: "var(--primary-color-dark)",
-					colorText: "var(--text-color-primary)",
-					colorBgContainer: "white",
-					borderRadius: 8,
-				},
-			}}
-		>
-			{/* Helmet for SEO */}
-			<ShopPageHelmet products={products} />
+		<>
+			<Suspense fallback={null}>
+				<ShopPageHelmet products={products} />
+			</Suspense>
 
 			<ShopPageMainOverallWrapper>
 				<ShopPageMainWrapper>
-					{/* ==================== DESKTOP FILTERS ==================== */}
-						<FiltersSection>
-								<Row gutter={[16, 16]}>
-									<Col xs={24} sm={12} md={8} lg={6} xl={4}>
+					{isDesktopViewport ? (
+						<ConfigProvider theme={antTheme}>
+							<FiltersSection>
+								<FilterGrid>
+									<FilterField>
 										<Select
 											placeholder='Color'
 											style={{ width: "100%" }}
@@ -949,9 +1053,8 @@ function ShopPageMain() {
 												</Option>
 											))}
 										</Select>
-									</Col>
-
-									<Col xs={24} sm={12} md={8} lg={6} xl={4}>
+									</FilterField>
+									<FilterField>
 										<Select
 											placeholder='Category'
 											style={{ width: "100%" }}
@@ -967,9 +1070,8 @@ function ShopPageMain() {
 												</Option>
 											))}
 										</Select>
-									</Col>
-
-									<Col xs={24} sm={12} md={8} lg={6} xl={4}>
+									</FilterField>
+									<FilterField>
 										<Select
 											placeholder='Size'
 											style={{ width: "100%" }}
@@ -985,289 +1087,279 @@ function ShopPageMain() {
 												</Option>
 											))}
 										</Select>
-									</Col>
-
-								<Col xs={24} sm={12} md={8} lg={6} xl={4}>
-									<Select
-										placeholder='Gender'
-										style={{ width: "100%" }}
-										value={filters.gender}
-									onChange={(value) => handleFilterChange("gender", value)}
-								>
-									<Option value=''>All Genders</Option>
-									{genders.map((g, i) => (
-										<Option key={i} value={g.id}>
-											{g.name}
-										</Option>
-									))}
-									</Select>
-								</Col>
-
-									<Col xs={24} sm={12} md={8} lg={6} xl={4}>
+									</FilterField>
+									<FilterField>
+										<Select
+											placeholder='Gender'
+											style={{ width: "100%" }}
+											value={filters.gender}
+											onChange={(value) => handleFilterChange("gender", value)}
+										>
+											<Option value=''>All Genders</Option>
+											{genders.map((g, index) => (
+												<Option key={index} value={g.id}>
+													{g.name}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+									<FilterField>
 										<Select
 											placeholder='Store'
 											style={{ width: "100%" }}
 											value={filters.store}
 											onChange={(value) => handleFilterChange("store", value)}
-										showSearch
-										optionFilterProp='children'
-									>
-										<Option value=''>All Stores</Option>
-										{stores.map((storeEntry) => (
-											<Option
-												key={storeEntry?.id || storeEntry?.name}
-												value={storeEntry?.name || ""}
-											>
-												{storeEntry?.name || ""}
-											</Option>
-										))}
+											showSearch
+											optionFilterProp='children'
+										>
+											<Option value=''>All Stores</Option>
+											{stores.map((storeEntry) => (
+												<Option
+													key={storeEntry?.id || storeEntry?.name}
+													value={storeEntry?.name || ""}
+												>
+													{storeEntry?.name || ""}
+												</Option>
+											))}
 										</Select>
-									</Col>
-								</Row>
+									</FilterField>
+								</FilterGrid>
 
-							<Row gutter={[16, 16]} style={{ marginTop: "20px" }}>
-									<Col xs={24} lg={12}>
-									<div style={{ marginBottom: "8px" }}>Price Range</div>
-									<div
-										style={{
-											marginBottom: "8px",
-											fontSize: "0.9rem",
-											fontWeight: 600,
-										}}
-									>
-										Selected: ${draftPriceRange[0].toFixed(2)} - $
-										{draftPriceRange[1].toFixed(2)}
-									</div>
-									<Slider
-										range
-										value={draftPriceRange}
-									min={priceRange[0]}
-									max={priceRange[1]}
-									onBeforeChange={handlePriceRangeBeforeChange}
-									onChange={(val) =>
-										setDraftPriceRange(clampPriceRange(val, priceRange))
-									}
-									onAfterChange={handlePriceRangeAfterChange}
-									tooltip={{ formatter: (val) => `$${val}` }}
-								/>
-								<div
-									style={{ display: "flex", justifyContent: "space-between" }}
-								>
-									<span
-										style={{
-											fontWeight:
-												filters.priceMin === priceRange[0] ? "bold" : "normal",
-										}}
-									>
-										${priceRange[0]}
-									</span>
-									<span
-										style={{
-											fontWeight:
-												filters.priceMax === priceRange[1] ? "bold" : "normal",
-										}}
-									>
-										${priceRange[1]}
-									</span>
-								</div>
-							</Col>
+								<PriceSearchRow>
+									<PriceRangeField>
+										<FilterLabel>Price Range</FilterLabel>
+										<FilterValueText>
+											Selected: ${draftPriceRange[0].toFixed(2)} - $
+											{draftPriceRange[1].toFixed(2)}
+										</FilterValueText>
+										<Slider
+											range
+											value={draftPriceRange}
+											min={priceRange[0]}
+											max={priceRange[1]}
+											onBeforeChange={handlePriceRangeBeforeChange}
+											onChange={(val) =>
+												setDraftPriceRange(clampPriceRange(val, priceRange))
+											}
+											onAfterChange={handlePriceRangeAfterChange}
+											tooltip={{ formatter: (val) => `$${val}` }}
+										/>
+										<PriceBounds>
+											<PriceBoundLabel
+												$isActive={filters.priceMin === priceRange[0]}
+											>
+												${priceRange[0]}
+											</PriceBoundLabel>
+											<PriceBoundLabel
+												$isActive={filters.priceMax === priceRange[1]}
+											>
+												${priceRange[1]}
+											</PriceBoundLabel>
+										</PriceBounds>
+									</PriceRangeField>
 
-								<Col xs={24} lg={12} className='mt-3 py-2'>
-								<Search
+									<SearchField>
+										<SearchForm
+											onSubmit={(event) => {
+												event.preventDefault();
+												handleSearchSubmit(searchInput);
+											}}
+										>
+											<SearchInput
+												type='search'
+												placeholder='Search'
+												value={searchInput}
+												onChange={(event) => setSearchInput(event.target.value)}
+												aria-label='Search products'
+											/>
+											<SearchSubmitButton type='submit'>
+												Search
+											</SearchSubmitButton>
+										</SearchForm>
+									</SearchField>
+								</PriceSearchRow>
+
+								<FilterActionsRow>
+									<ResetButton type='button' onClick={resetFilters}>
+										<ReloadOutlined />
+										<span>Reset Filters</span>
+									</ResetButton>
+								</FilterActionsRow>
+							</FiltersSection>
+						</ConfigProvider>
+					) : (
+						<DesktopFiltersPlaceholder aria-hidden='true' />
+					)}
+
+					<SearchInputWrapper>
+						<FiltersTriggerButton type='button' onClick={showDrawer}>
+							<FilterOutlined />
+							<span>Filters</span>
+						</FiltersTriggerButton>
+						<MobileSearchField>
+							<SearchForm
+								onSubmit={(event) => {
+									event.preventDefault();
+									handleSearchSubmit(searchInput);
+								}}
+							>
+								<SearchInput
+									type='search'
 									placeholder='Search'
 									value={searchInput}
-									onChange={(e) => setSearchInput(e.target.value)}
-									onSearch={(value) => handleSearchSubmit(value)}
-									enterButton
+									onChange={(event) => setSearchInput(event.target.value)}
+									aria-label='Search products'
 								/>
-							</Col>
-						</Row>
-
-						<Row
-							gutter={[16, 16]}
-							style={{ marginTop: "20px", justifyContent: "flex-end" }}
-						>
-							<StyledButton onClick={resetFilters} icon={<ReloadOutlined />}>
-								Reset Filters
-							</StyledButton>
-						</Row>
-					</FiltersSection>
-
-					{/* ==================== MOBILE FILTERS ==================== */}
-					<SearchInputWrapper>
-						<FiltersButton icon={<FilterOutlined />} onClick={showDrawer}>
-							Filters
-						</FiltersButton>
-						<Search
-							placeholder='Search'
-							className='mx-2'
-							value={searchInput}
-							onChange={(e) => setSearchInput(e.target.value)}
-							onSearch={(value) => handleSearchSubmit(value)}
-						/>
+								<MobileSearchSubmitButton type='submit'>
+									Go
+								</MobileSearchSubmitButton>
+							</SearchForm>
+						</MobileSearchField>
 					</SearchInputWrapper>
 
-					{/* Replace "visible" with "open" to remove Drawer warning */}
-					<FiltersDrawer
-						title='Filters'
-						placement='left'
-						closable
-						onClose={closeDrawer}
-						open={drawerVisible}
-					>
-							<Row gutter={[16, 16]}>
-								<Col span={24}>
-									<Select
-										placeholder='Color'
-										style={{ width: "100%" }}
-										mode='multiple'
-										allowClear
-										maxTagCount='responsive'
-										value={filters.color}
-										onChange={(val) => handleFilterChange("color", val)}
-									>
-										{displayColorOptions.map((option) => (
-											<Option key={option.value} value={option.value}>
-												{option.label}
-										</Option>
-									))}
-								</Select>
-							</Col>
-
-								<Col span={24}>
-									<Select
-										placeholder='Category'
-										style={{ width: "100%" }}
-										mode='multiple'
-										allowClear
-										maxTagCount='responsive'
-										value={filters.category}
-										onChange={(val) => handleFilterChange("category", val)}
-									>
-										{categories.map((cat) => (
-											<Option key={cat.id} value={`${cat.id}`}>
-												{toTitleCase(cat.name)}
-											</Option>
-										))}
-									</Select>
-								</Col>
-
-								<Col span={24}>
-									<Select
-										placeholder='Size'
-										style={{ width: "100%" }}
-										mode='multiple'
-										allowClear
-										maxTagCount='responsive'
-										value={filters.size}
-										onChange={(val) => handleFilterChange("size", val)}
-									>
-										{sizes.map((size, i) => (
-											<Option key={i} value={size}>
-												{size}
-										</Option>
-									))}
-								</Select>
-							</Col>
-
-								<Col span={24}>
-									<Select
-										placeholder='Gender'
-										style={{ width: "100%" }}
-									value={filters.gender}
-									onChange={(val) => handleFilterChange("gender", val)}
-								>
-									<Option value=''>All Genders</Option>
-									{genders.map((g, i) => (
-										<Option key={i} value={g.id}>
-											{g.name}
-										</Option>
-									))}
-									</Select>
-								</Col>
-
-								<Col span={24}>
-									<Select
-										placeholder='Store'
-										style={{ width: "100%" }}
-										value={filters.store}
-										onChange={(val) => handleFilterChange("store", val)}
-										showSearch
-										optionFilterProp='children'
-									>
-										<Option value=''>All Stores</Option>
-										{stores.map((storeEntry) => (
-											<Option
-												key={storeEntry?.id || storeEntry?.name}
-												value={storeEntry?.name || ""}
-											>
-												{storeEntry?.name || ""}
-											</Option>
-										))}
-										</Select>
-									</Col>
-								</Row>
-
-						<Row gutter={[16, 16]} style={{ marginTop: "20px" }}>
-								<Col span={24}>
-									<div style={{ marginBottom: "8px" }}>Price Range</div>
-									<div
-										style={{
-											marginBottom: "8px",
-											fontSize: "0.9rem",
-											fontWeight: 600,
-										}}
-									>
-										Selected: ${draftPriceRange[0].toFixed(2)} - $
-										{draftPriceRange[1].toFixed(2)}
-									</div>
-									<Slider
-										range
-										value={draftPriceRange}
-									min={priceRange[0]}
-									max={priceRange[1]}
-									onBeforeChange={handlePriceRangeBeforeChange}
-									onChange={(val) =>
-										setDraftPriceRange(clampPriceRange(val, priceRange))
-									}
-									onAfterChange={handlePriceRangeAfterChange}
-									tooltip={{ formatter: (val) => `$${val}` }}
-								/>
-								<div
-									style={{ display: "flex", justifyContent: "space-between" }}
-								>
-									<span
-										style={{
-											fontWeight:
-												filters.priceMin === priceRange[0] ? "bold" : "normal",
-										}}
-									>
-										${priceRange[0]}
-									</span>
-									<span
-										style={{
-											fontWeight:
-												filters.priceMax === priceRange[1] ? "bold" : "normal",
-										}}
-									>
-										${priceRange[1]}
-									</span>
-								</div>
-							</Col>
-							<Row
-								gutter={[16, 16]}
-								style={{ marginTop: "20px", justifyContent: "flex-end" }}
+					{drawerVisible ? (
+						<ConfigProvider theme={antTheme}>
+							<FiltersDrawer
+								title='Filters'
+								placement='left'
+								closable
+								onClose={closeDrawer}
+								open={drawerVisible}
 							>
-								<StyledButton onClick={resetFilters} icon={<ReloadOutlined />}>
-									Reset Filters
-								</StyledButton>
-							</Row>
-						</Row>
-					</FiltersDrawer>
+								<DrawerFilterStack>
+									<FilterField>
+										<Select
+											placeholder='Color'
+											style={{ width: "100%" }}
+											mode='multiple'
+											allowClear
+											maxTagCount='responsive'
+											value={filters.color}
+											onChange={(value) => handleFilterChange("color", value)}
+										>
+											{displayColorOptions.map((option) => (
+												<Option key={option.value} value={option.value}>
+													{option.label}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+									<FilterField>
+										<Select
+											placeholder='Category'
+											style={{ width: "100%" }}
+											mode='multiple'
+											allowClear
+											maxTagCount='responsive'
+											value={filters.category}
+											onChange={(value) => handleFilterChange("category", value)}
+										>
+											{categories.map((cat) => (
+												<Option key={cat.id} value={`${cat.id}`}>
+													{toTitleCase(cat.name)}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+									<FilterField>
+										<Select
+											placeholder='Size'
+											style={{ width: "100%" }}
+											mode='multiple'
+											allowClear
+											maxTagCount='responsive'
+											value={filters.size}
+											onChange={(value) => handleFilterChange("size", value)}
+										>
+											{sizes.map((size, index) => (
+												<Option key={index} value={size}>
+													{size}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+									<FilterField>
+										<Select
+											placeholder='Gender'
+											style={{ width: "100%" }}
+											value={filters.gender}
+											onChange={(value) => handleFilterChange("gender", value)}
+										>
+											<Option value=''>All Genders</Option>
+											{genders.map((g, index) => (
+												<Option key={index} value={g.id}>
+													{g.name}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+									<FilterField>
+										<Select
+											placeholder='Store'
+											style={{ width: "100%" }}
+											value={filters.store}
+											onChange={(value) => handleFilterChange("store", value)}
+											showSearch
+											optionFilterProp='children'
+										>
+											<Option value=''>All Stores</Option>
+											{stores.map((storeEntry) => (
+												<Option
+													key={storeEntry?.id || storeEntry?.name}
+													value={storeEntry?.name || ""}
+												>
+													{storeEntry?.name || ""}
+												</Option>
+											))}
+										</Select>
+									</FilterField>
+
+									<PriceRangeField>
+										<FilterLabel>Price Range</FilterLabel>
+										<FilterValueText>
+											Selected: ${draftPriceRange[0].toFixed(2)} - $
+											{draftPriceRange[1].toFixed(2)}
+										</FilterValueText>
+										<Slider
+											range
+											value={draftPriceRange}
+											min={priceRange[0]}
+											max={priceRange[1]}
+											onBeforeChange={handlePriceRangeBeforeChange}
+											onChange={(value) =>
+												setDraftPriceRange(clampPriceRange(value, priceRange))
+											}
+											onAfterChange={handlePriceRangeAfterChange}
+											tooltip={{ formatter: (value) => `$${value}` }}
+										/>
+										<PriceBounds>
+											<PriceBoundLabel
+												$isActive={filters.priceMin === priceRange[0]}
+											>
+												${priceRange[0]}
+											</PriceBoundLabel>
+											<PriceBoundLabel
+												$isActive={filters.priceMax === priceRange[1]}
+											>
+												${priceRange[1]}
+											</PriceBoundLabel>
+										</PriceBounds>
+									</PriceRangeField>
+
+									<DrawerActionsRow>
+										<ResetButton type='button' onClick={resetFilters}>
+											<ReloadOutlined />
+											<span>Reset Filters</span>
+										</ResetButton>
+									</DrawerActionsRow>
+								</DrawerFilterStack>
+							</FiltersDrawer>
+						</ConfigProvider>
+					) : null}
 
 					{/* ==================== PRODUCT CARDS ==================== */}
 					<ProductsSection>
-						<Row gutter={[16, 16]}>
+						<ProductsGrid>
 							{products.map((prod, idx) => {
 								const isPOD = prod?.printifyProductDetails?.POD;
 
@@ -1320,272 +1412,289 @@ function ShopPageMain() {
 								const totalQty = prod?.quantity || 0;
 
 								return (
-									<Col xs={12} sm={12} md={12} lg={8} xl={4} key={idx}>
-										<ProductCard
-											hoverable
-											cover={
-												<ImageContainer>
-													<BadgeContainer>
-														{isPOD && <PodBadge>Custom Design</PodBadge>}
-														{discountPercentage > 0 && (
-															<DiscountBadge>
-																{discountPercentage}% OFF
-															</DiscountBadge>
-														)}
-													</BadgeContainer>
+									<ProductCard key={`${prod?._id || "product"}-${idx}`}>
+										<ImageContainer>
+											<BadgeContainer>
+												{isPOD && <PodBadge>Custom Design</PodBadge>}
+												{discountPercentage > 0 ? (
+													<DiscountBadge>{discountPercentage}% OFF</DiscountBadge>
+												) : null}
+											</BadgeContainer>
 
-													{totalQty > 0 ? (
-														<CartIcon
-															onClick={(e) => {
-																e.stopPropagation();
-																ReactGA.event({
-																	category: "Add To Cart",
-																	action:
-																		"User added product from Products Page",
-																	label: `User added ${prod?.productName || "unknown"}`,
-																});
+											{totalQty > 0 ? (
+												<CartIcon
+													onClick={(event) => {
+														event.stopPropagation();
+														emitGaEvent({
+															category: "Add To Cart",
+															action: "User added product from Products Page",
+															label: `User added ${prod?.productName || "unknown"}`,
+														});
 
-																ReactPixel.track("AddToCart", {
-																	// Standard Meta parameters:
-																	content_name: prod.productName,
-																	content_ids: [prod._id],
-																	content_type: "product",
-																	currency: "USD",
-																	value: prod.priceAfterDiscount || prod.price, // the price you'd like to track
+														emitFbTrack("AddToCart", {
+															content_name: prod.productName,
+															content_ids: [prod._id],
+															content_type: "product",
+															currency: "USD",
+															value: prod.priceAfterDiscount || prod.price,
+															contents: [{ id: prod._id, quantity: 1 }],
+														});
 
-																	// Optionally, you could pass `contents`:
-																	contents: [
-																		{
-																			id: prod._id,
-																			quantity: 1,
-																		},
-																	],
-																});
+														const eventId = `AddToCart-ShopMain-${prod?._id}-${Date.now()}`;
+														void postFacebookConversion({
+															eventName: "AddToCart",
+															eventId,
+															email: user?.email || "Unknown",
+															phone: user?.phone || "Unknown",
+															currency: "USD",
+															value: prod?.priceAfterDiscount || prod?.price,
+															contentIds: [prod?._id],
+															userAgent: window.navigator.userAgent,
+														});
 
-																const eventId = `AddToCart-ShopMain-${prod?._id}-${Date.now()}`;
+														readProduct(prod?._id).then((res) => {
+															if (res?.error) {
+																console.log(res.error);
+																return;
+															}
+															openSidebar2();
+															const chosenAttr =
+																prod?.productAttributes?.[0] || null;
+															addToCart(prod?._id, null, 1, res, chosenAttr);
+														});
+													}}
+												/>
+											) : (
+												<OutOfStockBadge>Out of Stock</OutOfStockBadge>
+											)}
 
-																axios.post(
-																	`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-																	{
-																		eventName: "AddToCart",
-																		eventId,
-																		email: user?.email || "Unknown",
-																		phone: user?.phone || "Unknown",
-																		currency: "USD",
-																		value:
-																			prod?.priceAfterDiscount || prod?.price,
-																		contentIds: [prod?._id],
-																		userAgent: window.navigator.userAgent,
-																	}
-																).catch(() => {});
+											{primarySrc ? (
+												<ProductImage
+													src={primarySrc}
+													fallbackSrc={fallbackSrc}
+													alt={prod?.productName || "Product Image"}
+													loading={idx < 2 ? "eager" : "lazy"}
+													fetchPriority={idx < 2 ? "high" : undefined}
+													decoding='async'
+													sizes='(max-width: 576px) 48vw, (max-width: 992px) 48vw, (max-width: 1200px) 32vw, 16vw'
+													widths={[220, 320, 420, 540, 720]}
+													onClick={() => {
+														const eventId = `Lead-ShopMain-${prod?._id}-${Date.now()}`;
 
-																readProduct(prod?._id).then((res) => {
-																	if (res?.error) {
-																		console.log(res.error);
-																	} else {
-																		openSidebar2();
-																		// pick the first attribute if you want
-																		const chosenAttr =
-																			prod?.productAttributes?.[0] || null;
-																		addToCart(
-																			prod?._id,
-																			null,
-																			1,
-																			res,
-																			chosenAttr
-																		);
-																	}
-																});
-															}}
-														/>
-													) : (
-														<OutOfStockBadge>Out of Stock</OutOfStockBadge>
-													)}
+														emitGaEvent({
+															category: "Single Product Clicked",
+															action:
+																"User Navigated To Single Product From Products Page",
+															label: `User viewed ${prod?.productName || "unknown"}`,
+														});
 
-													{primarySrc ? (
-														<ProductImage
-															src={primarySrc}
-															fallbackSrc={fallbackSrc}
-															alt={prod?.productName || "Product Image"}
-															loading='lazy'
-															decoding='async'
-															sizes='(max-width: 480px) 80vw, (max-width: 768px) 45vw, (max-width: 1200px) 30vw, 280px'
-															widths={[280, 360, 480, 600, 800, 1000]}
-															onClick={() => {
-																const eventId = `Lead-ShopMain-${prod?._id}-${Date.now()}`;
+														emitFbTrack("Lead", {
+															content_name: `User viewed ${prod?.productName || "unknown"} From Shop Page`,
+															click_type: "Shop Page Product Clicked",
+														});
 
-																ReactGA.event({
-																	category: "Single Product Clicked",
-																	action:
-																		"User Navigated To Single Product From Products Page",
-																	label: `User viewed ${prod?.productName || "unknown"}`,
-																});
+														void postFacebookConversion({
+															eventName: "Lead",
+															eventId,
+															email: user?.email || "Unknown",
+															phone: user?.phone || "Unknown",
+															currency: "USD",
+															value: 0,
+															contentIds: [prod?._id],
+															userAgent: window.navigator.userAgent,
+														});
 
-																ReactPixel.track("Lead", {
-																	content_name: `User viewed ${prod?.productName || "unknown"} From Shop Page`,
-																	click_type: "Shop Page Product Clicked",
-																	// You can add more parameters if you want
-																	// e.g. currency: "USD", value: 0
-																});
+														window.scrollTo({ top: 0, behavior: "smooth" });
+														if (
+															prod?.printifyProductDetails?.POD &&
+															shouldAskForPodPersonalization()
+														) {
+															setPendingPodProduct(prod);
+															setShowPodWelcomeModal(true);
+															return;
+														}
+														const safePersonalization = savePodPersonalization({
+															occasion: podOccasion,
+															name: podName,
+														});
+														history.push(getProductLink(prod, safePersonalization));
+													}}
+												/>
+											) : (
+												<NoImagePlaceholder>Image unavailable</NoImagePlaceholder>
+											)}
+										</ImageContainer>
 
-																axios.post(
-																	`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-																	{
-																		eventName: "Lead",
-																		eventId,
-																		email: user?.email || "Unknown", // if you have a user object
-																		phone: user?.phone || "Unknown", // likewise
-																		currency: "USD", // not essential for "Lead," but you can pass
-																		value: 0,
-																		contentIds: [prod?._id], // or any ID you want
-																		userAgent: window.navigator.userAgent,
-																	}
-																).catch(() => {});
-
-																window.scrollTo({ top: 0, behavior: "smooth" });
-																if (
-																	prod?.printifyProductDetails?.POD &&
-																	shouldAskForPodPersonalization()
-																) {
-																	setPendingPodProduct(prod);
-																	setShowPodWelcomeModal(true);
-																	return;
-																}
-																const safePersonalization =
-																	savePodPersonalization({
-																		occasion: podOccasion,
-																		name: podName,
-																	});
-																history.push(
-																	getProductLink(prod, safePersonalization)
-																);
-															}}
-														/>
-													) : (
-														<NoImagePlaceholder>
-															Image unavailable
-														</NoImagePlaceholder>
-													)}
-												</ImageContainer>
-											}
-										>
-											<Meta
-												title={prod?.productName || "Untitled Product"}
-												description={
-													originalPrice > discountedPrice ? (
-														<span>
-															<OriginalPrice>
-																Price: ${originalPrice.toFixed(2)}
-															</OriginalPrice>{" "}
-															<DiscountedPrice>
-																${discountedPrice.toFixed(2)}
-															</DiscountedPrice>
-														</span>
-													) : (
+										<ProductCardBody>
+											<ProductTitle>{prod?.productName || "Untitled Product"}</ProductTitle>
+											<ProductPriceText>
+												{originalPrice > discountedPrice ? (
+													<>
+														<OriginalPrice>
+															Price: ${originalPrice.toFixed(2)}
+														</OriginalPrice>
 														<DiscountedPrice>
-															Price: ${discountedPrice.toFixed(2)}
+															${discountedPrice.toFixed(2)}
 														</DiscountedPrice>
-													)
-												}
-											/>
-											{isPOD && (
+													</>
+												) : (
+													<DiscountedPrice>
+														Price: ${discountedPrice.toFixed(2)}
+													</DiscountedPrice>
+												)}
+											</ProductPriceText>
+											{isPOD ? (
 												<CursiveText>
 													Your Loved Ones Deserve 3 Minutes From Your Time To
 													Customize Their Present!
 												</CursiveText>
-											)}
-										</ProductCard>
-									</Col>
+											) : null}
+										</ProductCardBody>
+									</ProductCard>
 								);
 							})}
-						</Row>
+						</ProductsGrid>
 
 						{/* Pagination */}
-						<PaginationWrapper
-							onClick={() => {
-								window.scrollTo({ top: 0, behavior: "smooth" });
-							}}
-						>
-								<Pagination
-									current={page}
-									pageSize={records}
-									onChange={(pg) => setPage(pg)}
-									total={totalRecords}
-									responsive
-									showSizeChanger={false}
-									hideOnSinglePage={totalRecords <= records}
-								/>
-						</PaginationWrapper>
+						{totalPages > 1 ? (
+							<PaginationWrapper>
+								<PaginationNav aria-label='Products pagination'>
+									{page <= 1 ? (
+										<PaginationButton type='button' disabled>
+											Prev
+										</PaginationButton>
+									) : (
+										<PaginationLinkButton
+											to={{
+												pathname: location.pathname,
+												search: getPaginationSearch(page - 1),
+											}}
+											onClick={handlePaginationLinkClick}
+										>
+											Prev
+										</PaginationLinkButton>
+									)}
+									{paginationItems.map((item) =>
+										typeof item === "number" ? (
+											item === page ? (
+												<PaginationButton
+													key={item}
+													type='button'
+													$isActive
+													aria-current='page'
+												>
+													{item}
+												</PaginationButton>
+											) : (
+												<PaginationLinkButton
+													key={item}
+													to={{
+														pathname: location.pathname,
+														search: getPaginationSearch(item),
+													}}
+													onClick={handlePaginationLinkClick}
+												>
+													{item}
+												</PaginationLinkButton>
+											)
+										) : (
+											<PaginationEllipsis key={item}>...</PaginationEllipsis>
+										)
+									)}
+									{page >= totalPages ? (
+										<PaginationButton type='button' disabled>
+											Next
+										</PaginationButton>
+									) : (
+										<PaginationLinkButton
+											to={{
+												pathname: location.pathname,
+												search: getPaginationSearch(page + 1),
+											}}
+											onClick={handlePaginationLinkClick}
+										>
+											Next
+										</PaginationLinkButton>
+									)}
+								</PaginationNav>
+							</PaginationWrapper>
+						) : null}
 					</ProductsSection>
 				</ShopPageMainWrapper>
 			</ShopPageMainOverallWrapper>
 
-			<Modal
-				open={showPodWelcomeModal}
-				onCancel={handlePodWelcomeClose}
-				footer={null}
-				destroyOnHidden
-				centered
-				width={680}
-			>
-				<PodWelcomeCard>
-					<PodWelcomeEyebrow>Personalized Gifts Made Easy</PodWelcomeEyebrow>
-					<PodWelcomeTitle>Looking for the perfect gift?</PodWelcomeTitle>
-					<PodWelcomeSubtitle>
-						Choose an occasion once, add a name if you want, and we will pre-fill
-						custom gift designs for you.
-					</PodWelcomeSubtitle>
-
-					<PodFieldLabel>What is your occasion?</PodFieldLabel>
-					<PodFieldPulseWrap
-						key={`pod-occasion-${podFieldPulseKey}`}
-						$delayMs={80}
+			{showPodWelcomeModal ? (
+				<ConfigProvider theme={antTheme}>
+					<Modal
+						open={showPodWelcomeModal}
+						onCancel={handlePodWelcomeClose}
+						footer={null}
+						destroyOnHidden
+						centered
+						width={680}
 					>
-						<Select
-							size='large'
-							value={podOccasion}
-							style={{ width: "100%" }}
-							onChange={(value) => setPodOccasion(value)}
-						>
-							{POD_OCCASION_OPTIONS.map((item) => (
-								<Option key={item.value} value={item.value}>
-									<span>
-										{item.icon} {item.value}
-									</span>
-								</Option>
-							))}
-						</Select>
-					</PodFieldPulseWrap>
+						<PodWelcomeCard>
+							<PodWelcomeEyebrow>Personalized Gifts Made Easy</PodWelcomeEyebrow>
+							<PodWelcomeTitle>Looking for the perfect gift?</PodWelcomeTitle>
+							<PodWelcomeSubtitle>
+								Choose an occasion once, add a name if you want, and we will pre-fill
+								custom gift designs for you.
+							</PodWelcomeSubtitle>
 
-					<PodFieldLabel style={{ marginTop: "12px" }}>
-						Optional: name to include in designs
-					</PodFieldLabel>
-					<PodFieldPulseWrap
-						key={`pod-name-${podFieldPulseKey}`}
-						$delayMs={200}
-					>
-						<Input
-							size='large'
-							value={podName}
-							onChange={(e) => setPodName(e.target.value)}
-							placeholder='Example: Emma'
-							maxLength={40}
-						/>
-					</PodFieldPulseWrap>
+							<PodFieldLabel>What is your occasion?</PodFieldLabel>
+							<PodFieldPulseWrap
+								key={`pod-occasion-${podFieldPulseKey}`}
+								$delayMs={80}
+							>
+								<Select
+									size='large'
+									value={podOccasion}
+									style={{ width: "100%" }}
+									onChange={(value) => setPodOccasion(value)}
+								>
+									{POD_OCCASION_OPTIONS.map((item) => (
+										<Option key={item.value} value={item.value}>
+											<span>
+												{item.icon} {item.value}
+											</span>
+										</Option>
+									))}
+								</Select>
+							</PodFieldPulseWrap>
 
-					<PodModalHint>
-						You can update these anytime on the custom gifts pages.
-					</PodModalHint>
+							<PodFieldLabel style={{ marginTop: "12px" }}>
+								Optional: name to include in designs
+							</PodFieldLabel>
+							<PodFieldPulseWrap
+								key={`pod-name-${podFieldPulseKey}`}
+								$delayMs={200}
+							>
+								<PodNameInput
+									type='text'
+									value={podName}
+									onChange={(event) => setPodName(event.target.value)}
+									placeholder='Example: Emma'
+									maxLength={40}
+								/>
+							</PodFieldPulseWrap>
 
-					<PodActions>
-						<Button onClick={handlePodWelcomeClose}>Maybe later</Button>
-						<Button type='primary' onClick={handlePodWelcomeStart}>
-							Show Me Custom Gifts
-						</Button>
-					</PodActions>
-				</PodWelcomeCard>
-			</Modal>
-		</ConfigProvider>
+							<PodModalHint>
+								You can update these anytime on the custom gifts pages.
+							</PodModalHint>
+
+							<PodActions>
+								<ModalSecondaryButton type='button' onClick={handlePodWelcomeClose}>
+									Maybe later
+								</ModalSecondaryButton>
+								<ModalPrimaryButton type='button' onClick={handlePodWelcomeStart}>
+									Show Me Custom Gifts
+								</ModalPrimaryButton>
+							</PodActions>
+						</PodWelcomeCard>
+					</Modal>
+				</ConfigProvider>
+			) : null}
+		</>
 	);
 }
 
@@ -1622,10 +1731,143 @@ const FiltersSection = styled.div`
 	}
 `;
 
+const DesktopFiltersPlaceholder = styled.div`
+	display: none;
+	height: 208px;
+	margin-bottom: 20px;
+	border-radius: 8px;
+	background: linear-gradient(90deg, #f7f4ef, #f2ece5, #f7f4ef);
+	animation: desktopFilterPulse 1.6s ease-in-out infinite;
+
+	@media (min-width: 577px) {
+		display: block;
+	}
+
+	@keyframes desktopFilterPulse {
+		0% {
+			opacity: 0.92;
+		}
+		50% {
+			opacity: 1;
+		}
+		100% {
+			opacity: 0.92;
+		}
+	}
+`;
+
+const FilterGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(5, minmax(0, 1fr));
+	gap: 16px;
+
+	@media (max-width: 1400px) {
+		grid-template-columns: repeat(4, minmax(0, 1fr));
+	}
+
+	@media (max-width: 1200px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	@media (max-width: 900px) {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+`;
+
+const FilterField = styled.div`
+	width: 100%;
+`;
+
+const PriceSearchRow = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+	gap: 16px;
+	margin-top: 20px;
+
+	@media (max-width: 900px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const PriceRangeField = styled.div`
+	width: 100%;
+`;
+
+const SearchField = styled.div`
+	width: 100%;
+	align-self: end;
+	padding-top: 14px;
+`;
+
+const SearchForm = styled.form`
+	display: flex;
+	align-items: stretch;
+	width: 100%;
+	border: 1px solid #d8d1c5;
+	border-radius: 10px;
+	overflow: hidden;
+	background: #fff;
+`;
+
+const SearchInput = styled.input`
+	flex: 1;
+	min-width: 0;
+	border: 0;
+	padding: 0.78rem 0.9rem;
+	font-size: 0.95rem;
+	color: var(--text-color-dark);
+	background: transparent;
+
+	&:focus {
+		outline: none;
+	}
+`;
+
+const SearchSubmitButton = styled.button`
+	border: 0;
+	border-left: 1px solid #d8d1c5;
+	background: var(--secondary-color);
+	color: var(--button-font-color);
+	padding: 0 1rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: var(--main-transition);
+
+	&:hover {
+		background: var(--secondary-color-dark);
+	}
+`;
+
+const FilterLabel = styled.div`
+	margin-bottom: 8px;
+`;
+
+const FilterValueText = styled.div`
+	margin-bottom: 8px;
+	font-size: 0.9rem;
+	font-weight: 600;
+`;
+
+const PriceBounds = styled.div`
+	display: flex;
+	justify-content: space-between;
+`;
+
+const PriceBoundLabel = styled.span`
+	font-weight: ${(props) => (props.$isActive ? "700" : "400")};
+`;
+
+const FilterActionsRow = styled.div`
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 20px;
+`;
+
 const SearchInputWrapper = styled.div`
 	@media (max-width: 576px) {
 		display: flex;
-		justify-content: center;
+		align-items: center;
+		gap: 8px;
 		margin-top: 5px;
 		margin-bottom: 13px;
 	}
@@ -1642,10 +1884,49 @@ const FiltersDrawer = styled(Drawer)`
 	}
 `;
 
-const FiltersButton = styled(Button)`
+const FiltersTriggerButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	border: 1px solid var(--secondary-color);
+	background: var(--secondary-color);
+	color: var(--button-font-color);
+	border-radius: 8px;
+	padding: 0 14px;
+	height: 40px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: var(--main-transition);
+
+	&:hover {
+		background: var(--secondary-color-dark);
+		border-color: var(--secondary-color-dark);
+	}
+
 	@media (min-width: 577px) {
 		display: none; /* Hide button on larger screens */
 	}
+`;
+
+const MobileSearchField = styled.div`
+	flex: 1;
+`;
+
+const MobileSearchSubmitButton = styled(SearchSubmitButton)`
+	padding: 0 0.9rem;
+	font-size: 0.9rem;
+`;
+
+const DrawerFilterStack = styled.div`
+	display: grid;
+	gap: 16px;
+`;
+
+const DrawerActionsRow = styled.div`
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 4px;
 `;
 
 const ProductsSection = styled.div`
@@ -1655,22 +1936,28 @@ const ProductsSection = styled.div`
 
 	@media (max-width: 576px) {
 		padding: 10px;
-
-		.ant-row {
-			margin-left: -4px !important;
-			margin-right: -4px !important;
-		}
-
-		.ant-col {
-			flex: 0 0 50% !important;
-			max-width: 50% !important;
-			padding-left: 4px !important;
-			padding-right: 4px !important;
-		}
 	}
 `;
 
-const ProductCard = styled(Card)`
+const ProductsGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 16px;
+
+	@media (min-width: 992px) {
+		grid-template-columns: repeat(3, minmax(0, 1fr));
+	}
+
+	@media (min-width: 1200px) {
+		grid-template-columns: repeat(6, minmax(0, 1fr));
+	}
+
+	@media (max-width: 576px) {
+		gap: 8px;
+	}
+`;
+
+const ProductCard = styled.article`
 	border-radius: 10px;
 	overflow: hidden;
 	display: flex;
@@ -1679,37 +1966,40 @@ const ProductCard = styled(Card)`
 	transition: var(--main-transition);
 	text-transform: capitalize;
 	background: #fff;
-
-	.ant-card-cover {
-		margin: 0 !important;
-	}
-
-	.ant-card-body {
-		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding: 14px;
-	}
-
-	.ant-card-meta-title {
-		white-space: normal;
-		overflow: hidden;
-		text-overflow: ellipsis;
-		display: -webkit-box;
-		-webkit-line-clamp: 2;
-		-webkit-box-orient: vertical;
-		line-height: 1.35;
-		min-height: calc(1.35em * 2);
-	}
-
-	.ant-card-meta-description {
-		min-height: 24px;
-	}
+	box-shadow: 0 1px 3px rgba(15, 23, 42, 0.08);
 
 	&:hover {
 		transform: translateY(-6px);
 		box-shadow: var(--box-shadow-light);
 	}
+`;
+
+const ProductCardBody = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 14px;
+`;
+
+const ProductTitle = styled.h3`
+	margin: 0;
+	font-size: 0.98rem;
+	font-weight: 600;
+	line-height: 1.35;
+	min-height: calc(1.35em * 2);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+	text-overflow: ellipsis;
+`;
+
+const ProductPriceText = styled.div`
+	min-height: 24px;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: baseline;
+	gap: 6px;
 `;
 
 const ImageContainer = styled.div`
@@ -1807,10 +2097,80 @@ const PaginationWrapper = styled.div`
 	margin-top: 20px;
 `;
 
-const StyledButton = styled(Button)`
+const PaginationNav = styled.nav`
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+`;
+
+const PaginationButton = styled.button`
+	border: 1px solid ${(props) =>
+		props.$isActive ? "var(--secondary-color)" : "#ddd4c8"};
+	background: ${(props) =>
+		props.$isActive ? "var(--secondary-color)" : "#fff"};
+	color: ${(props) =>
+		props.$isActive ? "var(--button-font-color)" : "var(--text-color-dark)"};
+	min-width: 40px;
+	height: 40px;
+	padding: 0 0.9rem;
+	border-radius: 999px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: var(--main-transition);
+
+	&:hover:not(:disabled) {
+		border-color: var(--secondary-color);
+		color: var(--secondary-color-darker);
+	}
+
+	&:disabled {
+		opacity: 0.5;
+		cursor: not-allowed;
+	}
+`;
+
+const PaginationLinkButton = styled(Link)`
+	border: 1px solid #ddd4c8;
+	background: #fff;
+	color: var(--text-color-dark);
+	min-width: 40px;
+	height: 40px;
+	padding: 0 0.9rem;
+	border-radius: 999px;
+	font-weight: 600;
+	cursor: pointer;
+	transition: var(--main-transition);
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	text-decoration: none;
+
+	&:hover {
+		border-color: var(--secondary-color);
+		color: var(--secondary-color-darker);
+	}
+`;
+
+const PaginationEllipsis = styled.span`
+	min-width: 24px;
+	text-align: center;
+	color: var(--text-color-secondary);
+`;
+
+const ResetButton = styled.button`
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 8px;
+	border: 1px solid var(--secondary-color);
 	background: var(--secondary-color);
-	border-color: var(--secondary-color);
 	color: var(--button-font-color);
+	padding: 0.65rem 1rem;
+	border-radius: 8px;
+	font-weight: 600;
+	cursor: pointer;
 	transition: var(--main-transition);
 
 	&:hover {
@@ -1907,6 +2267,21 @@ const PodFieldPulseWrap = styled.div`
 	animation: ${podFieldBeat} 620ms ease-in-out ${(props) => props.$delayMs || 0}ms 2;
 `;
 
+const PodNameInput = styled.input`
+	width: 100%;
+	border: 1px solid #d9d9d9;
+	border-radius: 8px;
+	padding: 0.9rem 1rem;
+	font-size: 1rem;
+	color: var(--text-color-dark);
+	background: #fff;
+
+	&:focus {
+		outline: 2px solid rgba(201, 134, 134, 0.18);
+		border-color: var(--secondary-color);
+	}
+`;
+
 const PodModalHint = styled.p`
 	margin: 10px 0 0;
 	font-size: 0.85rem;
@@ -1919,5 +2294,37 @@ const PodActions = styled.div`
 	gap: 8px;
 	justify-content: flex-end;
 	flex-wrap: wrap;
+`;
+
+const ModalSecondaryButton = styled.button`
+	border: 1px solid #d0cbc7;
+	background: #fff;
+	color: #3f3936;
+	border-radius: 8px;
+	padding: 0.7rem 1rem;
+	font-weight: 600;
+	cursor: pointer;
+	transition: var(--main-transition);
+
+	&:hover {
+		border-color: #b8b2ac;
+		background: #faf7f5;
+	}
+`;
+
+const ModalPrimaryButton = styled.button`
+	border: 1px solid var(--secondary-color);
+	background: var(--secondary-color);
+	color: var(--button-font-color);
+	border-radius: 8px;
+	padding: 0.7rem 1rem;
+	font-weight: 700;
+	cursor: pointer;
+	transition: var(--main-transition);
+
+	&:hover {
+		border-color: var(--secondary-color-dark);
+		background: var(--secondary-color-dark);
+	}
 `;
 

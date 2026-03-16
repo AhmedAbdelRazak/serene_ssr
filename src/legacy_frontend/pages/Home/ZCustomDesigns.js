@@ -1,35 +1,31 @@
 ﻿import React, { useMemo, useCallback, useState } from "react";
 import styled from "styled-components";
 import Slider from "react-slick";
-import { Card } from "antd";
 import { useHistory } from "react-router-dom";
 import { gettingSpecificProducts } from "../../apiCore";
 import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageSources } from "../../utils/image";
 
-const { Meta } = Card;
 
 const MAX_PRODUCTS = 15;
 
-const emitGaEvent = async (payload) => {
+const emitGaEvent = (payload = {}) => {
+	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
 	try {
-		const module = await import("react-ga4");
-		const ReactGA = module?.default || module;
-		ReactGA?.event?.(payload);
-	} catch (error) {
-		// Ignore GA load failures to avoid impacting UX.
-	}
+		window.gtag("event", `${payload.action || "event"}`.trim(), {
+			event_category: payload.category,
+			event_label: payload.label,
+			value: payload.value,
+		});
+	} catch {}
 };
 
-const emitFbTrack = async (eventName, payload, options) => {
+const emitFbTrack = (eventName, payload = {}, options = {}) => {
+	if (typeof window === "undefined" || typeof window.fbq !== "function") return;
 	try {
-		const module = await import("react-facebook-pixel");
-		const ReactPixel = module?.default || module;
-		ReactPixel?.track?.(eventName, payload, options);
-	} catch (error) {
-		// Ignore FB pixel load failures to avoid impacting UX.
-	}
+		window.fbq("track", eventName, payload, options);
+	} catch {}
 };
 
 const ZCustomDesigns = ({ customDesignProducts }) => {
@@ -225,49 +221,40 @@ const ZCustomDesigns = ({ customDesignProducts }) => {
 
 						return (
 							<div key={i} className='slide'>
-								<ProductCard
-									hoverable
-									onClick={() => navigateToProduct(product)}
-									cover={
-										<ImageContainer>
-											{/* If it's a POD product, show the custom design badge */}
-											{isPOD && <PodBadge>Custom Design</PodBadge>}
+								<ProductCard onClick={() => navigateToProduct(product)}>
+									<ImageContainer>
+										{isPOD ? <PodBadge>Custom Design</PodBadge> : null}
 
-											<ImageWrapper>
-												{primarySrc ? (
-													<ProductImage
-														src={primarySrc}
-														fallbackSrc={fallbackSrc}
-														alt={`${product.productName} - single view`}
-														loading='lazy'
-														sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
-														widths={[220, 320, 420, 540, 640]}
-													/>
-												) : (
-													<NoImagePlaceholder>No Image</NoImagePlaceholder>
-												)}
-											</ImageWrapper>
-										</ImageContainer>
-									}
-								>
-									<Meta
-										title={product.productName}
-										description={
-											originalPrice > discountedPrice ? (
-												<span>
-													Price:{" "}
-													<OriginalPrice>${originalPriceFixed}</OriginalPrice>{" "}
-													<DiscountedPrice>
-														${discountedPriceFixed}
-													</DiscountedPrice>
-												</span>
+										<ImageWrapper>
+											{primarySrc ? (
+												<ProductImage
+													src={primarySrc}
+													fallbackSrc={fallbackSrc}
+													alt={`${product.productName} - single view`}
+													loading='lazy'
+													sizes='(max-width: 480px) 85vw, (max-width: 600px) 50vw, (max-width: 1024px) 33vw, 20vw'
+													widths={[220, 320, 420, 540, 640]}
+												/>
+											) : (
+												<NoImagePlaceholder>No Image</NoImagePlaceholder>
+											)}
+										</ImageWrapper>
+									</ImageContainer>
+									<ProductCardBody>
+										<ProductTitle>{product.productName}</ProductTitle>
+										<ProductPriceText>
+											{originalPrice > discountedPrice ? (
+												<>
+													<OriginalPrice>${originalPriceFixed}</OriginalPrice>
+													<DiscountedPrice>${discountedPriceFixed}</DiscountedPrice>
+												</>
 											) : (
 												<DiscountedPrice>
 													Price: ${discountedPriceFixed}
 												</DiscountedPrice>
-											)
-										}
-									/>
+											)}
+										</ProductPriceText>
+									</ProductCardBody>
 								</ProductCard>
 							</div>
 						);
@@ -358,18 +345,21 @@ const ZCustomDesignsWrapper = styled.div`
 	}
 `;
 
-const ProductCard = styled(Card)`
+const ProductCard = styled.article`
 	border-radius: 10px;
 	overflow: hidden;
 	box-shadow: var(--box-shadow-light);
 	transition:
 		transform 0.3s ease,
 		box-shadow 0.3s ease;
-	text-align: center;
 	position: relative;
 	text-transform: capitalize;
 	max-height: 400px;
 	min-height: 400px;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	cursor: pointer;
 
 	@media (max-width: 700px) {
 		max-height: 500px;
@@ -380,14 +370,35 @@ const ProductCard = styled(Card)`
 		transform: translateY(-10px);
 		box-shadow: var(--box-shadow-dark);
 	}
+`;
 
-	.ant-card-cover {
-		margin: -16px -16px 0 -16px;
-	}
+const ProductCardBody = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px 14px;
+	text-align: center;
+`;
 
-	.ant-card-body {
-		padding: 5px !important;
-	}
+const ProductTitle = styled.h3`
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	line-height: 1.35;
+	min-height: calc(1.35em * 2);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+`;
+
+const ProductPriceText = styled.div`
+	min-height: 24px;
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 6px;
 `;
 
 const ImageContainer = styled.div`

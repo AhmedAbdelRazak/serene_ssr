@@ -1,5 +1,6 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
+import { Suspense, lazy, useMemo } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { Collapse } from "antd";
 import { useCartContext } from "../../cart_context";
@@ -7,8 +8,6 @@ import { toast } from "react-toastify";
 import { getColors, like, unlike, userlike, userunlike } from "../../apiCore";
 import ColorsAndSizes from "./ColorsAndSizes";
 import DisplayImages from "./DisplayImages";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
 import { resolveImageUrl } from "../../utils/image";
 
 import {
@@ -16,17 +15,17 @@ import {
 	ShoppingCartOutlined,
 	ArrowLeftOutlined,
 } from "@ant-design/icons";
-import CommentsAndRatings from "./CommentsAndRatings";
 import { isAuthenticated } from "../../auth";
-import RelatedProductsCarousel from "./RelatedProductsCarousel";
-import SigninModal from "./SigninModal/SigninModal";
 import { Helmet } from "react-helmet-async";
-import axios from "axios";
 import DeferredRender from "../../components/DeferredRender";
 import {
 	escapeJsonString,
 	useLegacySeoEnabled,
 } from "../../bootstrap/legacySeo";
+
+const CommentsAndRatings = lazy(() => import("./CommentsAndRatings"));
+const RelatedProductsCarousel = lazy(() => import("./RelatedProductsCarousel"));
+const SigninModal = lazy(() => import("./SigninModal/SigninModal"));
 
 const truncateMetaDescription = (text, limit = 155) => {
 	if (!text) return "";
@@ -42,19 +41,94 @@ const buildVariantSearch = ({ color = "", size = "" } = {}) => {
 	return params.toString();
 };
 
+function emitGaEvent(payload = {}) {
+	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+	try {
+		window.gtag("event", `${payload.action || "event"}`.trim(), {
+			event_category: payload.category,
+			event_label: payload.label,
+			value: payload.value,
+		});
+	} catch {}
+}
+
+function emitFbTrack(eventName, payload = {}, options = {}) {
+	if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+	try {
+		window.fbq("track", eventName, payload, options);
+	} catch {}
+}
+
+async function postFacebookConversion(payload = {}) {
+	try {
+		await fetch(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {}
+}
+
+function resolveClosestProductAttribute(productAttributes = [], color = "", size = "") {
+	if (!Array.isArray(productAttributes) || productAttributes.length === 0) return null;
+	const exactMatch = productAttributes.find(
+		(attr) => attr.color === color && attr.size === size
+	);
+	if (exactMatch) return exactMatch;
+	const colorMatch = productAttributes.find((attr) => attr.color === color);
+	if (colorMatch) return colorMatch;
+	const sizeMatch = productAttributes.find((attr) => attr.size === size);
+	if (sizeMatch) return sizeMatch;
+	return productAttributes[0];
+}
+
+function resolveChosenImagesForAttribute(product = {}, attribute = null) {
+	if (!attribute) return [];
+	return (Array.isArray(product?.productAttributes) ? product.productAttributes : [])
+		.filter(
+			(attr) =>
+				attr.color === attribute.color &&
+				attr.size === attribute.size &&
+				Array.isArray(attr.productImages) &&
+				attr.productImages.length > 0
+		)
+		.flatMap((attr) => attr.productImages.map((img) => resolveImageUrl(img)))
+		.slice(0, 5);
+}
+
 const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	const { addToCart, openSidebar2 } = useCartContext();
-	const [selectedColor, setSelectedColor] = useState("");
-	const [selectedSize, setSelectedSize] = useState("");
-	const [chosenAttributes, setChosenAttributes] = useState({});
-	const [chosenImages, setChosenImages] = useState([]);
+	const history = useHistory();
+	const location = useLocation();
+	const initialVariantState = useMemo(() => {
+		const queryParams = new URLSearchParams(location.search);
+		const requestedColor = queryParams.get("color") || "";
+		const requestedSize = queryParams.get("size") || "";
+		const initialAttribute = resolveClosestProductAttribute(
+			product?.productAttributes,
+			requestedColor,
+			requestedSize
+		);
+		return {
+			attribute: initialAttribute || {},
+			images: resolveChosenImagesForAttribute(product, initialAttribute),
+			color: initialAttribute?.color || "",
+			size: initialAttribute?.size || "",
+		};
+	}, [location.search, product]);
+	const [selectedColor, setSelectedColor] = useState(() => initialVariantState.color);
+	const [selectedSize, setSelectedSize] = useState(() => initialVariantState.size);
+	const [chosenAttributes, setChosenAttributes] = useState(
+		() => initialVariantState.attribute
+	);
+	const [chosenImages, setChosenImages] = useState(() => initialVariantState.images);
 	const [allColors, setAllColors] = useState([]);
 	const [likes, setLikes] = useState(0);
 	const [modalVisible3, setModalVisible3] = useState(false);
 	const legacySeoEnabled = useLegacySeoEnabled();
-
-	const history = useHistory();
-	const location = useLocation();
 	const auth = isAuthenticated() || {};
 	const token = auth.token || "";
 	const user = auth.user || null;
@@ -71,73 +145,51 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 
 	const updateChosenAttributes = useCallback(
 		(color, size) => {
-			const attributes = product.productAttributes.find(
-				(attr) => attr.color === color && attr.size === size
+			const nextAttribute = resolveClosestProductAttribute(
+				product.productAttributes,
+				color,
+				size
 			);
-			setChosenAttributes(attributes);
-
-			const images = product.productAttributes
-				.filter(
-					(attr) =>
-						attr.color === color &&
-						attr.size === size &&
-						attr.productImages.length > 0
-				)
-				.flatMap((attr) => attr.productImages.map((img) => resolveImageUrl(img)));
-
-			setChosenImages(images.slice(0, 5)); // Limit to 5 images
+			setChosenAttributes(nextAttribute || {});
+			setChosenImages(resolveChosenImagesForAttribute(product, nextAttribute));
 		},
-		[product.productAttributes]
+		[product]
 	);
 
 	const resolveClosestAttribute = useCallback(
-		(color = "", size = "") => {
-			if (!product.productAttributes.length) return null;
-			const exactMatch = product.productAttributes.find(
-				(attr) => attr.color === color && attr.size === size
-			);
-			if (exactMatch) return exactMatch;
-			const colorMatch = product.productAttributes.find(
-				(attr) => attr.color === color
-			);
-			if (colorMatch) return colorMatch;
-			const sizeMatch = product.productAttributes.find(
-				(attr) => attr.size === size
-			);
-			if (sizeMatch) return sizeMatch;
-			return product.productAttributes[0];
-		},
+		(color = "", size = "") =>
+			resolveClosestProductAttribute(product.productAttributes, color, size),
 		[product.productAttributes]
 	);
 
 	useEffect(() => {
-		if (product.productAttributes.length > 0) {
-			const queryParams = new URLSearchParams(location.search);
-			const requestedColor = queryParams.get("color") || "";
-			const requestedSize = queryParams.get("size") || "";
-			const initialAttribute = resolveClosestAttribute(requestedColor, requestedSize);
-			if (initialAttribute) {
-				setSelectedColor(initialAttribute.color);
-				setSelectedSize(initialAttribute.size);
-				updateChosenAttributes(initialAttribute.color, initialAttribute.size);
+		const nextAttribute = initialVariantState.attribute;
+		if (!nextAttribute?.color && !nextAttribute?.size && !nextAttribute?.PK) return;
+		setSelectedColor((prev) => (prev === initialVariantState.color ? prev : initialVariantState.color));
+		setSelectedSize((prev) => (prev === initialVariantState.size ? prev : initialVariantState.size));
+		setChosenAttributes((prev) =>
+			prev?.PK === nextAttribute?.PK ? prev : nextAttribute
+		);
+		setChosenImages((prev) => {
+			const nextImages = initialVariantState.images;
+			if (
+				prev.length === nextImages.length &&
+				prev.every((image, index) => image === nextImages[index])
+			) {
+				return prev;
 			}
-		}
+			return nextImages;
+		});
+	}, [initialVariantState]);
 
+	useEffect(() => {
 		const userId = user?._id;
 		const isProductLiked = userId
 			? product.likes.some((like) => like.toString() === userId)
 			: false;
 		setLikee(isProductLiked);
 		setLikes(product.likes.length);
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [
-		location.search,
-		product,
-		resolveClosestAttribute,
-		updateChosenAttributes,
-		setLikee,
-		user?._id,
-	]);
+	}, [product.likes, setLikee, user?._id]);
 
 	useEffect(() => {
 		if (!product.productAttributes.length) return;
@@ -487,10 +539,14 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 				/>
 			</Helmet> : null}
 
-			<SigninModal
-				modalVisible3={modalVisible3}
-				setModalVisible3={setModalVisible3}
-			/>
+			{modalVisible3 ? (
+				<Suspense fallback={null}>
+					<SigninModal
+						modalVisible3={modalVisible3}
+						setModalVisible3={setModalVisible3}
+					/>
+				</Suspense>
+			) : null}
 			<SingleProductWrapper>
 				<ProductImagesWrapper>
 					<DisplayImages images={chosenImages} />
@@ -557,20 +613,17 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 						<ActionButton
 							onClick={() => {
 								handleAddToCart();
-								ReactGA.event({
+								emitGaEvent({
 									category: "SingleProduct Add To Cart",
 									action: "User Added To The Cart From Single Product",
 								});
 
-								ReactPixel.track("AddToCart", {
-									// Standard Meta parameters:
+								emitFbTrack("AddToCart", {
 									content_name: product.productName,
 									content_ids: [product._id],
 									content_type: "product",
 									currency: "USD",
-									value: product.priceAfterDiscount || product.price, // the price you'd like to track
-
-									// Optionally, you could pass `contents`:
+									value: product.priceAfterDiscount || product.price,
 									contents: [
 										{
 											id: product._id,
@@ -581,19 +634,16 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 
 								const eventId = `AddToCart-SingleProduct-${product?._id}-${Date.now()}`;
 
-								axios.post(
-									`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-									{
-										eventName: "AddToCart",
-										eventId,
-										email: user?.email || "Unknown",
-										phone: user?.phone || "Unknown",
-										currency: "USD",
-										value: product?.priceAfterDiscount || product?.price,
-										contentIds: [product?._id],
-										userAgent: window.navigator.userAgent,
-									}
-								);
+								void postFacebookConversion({
+									eventName: "AddToCart",
+									eventId,
+									email: user?.email || "Unknown",
+									phone: user?.phone || "Unknown",
+									currency: "USD",
+									value: product?.priceAfterDiscount || product?.price,
+									contentIds: [product?._id],
+									userAgent: window.navigator.userAgent,
+								});
 							}}
 							color='var(--primary-color-darker)'
 							disabled={isOutOfStock}
@@ -621,16 +671,20 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 				</ProductDetailsWrapper>
 			</SingleProductWrapper>
 			<DeferredRender rootMargin='240px 0px'>
-				<CommentsAndRatings product={product} user={user} token={token} />
+				<Suspense fallback={null}>
+					<CommentsAndRatings product={product} user={user} token={token} />
+				</Suspense>
 			</DeferredRender>
 			<DeferredRender rootMargin='240px 0px'>
-				<div className='my-3'>
+				<RelatedProductsSection>
 					{product &&
 					product.relatedProducts &&
 					product.relatedProducts.length > 0 ? (
-						<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
+						<Suspense fallback={null}>
+							<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
+						</Suspense>
 					) : null}
-				</div>
+				</RelatedProductsSection>
 			</DeferredRender>
 		</div>
 	);
@@ -652,6 +706,7 @@ const ProductImagesWrapper = styled.div`
 	flex: 6;
 	min-width: 500px;
 	margin-right: 20px;
+	min-height: 500px;
 
 	img {
 		width: 100%;
@@ -664,6 +719,7 @@ const ProductImagesWrapper = styled.div`
 		flex: 1 1 100%;
 		margin-right: 0;
 		min-width: 300px;
+		min-height: 400px;
 
 		img {
 			width: 100%;
@@ -677,10 +733,12 @@ const ProductDetailsWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
+	min-height: 420px;
 
 	@media (max-width: 768px) {
 		flex: 1 1 100%;
 		margin-top: 20px;
+		min-height: auto;
 	}
 `;
 
@@ -730,13 +788,20 @@ const ButtonContainer = styled.div`
 	justify-content: center;
 	flex-wrap: wrap;
 	gap: 10px;
+	min-height: 142px;
 
 	@media (max-width: 768px) {
 		flex-direction: column;
+		min-height: 182px;
 		button {
 			margin-bottom: 10px;
 		}
 	}
+`;
+
+const RelatedProductsSection = styled.div`
+	margin-top: 1rem;
+	margin-bottom: 1rem;
 `;
 
 const ActionButton = styled.button`

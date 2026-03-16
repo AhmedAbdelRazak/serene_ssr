@@ -71,6 +71,27 @@ function buildVariantLabel({ occasion = "", color = "", size = "", scent = "" } 
 	return [occasion, color, size, scent].filter(Boolean).join(" / ");
 }
 
+function buildPodSeoKeywords(name = "", selection = {}) {
+	const safeName = `${name || ""}`.trim();
+	const occasion = `${selection?.occasion || ""}`.trim();
+	const color = `${selection?.color || ""}`.trim();
+	const size = `${selection?.size || ""}`.trim();
+	const scent = `${selection?.scent || ""}`.trim();
+	const keywords = [
+		"custom gift",
+		"personalized gift",
+		"print on demand",
+		safeName,
+		occasion && `${occasion} gift`,
+		occasion && safeName && `${occasion} ${safeName}`,
+		occasion && safeName && `personalized ${occasion} ${safeName}`,
+		size && safeName && `${size} ${safeName}`,
+		color && safeName && `${color} ${safeName}`,
+		scent && safeName && `${scent} ${safeName}`,
+	];
+	return keywords.filter(Boolean);
+}
+
 export async function generateMetadata({ params, searchParams }) {
 	const resolvedParams = await params;
 	const resolvedSearchParams = await searchParams;
@@ -97,27 +118,29 @@ export async function generateMetadata({ params, searchParams }) {
 		const canonicalSlug = getProductSlug(product);
 		const path = `/custom-gifts/${canonicalSlug}/${parsed.productId}`;
 		const canonicalSearchParams = buildPodSearchParams(resolvedSearchParams);
-		const title = variationLabel
-			? `${name} | ${variationLabel} | Custom Gift`
-			: `${name} | Custom Gift`;
-		const descriptionSuffix = variationLabel
-			? ` Customize this gift further on the product page after choosing ${variationLabel.toLowerCase()}.`
-			: " Customize this gift further on the product page with available occasion, color, size, and scent options.";
+		const variantSuffix = [selection.color, selection.size, selection.scent]
+			.filter(Boolean)
+			.join(" / ");
+		const title = selection.occasion
+			? `${selection.occasion} ${name}${
+					variantSuffix ? ` | ${variantSuffix}` : ""
+			  } | Personalized Gift`
+			: variationLabel
+				? `${name} | ${variationLabel} | Personalized Gift`
+				: `${name} | Personalized Gift`;
+		const descriptionSuffix = selection.occasion
+			? ` Customize this ${name.toLowerCase()} for ${selection.occasion.toLowerCase()} with available color, size, and scent options on the product page.`
+			: variationLabel
+				? ` Customize this gift further on the product page after choosing ${variationLabel.toLowerCase()}.`
+				: " Customize this gift further on the product page with available occasion, color, size, and scent options.";
 		return createMetadata({
 			title,
 			description: `${description}${descriptionSuffix}`,
 			pathname: path,
 			searchParams: canonicalSearchParams,
 			image,
-			keywords: [
-				"custom gift",
-				"print on demand",
-				name,
-				selection.occasion,
-				selection.color,
-				selection.size,
-				selection.scent,
-			].filter(Boolean),
+			keywords: buildPodSeoKeywords(name, selection),
+			noindex: Boolean(getSafeSearchParamValue(resolvedSearchParams, "name")),
 		});
 	} catch {
 		return createMetadata({
@@ -170,7 +193,9 @@ export default async function PodProductPage({ params, searchParams }) {
 	);
 	const schema = productSchema({
 		name: variationLabel ? `${title} - ${variationLabel}` : title,
-		description: `${description} Customize the final design on the product page.`,
+		description: selection.occasion
+			? `${description} Personalized for ${selection.occasion}. Customize the final design on the product page.`
+			: `${description} Customize the final design on the product page.`,
 		image,
 		price,
 		url: canonicalUrl,

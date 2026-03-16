@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useLegacyRouteBootstrap } from "@/legacy_frontend/bootstrap/LegacyRouteBootstrapContext";
 import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
@@ -179,6 +179,7 @@ function PublicNavbarFallback() {
 
 export default function PublicStorefrontShell({ children }) {
 	const pathname = usePathname();
+	const hasMountedRef = useRef(false);
 	const [shouldRenderChat, setShouldRenderChat] = useState(false);
 	const [shouldRenderDesktopBottomNav, setShouldRenderDesktopBottomNav] =
 		useState(false);
@@ -188,6 +189,10 @@ export default function PublicStorefrontShell({ children }) {
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
+		if (!hasMountedRef.current) {
+			hasMountedRef.current = true;
+			return undefined;
+		}
 		window.scrollTo({ top: 0, left: 0, behavior: "auto" });
 		return undefined;
 	}, [pathname]);

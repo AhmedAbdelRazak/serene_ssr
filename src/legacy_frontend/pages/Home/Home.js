@@ -28,7 +28,7 @@ const fadeUp = keyframes`
 /* Simple styled div that applies the fadeUp animation */
 const FadeUpDiv = styled.div`
 	content-visibility: auto;
-	contain-intrinsic-size: 1000px;
+	contain-intrinsic-size: 560px;
 	animation: ${fadeUp} 1.2s ease-in-out;
 `;
 
@@ -49,7 +49,7 @@ const VisuallyHiddenH1 = styled.h1`
 const DeferredSection = ({
 	children,
 	fallback = <SectionSkeleton aria-hidden='true' />,
-	rootMargin = "320px 0px",
+	rootMargin = "80px 0px",
 }) => {
 	const [shouldRender, setShouldRender] = useState(false);
 	const triggerRef = useRef(null);
@@ -275,7 +275,7 @@ const Home = () => {
 
 			{/* Featured Products */}
 			{featuredProducts.length > 0 ? (
-				<DeferredSection rootMargin='260px 0px'>
+				<DeferredSection>
 					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
 						<FadeUpDiv>
 							<ZFeaturedProducts featuredProducts={featuredProducts} />
@@ -288,7 +288,7 @@ const Home = () => {
 
 			{/* Custom Designs */}
 			{customDesignProducts.length > 0 ? (
-				<DeferredSection rootMargin='260px 0px'>
+				<DeferredSection>
 					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
 						<FadeUpDiv>
 							<ZCustomDesigns customDesignProducts={customDesignProducts} />
@@ -301,7 +301,7 @@ const Home = () => {
 
 			{/* New Arrivals */}
 			{newArrivalProducts.length > 0 ? (
-				<DeferredSection rootMargin='260px 0px'>
+				<DeferredSection>
 					<Suspense fallback={<SectionSkeleton aria-hidden='true' />}>
 						<FadeUpDiv>
 							<ZNewArrival newArrivalProducts={newArrivalProducts} />
@@ -324,12 +324,16 @@ const HomeWrapper = styled.div`
 
 const SectionSkeleton = styled.div`
 	width: min(96%, 1400px);
-	height: 340px;
+	height: 560px;
 	margin: 20px auto;
 	border-radius: 12px;
 	background: linear-gradient(90deg, #f1f1f1 25%, #e7e7e7 37%, #f1f1f1 63%);
 	animation: skeletonPulse 1.6s ease-in-out infinite;
 	will-change: opacity;
+
+	@media (max-width: 768px) {
+		height: 620px;
+	}
 
 	@keyframes skeletonPulse {
 		0% {

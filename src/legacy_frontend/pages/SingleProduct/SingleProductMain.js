@@ -34,47 +34,43 @@ const SingleProductMain = () => {
 				"/single-product/glass-jellyfish-windchime-small-royal-blue/outdoors/669334c85e796e948f7f978f",
 		};
 
-			if (redirectMappings[currentPath]) {
-				history.push(redirectMappings[currentPath]);
+		if (redirectMappings[currentPath]) {
+			history.push(redirectMappings[currentPath]);
+			return;
+		}
+
+		if (bootstrappedProduct) {
+			setProduct(bootstrappedProduct);
+			setError(null);
+			if (!shouldHydrateBootstrappedProduct) {
 				return;
 			}
+		}
 
-			if (bootstrappedProduct && !shouldHydrateBootstrappedProduct && !likee) {
-				setProduct(bootstrappedProduct);
-				setError(null);
-				return;
-			}
-
-			if (bootstrappedProduct && shouldHydrateBootstrappedProduct) {
-				setProduct(bootstrappedProduct);
-				setError(null);
-			}
-
-			const fetchProduct = async () => {
-				try {
-					const { gettingSingleProduct } = await import("../../apiCore");
-					const product = await gettingSingleProduct(
-						productSlug,
+		const fetchProduct = async () => {
+			try {
+				const { gettingSingleProduct } = await import("../../apiCore");
+				const fetchedProduct = await gettingSingleProduct(
+					productSlug,
 					categorySlug,
 					productId
 				);
-				setProduct(product);
+				setProduct(fetchedProduct);
 			} catch (err) {
 				setError(err.message);
 			}
 		};
 
-			fetchProduct();
-		}, [
-			bootstrappedProduct,
-			shouldHydrateBootstrappedProduct,
-			productSlug,
-			categorySlug,
-			productId,
-			likee,
-			history,
-			location,
-		]);
+		fetchProduct();
+	}, [
+		bootstrappedProduct,
+		shouldHydrateBootstrappedProduct,
+		productSlug,
+		categorySlug,
+		productId,
+		history,
+		location.pathname,
+	]);
 
 	if (error) {
 		return <div>{error}</div>;

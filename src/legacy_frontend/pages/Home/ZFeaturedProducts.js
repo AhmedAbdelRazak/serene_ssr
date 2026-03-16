@@ -1,39 +1,46 @@
 import React, { useMemo, useCallback, useState } from "react";
 import styled from "styled-components";
 import Slider from "react-slick";
-import { Card } from "antd";
 import { ShoppingCartOutlined } from "@ant-design/icons";
 import { useCartContext } from "../../cart_context";
 import { readProduct, gettingSpecificProducts } from "../../apiCore";
 import { useHistory } from "react-router-dom";
-import axios from "axios";
 import { isAuthenticated } from "../../auth";
 import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
 import { resolveImageUrl } from "../../utils/image";
 
-const { Meta } = Card;
-
 const MAX_PRODUCTS = 30;
 
-const emitGaEvent = async (payload) => {
+const emitGaEvent = (payload = {}) => {
+	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
 	try {
-		const module = await import("react-ga4");
-		const ReactGA = module?.default || module;
-		ReactGA?.event?.(payload);
-	} catch (error) {
-		// Ignore GA load failures to avoid impacting UX.
-	}
+		window.gtag("event", `${payload.action || "event"}`.trim(), {
+			event_category: payload.category,
+			event_label: payload.label,
+			value: payload.value,
+		});
+	} catch {}
 };
 
-const emitFbTrack = async (eventName, payload, options) => {
+const emitFbTrack = (eventName, payload = {}, options = {}) => {
+	if (typeof window === "undefined" || typeof window.fbq !== "function") return;
 	try {
-		const module = await import("react-facebook-pixel");
-		const ReactPixel = module?.default || module;
-		ReactPixel?.track?.(eventName, payload, options);
-	} catch (error) {
-		// Ignore FB pixel load failures to avoid impacting UX.
-	}
+		window.fbq("track", eventName, payload, options);
+	} catch {}
+};
+
+const postFacebookConversion = async (payload = {}) => {
+	try {
+		await fetch(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {}
 };
 
 const ZFeaturedProducts = ({ featuredProducts }) => {
@@ -192,24 +199,17 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 
 			// (B) Trigger server-side Conversions API:
 			try {
-				await axios.post(
-					`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-					{
-						eventName: "AddToCart",
-						eventId, // the same as you passed to client pixel for dedup
-						// If user is logged in, pass their email/phone:
-						email: user && user.email ? user.email : null,
-						phone: user && user.phone ? user.phone : null,
-
-						currency: "USD",
-						value: product.priceAfterDiscount || product.price,
-						contentIds: [product._id],
-
-						// Optionally pass user agent or IP, but IP is often gleaned automatically on server
-						userAgent: window.navigator.userAgent,
-						clientIpAddress: null, // or from some other source
-					}
-				);
+				await postFacebookConversion({
+					eventName: "AddToCart",
+					eventId,
+					email: user && user.email ? user.email : null,
+					phone: user && user.phone ? user.phone : null,
+					currency: "USD",
+					value: product.priceAfterDiscount || product.price,
+					contentIds: [product._id],
+					userAgent: window.navigator.userAgent,
+					clientIpAddress: null,
+				});
 			} catch (apiError) {
 				console.error("Server-side AddToCart event error", apiError);
 			}
@@ -261,19 +261,16 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 				// e.g. currency: "USD", value: 0
 			});
 
-			axios.post(
-				`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-				{
-					eventName: "Lead",
-					eventId,
-					email: user?.email || "Unknown", // if you have a user object
-					phone: user?.phone || "Unknown", // likewise
-					currency: "USD", // not essential for "Lead," but you can pass
-					value: 0,
-					contentIds: [product._id], // or any ID you want
-					userAgent: window.navigator.userAgent,
-				}
-			).catch(() => {});
+			postFacebookConversion({
+				eventName: "Lead",
+				eventId,
+				email: user?.email || "Unknown",
+				phone: user?.phone || "Unknown",
+				currency: "USD",
+				value: 0,
+				contentIds: [product._id],
+				userAgent: window.navigator.userAgent,
+			}).catch(() => {});
 
 			history.push(
 				`/single-product/${product.slug}/${product.category.categorySlug}/${product._id}`
@@ -330,11 +327,8 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 
 						return (
 							<div key={i} className='slide'>
-								<ProductCard
-									hoverable
-									onClick={() => navigateToProduct(product)}
-									cover={
-										<ImageContainer>
+								<ProductCard onClick={() => navigateToProduct(product)}>
+									<ImageContainer>
 											{/* Discount badge if applicable */}
 											{discountPercentage > 0 && (
 												<DiscountBadge>
@@ -387,27 +381,22 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 													/>
 												</ImageWrapper>
 											)}
-										</ImageContainer>
-									}
-								>
-									<Meta
-										title={product.productName}
-										description={
-											originalPrice > discountedPrice ? (
-												<span>
-													Price:{" "}
-													<OriginalPrice>${originalPriceFixed}</OriginalPrice>{" "}
-													<DiscountedPrice>
-														${discountedPriceFixed}
-													</DiscountedPrice>
-												</span>
+									</ImageContainer>
+									<ProductCardBody>
+										<ProductTitle>{product.productName}</ProductTitle>
+										<ProductPriceText>
+											{originalPrice > discountedPrice ? (
+												<>
+													<OriginalPrice>${originalPriceFixed}</OriginalPrice>
+													<DiscountedPrice>${discountedPriceFixed}</DiscountedPrice>
+												</>
 											) : (
 												<DiscountedPrice>
 													Price: ${discountedPriceFixed}
 												</DiscountedPrice>
-											)
-										}
-									/>
+											)}
+										</ProductPriceText>
+									</ProductCardBody>
 								</ProductCard>
 							</div>
 						);
@@ -469,18 +458,21 @@ const ZFeaturedProductsWrapper = styled.div`
 	}
 `;
 
-const ProductCard = styled(Card)`
+const ProductCard = styled.article`
 	border-radius: 10px;
 	overflow: hidden;
 	box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 	transition:
 		transform 0.3s ease,
 		box-shadow 0.3s ease;
-	text-align: center;
 	position: relative;
 	text-transform: capitalize;
 	max-height: 400px;
 	min-height: 400px;
+	background: #fff;
+	display: flex;
+	flex-direction: column;
+	cursor: pointer;
 
 	@media (max-width: 700px) {
 		max-height: 500px;
@@ -491,14 +483,35 @@ const ProductCard = styled(Card)`
 		transform: translateY(-10px);
 		box-shadow: 0 6px 8px rgba(0, 0, 0, 0.15);
 	}
+`;
 
-	.ant-card-cover {
-		margin: -16px -16px 0 -16px;
-	}
+const ProductCardBody = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	padding: 10px 12px 14px;
+	text-align: center;
+`;
 
-	.ant-card-body {
-		padding: 5px !important;
-	}
+const ProductTitle = styled.h3`
+	margin: 0;
+	font-size: 1rem;
+	font-weight: 600;
+	line-height: 1.35;
+	min-height: calc(1.35em * 2);
+	display: -webkit-box;
+	-webkit-line-clamp: 2;
+	-webkit-box-orient: vertical;
+	overflow: hidden;
+`;
+
+const ProductPriceText = styled.div`
+	min-height: 24px;
+	display: flex;
+	align-items: baseline;
+	justify-content: center;
+	flex-wrap: wrap;
+	gap: 6px;
 `;
 
 const ImageContainer = styled.div`

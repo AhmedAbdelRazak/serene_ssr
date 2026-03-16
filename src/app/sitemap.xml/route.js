@@ -1,4 +1,5 @@
-import { getAllProductsForSeo } from "@/lib/api";
+import { POD_OCCASIONS } from "@/legacy_frontend/pages/PrintOnDemand/podPersonalization";
+import { getAllProductsForSeo, getCategoriesAndSubcategories } from "@/lib/api";
 import {
 	buildPodQueryCombinations,
 	buildProductPath,
@@ -40,6 +41,28 @@ export async function GET(request) {
 	STATIC_PATHS.forEach((path) => addUrl(toAbsoluteUrl(path), "0.8", "daily"));
 
 	try {
+		const categoriesPayload = await getCategoriesAndSubcategories({
+			revalidate: 1800,
+		}).catch(() => null);
+		const categories = Array.isArray(categoriesPayload?.categories)
+			? categoriesPayload.categories
+			: [];
+		for (const category of categories) {
+			const categoryId = `${category?._id || ""}`.trim();
+			const categorySlug = `${category?.categorySlug || ""}`.trim();
+			if (!categoryId) continue;
+			const params = new URLSearchParams();
+			params.set("category", categoryId);
+			if (categorySlug) params.set("categorySlug", categorySlug);
+			addUrl(toAbsoluteUrl(`/our-products?${params.toString()}`), "0.78", "daily");
+		}
+
+		for (const occasion of POD_OCCASIONS) {
+			const params = new URLSearchParams();
+			params.set("occasion", occasion);
+			addUrl(toAbsoluteUrl(`/custom-gifts?${params.toString()}`), "0.79", "daily");
+		}
+
 		const allProducts = await getAllProductsForSeo({
 			maxPages: 200,
 			records: 200,

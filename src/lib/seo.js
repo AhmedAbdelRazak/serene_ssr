@@ -50,7 +50,7 @@ export function createMetadata({
 			canonical,
 		},
 		robots: noindex
-			? { index: false, follow: false, nocache: true }
+			? { index: false, follow: true, nocache: true }
 			: { index: true, follow: true },
 		openGraph: {
 			type: "website",

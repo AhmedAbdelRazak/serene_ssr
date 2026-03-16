@@ -509,6 +509,7 @@ function buildPodFeedItems({
 	<title>${escapeXml(title)}</title>
 	<description>${escapeXml(description)}</description>
 	<link>${escapeXml(link)}</link>
+	<g:canonical_link>${escapeXml(link)}</g:canonical_link>
 	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
 	<g:availability>${escapeXml(availability)}</g:availability>
@@ -576,6 +577,7 @@ function buildStandardFeedItems({
 	<title>${escapeXml(name)}</title>
 	<description>${escapeXml(description)}</description>
 	<link>${escapeXml(baseLink)}</link>
+	<g:canonical_link>${escapeXml(baseLink)}</g:canonical_link>
 	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
 	<g:availability>${escapeXml(availability)}</g:availability>
@@ -635,6 +637,7 @@ function buildStandardFeedItems({
 	<title>${escapeXml(title)}</title>
 	<description>${escapeXml(description)}</description>
 	<link>${escapeXml(baseLink)}</link>
+	<g:canonical_link>${escapeXml(baseLink)}</g:canonical_link>
 	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
 	<g:availability>${escapeXml(availability)}</g:availability>

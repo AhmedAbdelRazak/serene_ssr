@@ -1,11 +1,11 @@
 ﻿import React, { useState, useEffect } from "react";
 import styled from "styled-components";
+import { Suspense, lazy, useMemo } from "react";
 import { useHistory } from "react-router-dom";
 import { Collapse } from "antd";
 import { useCartContext } from "../../cart_context";
 import { toast } from "react-toastify";
 import DisplayImages from "./DisplayImages"; // Adjust the path as necessary
-import CommentsAndRatings from "./CommentsAndRatings"; // Import CommentsAndRatings component
 import {
 	HeartOutlined,
 	ShoppingCartOutlined,
@@ -13,18 +13,17 @@ import {
 } from "@ant-design/icons";
 import { isAuthenticated } from "../../auth"; // Import authentication functions
 import { like, unlike, userlike, userunlike } from "../../apiCore"; // Import API functions
-import RelatedProductsCarousel from "./RelatedProductsCarousel";
-import SigninModal from "./SigninModal/SigninModal";
 import { Helmet } from "react-helmet-async";
-import ReactGA from "react-ga4";
-import ReactPixel from "react-facebook-pixel";
-import axios from "axios";
 import { resolveImageUrl } from "../../utils/image";
 import DeferredRender from "../../components/DeferredRender";
 import {
 	escapeJsonString,
 	useLegacySeoEnabled,
 } from "../../bootstrap/legacySeo";
+
+const CommentsAndRatings = lazy(() => import("./CommentsAndRatings"));
+const RelatedProductsCarousel = lazy(() => import("./RelatedProductsCarousel"));
+const SigninModal = lazy(() => import("./SigninModal/SigninModal"));
 
 const truncateMetaDescription = (text, limit = 155) => {
 	if (!text) return "";
@@ -33,11 +32,39 @@ const truncateMetaDescription = (text, limit = 155) => {
 	return `${normalized.slice(0, limit - 3).trim()}...`;
 };
 
+function emitGaEvent(payload = {}) {
+	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
+	try {
+		window.gtag("event", `${payload.action || "event"}`.trim(), {
+			event_category: payload.category,
+			event_label: payload.label,
+			value: payload.value,
+		});
+	} catch {}
+}
+
+function emitFbTrack(eventName, payload = {}, options = {}) {
+	if (typeof window === "undefined" || typeof window.fbq !== "function") return;
+	try {
+		window.fbq("track", eventName, payload, options);
+	} catch {}
+}
+
+async function postFacebookConversion(payload = {}) {
+	try {
+		await fetch(`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify(payload),
+			keepalive: true,
+		});
+	} catch {}
+}
+
 const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 	const { addToCart, openSidebar2 } = useCartContext();
-	const [chosenImages, setChosenImages] = useState([]);
-	const [description, setDescription] = useState("");
-	const [plainDescription, setPlainDescription] = useState("");
 	const [modalVisible3, setModalVisible3] = useState(false);
 	const [likes, setLikes] = useState(0);
 	const history = useHistory();
@@ -46,31 +73,30 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 	const auth = isAuthenticated() || {};
 	const token = auth.token || "";
 	const user = auth.user || null;
+	const chosenImages = useMemo(() => {
+		if (!Array.isArray(product?.thumbnailImage) || product.thumbnailImage.length === 0) {
+			return [];
+		}
+		return product.thumbnailImage[0].images.map((img) => resolveImageUrl(img));
+	}, [product?.thumbnailImage]);
+	const description = useMemo(
+		() => `${product?.description || ""}`.replace(/<br>/g, ""),
+		[product?.description]
+	);
+	const plainDescription = useMemo(
+		() => description.replace(/<[^>]+>/g, ""),
+		[description]
+	);
+	const isOutOfStock = Number(product?.quantity || 0) <= 0;
 
 	useEffect(() => {
-		if (product.thumbnailImage.length > 0) {
-			const images = product.thumbnailImage[0].images.map((img) =>
-				resolveImageUrl(img)
-			);
-			setChosenImages(images);
-		}
-
-		// Remove <br> tags from the description
-		const cleanedDescription = product.description.replace(/<br>/g, "");
-		setDescription(cleanedDescription);
-
-		// Convert description to plain text for Helmet
-		const plainTextDescription = cleanedDescription.replace(/<[^>]+>/g, "");
-		setPlainDescription(plainTextDescription);
-
 		// Check if the product is already in the wishlist
 		const isProductLiked = product.likes.some(
 			(like) => like.toString() === user?._id
 		);
 		setLikee(isProductLiked);
 		setLikes(product.likes.length);
-		// eslint-disable-next-line
-	}, [product, setLikee]);
+	}, [product.likes, setLikee, user?._id]);
 
 	const handleAddToCart = () => {
 		addToCart(product._id, null, 1, product);
@@ -336,10 +362,14 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 				/>
 			</Helmet> : null}
 
-			<SigninModal
-				modalVisible3={modalVisible3}
-				setModalVisible3={setModalVisible3}
-			/>
+			{modalVisible3 ? (
+				<Suspense fallback={null}>
+					<SigninModal
+						modalVisible3={modalVisible3}
+						setModalVisible3={setModalVisible3}
+					/>
+				</Suspense>
+			) : null}
 			<SingleProductWrapper>
 				<ProductImagesWrapper>
 					<DisplayImages images={chosenImages} />
@@ -404,23 +434,20 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 					)}
 					<ButtonContainer>
 						<ActionButton
-							disabled={product && product.quantity <= 0}
+							disabled={isOutOfStock}
 							onClick={() => {
 								handleAddToCart();
-								ReactGA.event({
+								emitGaEvent({
 									category: "SingleProduct Add To Cart",
 									action: "User Added To The Cart From Single Product",
 								});
 
-								ReactPixel.track("AddToCart", {
-									// Standard Meta parameters:
+								emitFbTrack("AddToCart", {
 									content_name: product.productName,
 									content_ids: [product._id],
 									content_type: "product",
 									currency: "USD",
-									value: product.priceAfterDiscount || product.price, // the price you'd like to track
-
-									// Optionally, you could pass `contents`:
+									value: product.priceAfterDiscount || product.price,
 									contents: [
 										{
 											id: product._id,
@@ -431,32 +458,21 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 
 								const eventId = `AddToCart-SingleProduct-${product?._id}-${Date.now()}`;
 
-								axios.post(
-									`${process.env.REACT_APP_API_URL}/facebookpixel/conversionapi`,
-									{
-										eventName: "AddToCart",
-										eventId,
-										email: user?.email || "Unknown",
-										phone: user?.phone || "Unknown",
-										currency: "USD",
-										value: product?.priceAfterDiscount || product?.price,
-										contentIds: [product?._id],
-										userAgent: window.navigator.userAgent,
-									}
-								);
+								void postFacebookConversion({
+									eventName: "AddToCart",
+									eventId,
+									email: user?.email || "Unknown",
+									phone: user?.phone || "Unknown",
+									currency: "USD",
+									value: product?.priceAfterDiscount || product?.price,
+									contentIds: [product?._id],
+									userAgent: window.navigator.userAgent,
+								});
 							}}
 							color='var(--primary-color-darker)'
 						>
 							<ShoppingCartOutlined />{" "}
-							{(product &&
-								product.productAttributes &&
-								product.productAttributes.reduce(
-									(acc, attr) => acc + attr.quantity,
-									0
-								)) ||
-							(product && product.quantity <= 0)
-								? "Out Of Stock"
-								: "Add to Cart"}
+							{isOutOfStock ? "Out Of Stock" : "Add to Cart"}
 						</ActionButton>
 						<ActionButton
 							onClick={handleAddToWishlist}
@@ -478,16 +494,20 @@ const SingleProductNoVariables = ({ product, likee, setLikee }) => {
 				</ProductDetailsWrapper>
 			</SingleProductWrapper>
 			<DeferredRender rootMargin='240px 0px'>
-				<CommentsAndRatings product={product} user={user} token={token} />
+				<Suspense fallback={null}>
+					<CommentsAndRatings product={product} user={user} token={token} />
+				</Suspense>
 			</DeferredRender>
 			<DeferredRender rootMargin='240px 0px'>
-				<div className='my-3'>
+				<RelatedProductsSection>
 					{product &&
 					product.relatedProducts &&
 					product.relatedProducts.length > 0 ? (
-						<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
+						<Suspense fallback={null}>
+							<RelatedProductsCarousel relatedProducts={product.relatedProducts} />
+						</Suspense>
 					) : null}
-				</div>
+				</RelatedProductsSection>
 			</DeferredRender>
 		</div>
 	);
@@ -511,6 +531,7 @@ const ProductImagesWrapper = styled.div`
 	flex: 6;
 	min-width: 500px;
 	margin-right: 20px;
+	min-height: 700px;
 
 	img {
 		width: 100%;
@@ -523,6 +544,7 @@ const ProductImagesWrapper = styled.div`
 		flex: 1 1 100%;
 		margin-right: 0;
 		min-width: 300px;
+		min-height: 400px;
 
 		img {
 			width: 100%;
@@ -538,10 +560,12 @@ const ProductDetailsWrapper = styled.div`
 	flex-direction: column;
 	gap: 10px; /* Ensure even spacing between elements */
 	padding-top: 30px;
+	min-height: 420px;
 	@media (max-width: 768px) {
 		flex: 1 1 100%;
 		margin-top: 20px;
 		padding-top: 10px;
+		min-height: auto;
 	}
 `;
 
@@ -588,13 +612,20 @@ const ButtonContainer = styled.div`
 	justify-content: center;
 	flex-wrap: wrap;
 	gap: 10px; /* Ensure even spacing between buttons */
+	min-height: 142px;
 
 	@media (max-width: 768px) {
 		flex-direction: column;
+		min-height: 182px;
 		button {
 			margin-bottom: 10px;
 		}
 	}
+`;
+
+const RelatedProductsSection = styled.div`
+	margin-top: 1rem;
+	margin-bottom: 1rem;
 `;
 
 const ActionButton = styled.button`
