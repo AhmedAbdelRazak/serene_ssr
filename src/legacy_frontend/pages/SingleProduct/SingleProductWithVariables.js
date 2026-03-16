@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
 import { Suspense, lazy, useMemo } from "react";
+import { useRef } from "react";
 import { useHistory, useLocation } from "react-router-dom";
 import { Collapse } from "antd";
 import { useCartContext } from "../../cart_context";
@@ -103,6 +104,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	const { addToCart, openSidebar2 } = useCartContext();
 	const history = useHistory();
 	const location = useLocation();
+	const isSyncingVariantFromLocationRef = useRef(false);
 	const initialVariantState = useMemo(() => {
 		const queryParams = new URLSearchParams(location.search);
 		const requestedColor = queryParams.get("color") || "";
@@ -165,6 +167,7 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 	useEffect(() => {
 		const nextAttribute = initialVariantState.attribute;
 		if (!nextAttribute?.color && !nextAttribute?.size && !nextAttribute?.PK) return;
+		isSyncingVariantFromLocationRef.current = true;
 		setSelectedColor((prev) => (prev === initialVariantState.color ? prev : initialVariantState.color));
 		setSelectedSize((prev) => (prev === initialVariantState.size ? prev : initialVariantState.size));
 		setChosenAttributes((prev) =>
@@ -198,6 +201,12 @@ const SingleProductWithVariables = ({ product, likee, setLikee }) => {
 			size: selectedSize,
 		});
 		const normalizedNextSearch = nextSearch ? `?${nextSearch}` : "";
+		if (isSyncingVariantFromLocationRef.current) {
+			if (normalizedNextSearch === location.search) {
+				isSyncingVariantFromLocationRef.current = false;
+			}
+			return;
+		}
 		if (normalizedNextSearch !== location.search) {
 			history.replace({
 				pathname: location.pathname,

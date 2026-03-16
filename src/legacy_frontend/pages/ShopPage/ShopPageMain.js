@@ -391,6 +391,7 @@ function buildShopStateFromPayload(payload = {}, legacyCategorySlug = "") {
 function ShopPageMain() {
 	const history = useHistory();
 	const location = useLocation();
+	const isSyncingFromLocationRef = useRef(false);
 	const routeBootstrap = useLegacyRouteBootstrap();
 	const initialShopBootstrap = routeBootstrap?.type === "shop" ? routeBootstrap : null;
 	const initialFilters = parseShopFiltersFromSearch(location.search);
@@ -793,6 +794,7 @@ function ShopPageMain() {
 
 	useEffect(() => {
 		if (!location.pathname.includes("/our-products")) return;
+		isSyncingFromLocationRef.current = true;
 		const nextFilters = parseShopFiltersFromSearch(location.search);
 		setFilters((prev) => {
 			const same =
@@ -840,6 +842,12 @@ function ShopPageMain() {
 	useEffect(() => {
 		if (!location.pathname.includes("/our-products")) return;
 		const nextSearch = buildShopSearchFromFilters(filters, page);
+		if (isSyncingFromLocationRef.current) {
+			if (nextSearch === location.search) {
+				isSyncingFromLocationRef.current = false;
+			}
+			return;
+		}
 		if (nextSearch !== location.search) {
 			history.replace({ pathname: location.pathname, search: nextSearch });
 		}

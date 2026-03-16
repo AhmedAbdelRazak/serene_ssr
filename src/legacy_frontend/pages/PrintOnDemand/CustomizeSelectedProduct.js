@@ -911,6 +911,7 @@ export default function CustomizeSelectedProduct() {
 	});
 
 	const [isMobile, setIsMobile] = useState(window.innerWidth < 800);
+	const isSyncingUrlStateRef = useRef(false);
 	useEffect(() => {
 		const handleResize = () => setIsMobile(window.innerWidth < 800);
 		window.addEventListener("resize", handleResize);
@@ -919,6 +920,7 @@ export default function CustomizeSelectedProduct() {
 
 	useEffect(() => {
 		const resolved = resolvePodPersonalization(location.search);
+		isSyncingUrlStateRef.current = true;
 		setSelectedOccasion(resolved.occasion);
 		setSelectedGiftName(resolved.name);
 		savePodPersonalization(resolved);
@@ -1493,6 +1495,12 @@ export default function CustomizeSelectedProduct() {
 		else params.delete("scent");
 
 		const nextSearch = `?${params.toString()}`;
+		if (isSyncingUrlStateRef.current) {
+			if (nextSearch === location.search) {
+				isSyncingUrlStateRef.current = false;
+			}
+			return;
+		}
 		if (nextSearch !== location.search) {
 			history.replace({ pathname: location.pathname, search: nextSearch });
 		}
