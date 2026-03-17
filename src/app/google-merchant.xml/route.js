@@ -23,6 +23,7 @@ const FEED_CURRENCY = "USD";
 const FEED_SHIPPING_COUNTRY = "US";
 const FEED_SHIPPING_SERVICE = "Standard";
 const DEFAULT_SHIPPING_PRICE_USD = 0;
+const MAX_FEED_IDENTIFIER_LENGTH = 50;
 
 function getCategoryInferenceText(product = {}) {
 	const parts = [
@@ -139,6 +140,45 @@ function toFeedIdToken(value = "") {
 		.replace(/[^a-zA-Z0-9._-]+/g, "-")
 		.replace(/-+/g, "-")
 		.replace(/^-|-$/g, "");
+}
+
+function hashFeedToken(value = "") {
+	let hash = 2166136261;
+	for (const char of `${value || ""}`) {
+		hash ^= char.charCodeAt(0);
+		hash = Math.imul(hash, 16777619);
+	}
+	return (hash >>> 0).toString(36);
+}
+
+function trimFeedToken(value = "", maxLength = MAX_FEED_IDENTIFIER_LENGTH) {
+	if (maxLength <= 0) return "";
+	const token = toFeedIdToken(value);
+	if (!token) return "";
+	return token.slice(0, maxLength).replace(/-+$/g, "");
+}
+
+function buildScopedFeedIdentifier(primary = "", secondary = "", scope = "") {
+	const primaryToken =
+		trimFeedToken(primary, 24) || trimFeedToken("item", 24) || "item";
+	const secondaryToken = toFeedIdToken(secondary);
+	const scopeToken = toFeedIdToken(scope);
+	const raw = [primaryToken, secondaryToken, scopeToken]
+		.filter(Boolean)
+		.join("-");
+
+	if (!raw) return primaryToken;
+	if (raw.length <= MAX_FEED_IDENTIFIER_LENGTH) return raw;
+
+	const hash = hashFeedToken(raw).slice(0, 6);
+	const secondaryMaxLength =
+		MAX_FEED_IDENTIFIER_LENGTH - primaryToken.length - hash.length - 2;
+	const compactSecondary = trimFeedToken(
+		secondaryToken || scopeToken || "variant",
+		secondaryMaxLength
+	);
+
+	return [primaryToken, compactSecondary, hash].filter(Boolean).join("-");
 }
 
 function normalizeHexColor(value = "") {
@@ -496,12 +536,14 @@ function buildPodFeedItems({
 				scent: selection.scent,
 			});
 			const occasionToken = toFeedIdToken(occasion || "custom") || "custom";
-			const variantToken =
-				toFeedIdToken(selection.token) ||
-				toFeedIdToken(selection.variantSku) ||
-				`${index + 1}`;
-			const itemId = `${product._id}-${occasionToken}-${variantToken}`;
-			const itemGroupId = `${product._id}-${occasionToken}`;
+			const variantIdentity =
+				selection.variantSku || selection.variantId || selection.token || `${index + 1}`;
+			const itemId = buildScopedFeedIdentifier(
+				product._id,
+				variantIdentity,
+				occasionToken
+			);
+			const itemGroupId = buildScopedFeedIdentifier(product._id, occasionToken);
 
 			return `<item>
 	<g:id>${escapeXml(itemId)}</g:id>
@@ -634,7 +676,7 @@ function buildStandardFeedItems({
 			toFeedIdToken(attr?.SubSKU) ||
 			toFeedIdToken(attr?.PK) ||
 			`${index + 1}`;
-		const variantId = `${product._id}-${variantToken}`;
+		const variantId = buildScopedFeedIdentifier(product._id, variantToken);
 
 		return `<item>
 	<g:id>${escapeXml(variantId)}</g:id>
