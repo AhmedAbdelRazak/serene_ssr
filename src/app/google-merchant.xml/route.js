@@ -603,6 +603,11 @@ function buildStandardFeedItems({
 
 	return attributes.map((attr, index) => {
 		const resolvedColor = resolveVariantColorLabel(product, attr?.color, colorLookup);
+		const link = buildVariantLink(baseLink, {
+			color: resolvedColor || attr?.color,
+			size: attr?.size,
+			scent: attr?.scent,
+		});
 		const imageSet = buildFeedImageSet(product, {
 			attr,
 			color: resolvedColor || attr?.color,
@@ -636,8 +641,8 @@ function buildStandardFeedItems({
 	<g:item_group_id>${escapeXml(String(product._id))}</g:item_group_id>
 	<title>${escapeXml(title)}</title>
 	<description>${escapeXml(description)}</description>
-	<link>${escapeXml(baseLink)}</link>
-	<g:canonical_link>${escapeXml(baseLink)}</g:canonical_link>
+	<link>${escapeXml(link)}</link>
+	<g:canonical_link>${escapeXml(link)}</g:canonical_link>
 	<g:image_link>${escapeXml(primaryImage)}</g:image_link>
 	${additionalImageLinks}
 	<g:availability>${escapeXml(availability)}</g:availability>
