@@ -3,6 +3,7 @@ import {
   buildPodSelectionQuery,
   buildProductPath,
   findBestProductAttribute,
+  getPodDefaultDesignImages,
   getPodGalleryImages,
   getPodOccasions,
   getPodVariantSelections,
@@ -344,6 +345,13 @@ function buildFeedImageSet(
   product = {},
   { attr = null, occasion = "", color = "", size = "", scent = "" } = {},
 ) {
+  const defaultDesignImageSet = getPodDefaultDesignImages(product, {
+    occasion,
+    color,
+    size,
+    scent,
+    limit: MAX_FEED_IMAGE_COUNT,
+  });
   const primary = getPrimaryProductImage(product, {
     occasion,
     color,
@@ -352,6 +360,7 @@ function buildFeedImageSet(
   });
 
   const images = cloudinaryOnlyImageUrls([
+    ...defaultDesignImageSet,
     toCloudinaryImageUrl(primary),
     ...extractImageUrls(attr?.exampleDesignImage),
     ...extractImageUrls(attr?.productImages),
@@ -364,6 +373,7 @@ function buildFeedImageSet(
   }
 
   const fallbackImageSet = cloudinaryOnlyImageUrls([
+    ...defaultDesignImageSet,
     toCloudinaryImageUrl(
       getPrimaryProductImage(product, {
         occasion,

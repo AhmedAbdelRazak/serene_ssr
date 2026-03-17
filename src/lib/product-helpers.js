@@ -1,6 +1,9 @@
 import { POD_OCCASIONS } from "./pod-occasions";
 import { stripHtml, toSlug, uniqueStrings } from "./utils";
 
+const CLOUDINARY_BASE_URL =
+  "https://res.cloudinary.com/infiniteapps/image/upload/";
+
 function normalizeToken(value = "") {
   if (typeof value === "symbol") return "";
   return `${value ?? ""}`.trim().toLowerCase();
@@ -358,7 +361,12 @@ function pickDefaultDesignByOccasion(defaultDesigns = [], occasion = "") {
   );
 }
 
-export function getPodDefaultDesignImage(
+function buildCloudinaryDeliveryUrl(publicId = "") {
+  const normalized = `${publicId || ""}`.trim().replace(/^\/+/, "");
+  return normalized ? `${CLOUDINARY_BASE_URL}${normalized}` : "";
+}
+
+export function getPodDefaultDesignImages(
   product = {},
   {
     occasion = "",
@@ -368,10 +376,11 @@ export function getPodDefaultDesignImage(
     scent = "",
     viewIndex = 0,
     allowOccasionFallback = false,
+    limit = 3,
   } = {},
 ) {
-  if (normalizeToken(name)) return "";
-  if (!normalizeToken(occasion) && !allowOccasionFallback) return "";
+  if (normalizeToken(name)) return [];
+  if (!normalizeToken(occasion) && !allowOccasionFallback) return [];
   const matchedAttr = findBestProductAttribute(product, { color, size, scent });
   const collections = [];
   if (Array.isArray(matchedAttr?.defaultDesigns)) {
@@ -387,16 +396,43 @@ export function getPodDefaultDesignImage(
     const images = Array.isArray(occasionEntry?.defaultDesignImages)
       ? occasionEntry.defaultDesignImages
       : [];
-    const indexedCandidate = images[viewIndex] || images[0];
-    const indexedUrl = resolveImageUrl(indexedCandidate);
-    if (indexedUrl) return indexedUrl;
-    for (const image of images) {
-      const url = resolveImageUrl(image);
-      if (url) return url;
-    }
+    const urls = images.map((image) => resolveImageUrl(image)).filter(Boolean);
+    if (!urls.length) continue;
+
+    const preferredImages =
+      viewIndex > 0 && urls[viewIndex]
+        ? [urls[viewIndex], ...urls.filter((_, index) => index !== viewIndex)]
+        : urls;
+    return uniqueStrings(preferredImages).slice(0, Math.max(1, limit));
   }
 
-  return "";
+  return [];
+}
+
+export function getPodDefaultDesignImage(
+  product = {},
+  {
+    occasion = "",
+    name = "",
+    color = "",
+    size = "",
+    scent = "",
+    viewIndex = 0,
+    allowOccasionFallback = false,
+  } = {},
+) {
+  return (
+    getPodDefaultDesignImages(product, {
+      occasion,
+      name,
+      color,
+      size,
+      scent,
+      viewIndex,
+      allowOccasionFallback,
+      limit: 1,
+    })[0] || ""
+  );
 }
 
 export function resolveImageUrl(imageLike) {
@@ -412,10 +448,22 @@ export function resolveImageUrl(imageLike) {
   if (Array.isArray(imageLike?.images) && imageLike.images.length) {
     return resolveImageUrl(imageLike.images[0]);
   }
-  const direct =
+  const cloudinaryDirect =
     imageLike.cloudinary_url ||
     imageLike.cloudinaryUrl ||
     imageLike.cloudinaryURL ||
+    imageLike.cloudinary_secure_url ||
+    imageLike.cloudinarySecureUrl ||
+    "";
+  const cloudinaryPublicId =
+    imageLike.cloudinary_public_id ||
+    imageLike.cloudinaryPublicId ||
+    imageLike.public_id ||
+    imageLike.publicId ||
+    "";
+  const direct =
+    cloudinaryDirect ||
+    buildCloudinaryDeliveryUrl(cloudinaryPublicId) ||
     imageLike.secure_url ||
     imageLike.url ||
     imageLike.src;
