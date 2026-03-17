@@ -84,6 +84,18 @@ function isApparelCategory(category = "") {
   return `${category || ""}`.startsWith("Apparel & Accessories > Clothing");
 }
 
+function hasGenderKeyword(text = "", keywords = []) {
+  const safeText = `${text || ""}`.trim().toLowerCase();
+  if (!safeText) return false;
+  return keywords.some((keyword) => {
+    const safeKeyword = `${keyword || ""}`.trim().toLowerCase();
+    if (!safeKeyword) return false;
+    const escapedKeyword = safeKeyword.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const pattern = new RegExp(`(^|[^a-z])${escapedKeyword}([^a-z]|$)`, "i");
+    return pattern.test(safeText);
+  });
+}
+
 function resolveFeedGender(product = {}) {
   const genderToken = `${product?.gender?.genderName || ""}`
     .trim()
@@ -91,20 +103,22 @@ function resolveFeedGender(product = {}) {
   const text = getCategoryInferenceText(product);
 
   if (
-    genderToken.includes("women") ||
-    genderToken.includes("female") ||
-    text.includes("women") ||
-    text.includes("female") ||
-    text.includes("ladies")
+    hasGenderKeyword(genderToken, ["unisex"]) ||
+    hasGenderKeyword(text, ["unisex"])
+  ) {
+    return "unisex";
+  }
+
+  if (
+    hasGenderKeyword(genderToken, ["women", "woman", "female", "ladies"]) ||
+    hasGenderKeyword(text, ["women", "woman", "female", "ladies"])
   ) {
     return "female";
   }
 
   if (
-    genderToken.includes("men") ||
-    genderToken.includes("male") ||
-    text.includes("men") ||
-    text.includes("male")
+    hasGenderKeyword(genderToken, ["men", "man", "male"]) ||
+    hasGenderKeyword(text, ["men", "man", "male"])
   ) {
     return "male";
   }
