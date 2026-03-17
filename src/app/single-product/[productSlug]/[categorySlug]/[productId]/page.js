@@ -6,9 +6,8 @@ import {
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
-	getProductInventoryCount,
-	getProductPrice,
 } from "@/lib/product-helpers";
+import { getSelectedStandardOffer } from "@/lib/product-offer";
 import {
 	sanitizeStandardProductRoute,
 	serializeComparableSearchParams,
@@ -86,8 +85,6 @@ export default async function SingleProductPage({ params, searchParams }) {
 	const description = getProductDescription(product);
 	const variationLabel = buildVariantLabel(selection);
 	const image = getPrimaryProductImage(product, selection);
-	const price = getProductPrice(product);
-	const inventoryCount = getProductInventoryCount(product);
 	const bootstrapProduct = createPublicProductBootstrap(product);
 	const canonicalPath = buildProductPath(product);
 	const routeQuery = routeState.routeSearchParams.toString();
@@ -104,21 +101,21 @@ export default async function SingleProductPage({ params, searchParams }) {
 		permanentRedirect(routeUrl);
 	}
 
-	const canonicalUrl = absoluteUrl(canonicalPath);
+	const selectedOffer = getSelectedStandardOffer(product, selection);
+	const canonicalUrl = absoluteUrl(routeUrl);
 	const schema = productSchema({
 		name: variationLabel ? `${title} - ${variationLabel}` : title,
 		description: variationLabel
 			? `${description} This product variation reflects ${variationLabel.toLowerCase()}.`
 			: description,
 		image,
-		price,
+		price: selectedOffer.price,
 		url: canonicalUrl,
-		availability:
-			inventoryCount > 0
-				? "https://schema.org/InStock"
-				: "https://schema.org/OutOfStock",
+		availability: selectedOffer.availabilityUrl,
+		sku: selectedOffer.sku,
+		mpn: selectedOffer.mpn,
+		itemGroupId: selectedOffer.itemGroupId,
 	});
-	schema.itemGroupId = product?._id;
 	const ratings = Array.isArray(product?.ratings) ? product.ratings : [];
 	if (ratings.length > 0) {
 		const ratingValue =
@@ -161,11 +158,11 @@ export default async function SingleProductPage({ params, searchParams }) {
 		product: bootstrapProduct,
 		title,
 		description,
-		price,
+		price: selectedOffer.price,
 		image,
 		selection,
 		canonicalPath,
-		availabilityLabel: inventoryCount > 0 ? "In stock" : "Out of stock",
+		availabilityLabel: selectedOffer.availabilityLabel,
 		hydrateProductOnMount: true,
 	};
 

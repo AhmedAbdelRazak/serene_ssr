@@ -79,20 +79,28 @@ export function productSchema({
 	currency = "USD",
 	availability = "https://schema.org/InStock",
 	brand = "Serene Jannat",
+	sku = "",
+	mpn = "",
+	itemGroupId = "",
 } = {}) {
 	return {
 		"@context": "https://schema.org",
 		"@type": "Product",
 		name,
 		description,
+		url,
 		image: image ? [image] : undefined,
 		brand: { "@type": "Brand", name: brand },
+		sku: sku || undefined,
+		mpn: mpn || undefined,
+		inProductGroupWithID: itemGroupId || undefined,
 		offers: {
 			"@type": "Offer",
 			priceCurrency: currency,
 			price: `${Number(price || 0).toFixed(2)}`,
 			availability,
 			url,
+			itemCondition: "https://schema.org/NewCondition",
 		},
 	};
 }

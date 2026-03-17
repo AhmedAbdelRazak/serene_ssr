@@ -7,6 +7,11 @@ export async function GET(request) {
 	const response = await getGoogleMerchantFeed(request);
 	const xml = await response.text();
 	const facebookXml = xml
+		.replace(/\sxmlns:g="[^"]+"/, "")
+		.replace(/<g:/g, "<")
+		.replace(/<\/g:/g, "</")
+		.replace(/>in_stock</g, ">in stock<")
+		.replace(/>out_of_stock</g, ">out of stock<")
 		.replace(
 			"<title>Serene Jannat Product Feed</title>",
 			"<title>Serene Jannat Facebook Catalog Feed</title>"

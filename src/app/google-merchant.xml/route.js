@@ -416,7 +416,7 @@ function resolveVariantPricing(product = {}, attr = null, variantLike = null) {
 
 function resolveAvailability(product = {}, attr = null) {
 	const quantity = Number(attr?.quantity ?? product?.quantity ?? 0);
-	return quantity > 0 ? "in stock" : "out of stock";
+	return quantity > 0 ? "in_stock" : "out_of_stock";
 }
 
 function buildPodFeedItems({

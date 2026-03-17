@@ -5,10 +5,9 @@ import {
 	getPrimaryProductImage,
 	getProductDescription,
 	getProductDisplayName,
-	getProductInventoryCount,
-	getProductPrice,
 	getProductSlug,
 } from "@/lib/product-helpers";
+import { getSelectedPodOffer } from "@/lib/product-offer";
 import {
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
@@ -153,8 +152,6 @@ export default async function PodProductPage({ params, searchParams }) {
 		product,
 		selection
 	);
-	const price = getProductPrice(product);
-	const inventoryCount = getProductInventoryCount(product);
 	const slug = getProductSlug(product);
 	const normalizedProduct = normalizePodProduct(product);
 	const initialVariantSelection = resolveInitialPodVariantSelection(
@@ -174,21 +171,21 @@ export default async function PodProductPage({ params, searchParams }) {
 		permanentRedirect(routeUrl);
 	}
 
-	const canonicalUrl = absoluteUrl(canonicalPath);
+	const selectedOffer = getSelectedPodOffer(product, initialVariantSelection);
+	const canonicalUrl = absoluteUrl(routeUrl);
 	const schema = productSchema({
 		name: variationLabel ? `${title} - ${variationLabel}` : title,
 		description: selection.occasion
 			? `${description} Personalized for ${selection.occasion}. Customize the final design on the product page.`
 			: `${description} Customize the final design on the product page.`,
 		image,
-		price,
+		price: selectedOffer.price,
 		url: canonicalUrl,
-		availability:
-			inventoryCount > 0
-				? "https://schema.org/InStock"
-				: "https://schema.org/OutOfStock",
+		availability: selectedOffer.availabilityUrl,
+		sku: selectedOffer.sku,
+		mpn: selectedOffer.mpn,
+		itemGroupId: selectedOffer.itemGroupId,
 	});
-	schema.itemGroupId = product?.printifyProductDetails?.id || product?._id;
 	schema.additionalProperty = [
 		selection.occasion && {
 			"@type": "PropertyValue",
@@ -230,7 +227,7 @@ export default async function PodProductPage({ params, searchParams }) {
 		productId: parsed.productId,
 		productSlug: slug,
 		title,
-		price,
+		price: selectedOffer.price,
 		image,
 		selection: {
 			occasion: selection.occasion,
