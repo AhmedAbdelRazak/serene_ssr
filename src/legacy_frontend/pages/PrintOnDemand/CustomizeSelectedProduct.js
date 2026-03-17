@@ -9,7 +9,6 @@ import {
 	Typography,
 	Input,
 	Select,
-	message,
 	Skeleton,
 	Divider,
 	Popover,
@@ -45,6 +44,7 @@ import html2canvas from "html2canvas";
 import { useCartContext } from "../../cart_context";
 import { Rnd } from "react-rnd";
 import { Helmet } from "react-helmet-async";
+import { toast } from "react-toastify";
 
 // GA 4
 import ReactGA from "react-ga4";
@@ -59,6 +59,7 @@ import {
 	normalizePodProduct,
 	resolveInitialPodVariantSelection,
 } from "@/lib/pod-product";
+import { getPodDefaultDesignImage } from "@/lib/product-helpers";
 import { useLegacySeoEnabled } from "../../bootstrap/legacySeo";
 import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 
@@ -118,6 +119,23 @@ function normalizeColorToken(value = "") {
 	return `#${stripped}`;
 }
 
+function normalizeSearchParamsString(search = "") {
+	const params = new URLSearchParams(`${search || ""}`.replace(/^\?/, ""));
+	const normalized = new URLSearchParams();
+	[...params.entries()]
+		.sort(([leftKey, leftValue], [rightKey, rightValue]) => {
+			if (leftKey === rightKey) {
+				return `${leftValue}`.localeCompare(`${rightValue}`);
+			}
+			return `${leftKey}`.localeCompare(`${rightKey}`);
+		})
+		.forEach(([key, value]) => {
+			normalized.append(key, value);
+		});
+	const next = normalized.toString();
+	return next ? `?${next}` : "";
+}
+
 function looksLikeHexColor(value = "") {
 	return /^#?[0-9a-f]{3,8}$/i.test(`${value || ""}`.trim());
 }
@@ -166,47 +184,677 @@ function getPodProductKindForDefaultDesign(product = {}) {
 	if (normalizedName.includes("mug")) return "mug";
 	if (normalizedName.includes("pillow")) return "pillow";
 	if (normalizedName.includes("magnet")) return "magnet";
+	if (normalizedName.includes("candle")) return "candle";
 	return "default";
 }
 
-function getPodPrintAreaFrame(product = {}) {
-	const kind = getPodProductKindForDefaultDesign(product);
-	switch (kind) {
-		case "apparel":
-			return { top: "19%", left: "21%", width: "58%", height: "72%" };
-		case "hoodie":
-			return { top: "20%", left: "21%", width: "58%", height: "71%" };
-		case "tote":
-			return { top: "20%", left: "24%", width: "52%", height: "64%" };
-		case "bag":
-			return { top: "18%", left: "22%", width: "56%", height: "62%" };
-		case "mug":
-			return { top: "30%", left: "18%", width: "64%", height: "42%" };
-		case "pillow":
-		case "magnet":
-			return { top: "16%", left: "16%", width: "68%", height: "68%" };
-		default:
-			return { top: "20%", left: "20%", width: "60%", height: "75%" };
-	}
+function normalizePrintAreaPosition(value = "") {
+	return `${value || ""}`
+		.trim()
+		.toLowerCase()
+		.replace(/\s+/g, "_");
 }
 
-function getPodPrintifySafeInsetPercent(product = {}) {
+function formatPrintAreaLabel(position = "") {
+	const safe = normalizePrintAreaPosition(position);
+	if (!safe) return "Front";
+	return safe
+		.split("_")
+		.map((token) => token.charAt(0).toUpperCase() + token.slice(1))
+		.join(" ");
+}
+
+const POD_EDITOR_FRAME_CONFIG = {
+	byBlueprint: {
+		478: {
+			front: { top: "28%", left: "18%", width: "64%", height: "50%", clampInset: 3 },
+		},
+		479: {
+			front: { top: "28%", left: "18%", width: "64%", height: "50%", clampInset: 3 },
+		},
+		220: {
+			front: { top: "30%", left: "29%", width: "42%", height: "42%", clampInset: 2 },
+		},
+		326: {
+			front: { top: "38%", left: "20%", width: "60%", height: "54%", clampInset: 1 },
+		},
+		1048: {
+			front: { top: "35%", left: "30%", width: "40%", height: "44%", clampInset: 2 },
+		},
+		1313: {
+			front: { top: "28%", left: "27%", width: "46%", height: "54%", clampInset: 3 },
+			back: { top: "28%", left: "27%", width: "46%", height: "54%", clampInset: 3 },
+		},
+		1464: {
+			front: { top: "12%", left: "12%", width: "76%", height: "76%", clampInset: 1 },
+		},
+	},
+	byKind: {
+		apparel: {
+			front: { top: "20%", left: "23%", width: "54%", height: "68%", clampInset: 4 },
+			back: { top: "20%", left: "23%", width: "54%", height: "68%", clampInset: 4 },
+		},
+		hoodie: {
+			front: { top: "23%", left: "25%", width: "50%", height: "63%", clampInset: 4 },
+			back: { top: "20%", left: "23%", width: "54%", height: "69%", clampInset: 4 },
+			left_sleeve: { top: "30%", left: "8%", width: "13%", height: "37%", clampInset: 4 },
+			right_sleeve: { top: "30%", left: "79%", width: "13%", height: "37%", clampInset: 4 },
+			neck: { top: "18%", left: "44%", width: "12%", height: "10%", clampInset: 2 },
+		},
+		tote: {
+			front: { top: "28%", left: "27%", width: "46%", height: "54%", clampInset: 3 },
+			back: { top: "28%", left: "27%", width: "46%", height: "54%", clampInset: 3 },
+		},
+		bag: {
+			front: { top: "38%", left: "20%", width: "60%", height: "54%", clampInset: 1 },
+		},
+		mug: {
+			front: { top: "28%", left: "18%", width: "64%", height: "50%", clampInset: 3 },
+		},
+		pillow: {
+			front: { top: "30%", left: "29%", width: "42%", height: "42%", clampInset: 2 },
+		},
+		magnet: {
+			front: { top: "12%", left: "12%", width: "76%", height: "76%", clampInset: 1 },
+		},
+		candle: {
+			front: { top: "35%", left: "30%", width: "40%", height: "44%", clampInset: 2 },
+		},
+		default: {
+			front: { top: "20%", left: "20%", width: "60%", height: "75%", clampInset: 3 },
+		},
+	},
+};
+
+function getPodEditorSurfaceConfig(product = {}, positionInput = "") {
 	const kind = getPodProductKindForDefaultDesign(product);
-	switch (kind) {
-		case "apparel":
-		case "hoodie":
-			return 8;
-		case "tote":
-		case "bag":
-			return 8;
-		case "mug":
-			return 12;
-		case "pillow":
-		case "magnet":
-			return 7;
-		default:
-			return 8;
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	const blueprintId = Number(product?.printifyProductDetails?.blueprint_id || 0);
+	const blueprintConfig =
+		POD_EDITOR_FRAME_CONFIG.byBlueprint[blueprintId]?.[position] ||
+		POD_EDITOR_FRAME_CONFIG.byBlueprint[blueprintId]?.front ||
+		null;
+	if (blueprintConfig) return blueprintConfig;
+	const kindConfig = POD_EDITOR_FRAME_CONFIG.byKind[kind] || POD_EDITOR_FRAME_CONFIG.byKind.default;
+	return kindConfig[position] || kindConfig.front || POD_EDITOR_FRAME_CONFIG.byKind.default.front;
+}
+
+function getPodPlaceholderAspectRatio(placeholder = null) {
+	const explicitRatio = Number(placeholder?.aspect_ratio || 0);
+	if (explicitRatio > 0) return explicitRatio;
+	const width = Number(placeholder?.width || 0);
+	const height = Number(placeholder?.height || 0);
+	if (width > 0 && height > 0) {
+		return width / height;
 	}
+	return 0;
+}
+
+function parsePercentValue(value = "") {
+	if (typeof value === "number" && Number.isFinite(value)) return value;
+	const parsed = parseFloat(`${value || ""}`.replace("%", ""));
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatPercentValue(value = 0) {
+	return `${Number(value).toFixed(4).replace(/\.?0+$/, "")}%`;
+}
+
+function buildFramePixelRectFromPercent(
+	frame = {},
+	containerWidth = 0,
+	containerHeight = 0
+) {
+	const safeContainerWidth = Math.max(0, Number(containerWidth) || 0);
+	const safeContainerHeight = Math.max(0, Number(containerHeight) || 0);
+	return {
+		x: (parsePercentValue(frame.left) / 100) * safeContainerWidth,
+		y: (parsePercentValue(frame.top) / 100) * safeContainerHeight,
+		width: (parsePercentValue(frame.width) / 100) * safeContainerWidth,
+		height: (parsePercentValue(frame.height) / 100) * safeContainerHeight,
+	};
+}
+
+function buildPercentFrameFromPixelRect(
+	rect = {},
+	containerWidth = 0,
+	containerHeight = 0
+) {
+	const safeContainerWidth = Math.max(1, Number(containerWidth) || 1);
+	const safeContainerHeight = Math.max(1, Number(containerHeight) || 1);
+	return {
+		left: formatPercentValue((rect.x / safeContainerWidth) * 100),
+		top: formatPercentValue((rect.y / safeContainerHeight) * 100),
+		width: formatPercentValue((rect.width / safeContainerWidth) * 100),
+		height: formatPercentValue((rect.height / safeContainerHeight) * 100),
+	};
+}
+
+function getFrameDifferenceScore(frameA = {}, frameB = {}) {
+	return Math.max(
+		Math.abs(parsePercentValue(frameA.left) - parsePercentValue(frameB.left)),
+		Math.abs(parsePercentValue(frameA.top) - parsePercentValue(frameB.top)),
+		Math.abs(parsePercentValue(frameA.width) - parsePercentValue(frameB.width)),
+		Math.abs(parsePercentValue(frameA.height) - parsePercentValue(frameB.height))
+	);
+}
+
+function clampPixelRectWithinContainer(
+	rect = {},
+	containerWidth = 0,
+	containerHeight = 0
+) {
+	const safeContainerWidth = Math.max(1, Number(containerWidth) || 1);
+	const safeContainerHeight = Math.max(1, Number(containerHeight) || 1);
+	const width = clampNumber(Number(rect.width) || 0, 24, safeContainerWidth);
+	const height = clampNumber(Number(rect.height) || 0, 24, safeContainerHeight);
+	return {
+		x: clampNumber(Number(rect.x) || 0, 0, safeContainerWidth - width),
+		y: clampNumber(Number(rect.y) || 0, 0, safeContainerHeight - height),
+		width,
+		height,
+	};
+}
+
+function getCombinedElementBounds(elements = []) {
+	const safeElements = Array.isArray(elements) ? elements.filter(Boolean) : [];
+	if (!safeElements.length) return null;
+	const minX = Math.min(...safeElements.map((item) => Number(item.x) || 0));
+	const minY = Math.min(...safeElements.map((item) => Number(item.y) || 0));
+	const maxX = Math.max(
+		...safeElements.map(
+			(item) => (Number(item.x) || 0) + Math.max(0, Number(item.width) || 0)
+		)
+	);
+	const maxY = Math.max(
+		...safeElements.map(
+			(item) => (Number(item.y) || 0) + Math.max(0, Number(item.height) || 0)
+		)
+	);
+	return {
+		x: minX,
+		y: minY,
+		width: Math.max(0, maxX - minX),
+		height: Math.max(0, maxY - minY),
+	};
+}
+
+function getRankedMockupImagesForSurface(product = {}, positionInput = "") {
+	const sourceImages = Array.isArray(product?.images) ? product.images : [];
+	return [...sourceImages].sort(
+		(left, right) =>
+			scoreMockupImageForSurface(right, positionInput, product) -
+			scoreMockupImageForSurface(left, positionInput, product)
+	);
+}
+
+function getPodDefaultDesignReferenceImageUrls(
+	product = {},
+	{ occasion = "", color = "", size = "", scent = "" } = {}
+) {
+	const urls = [];
+	for (let viewIndex = 0; viewIndex < 6; viewIndex += 1) {
+		const url = getPodDefaultDesignImage(product, {
+			occasion,
+			name: "",
+			color,
+			size,
+			scent,
+			viewIndex,
+			allowOccasionFallback: true,
+		});
+		if (url && !urls.includes(url)) {
+			urls.push(url);
+		}
+	}
+	return urls;
+}
+
+function createAnalysisCanvas(width = 1, height = 1) {
+	const canvas = document.createElement("canvas");
+	canvas.width = Math.max(1, Math.round(width) || 1);
+	canvas.height = Math.max(1, Math.round(height) || 1);
+	return canvas;
+}
+
+function loadAnalysisImage(src = "") {
+	return new Promise((resolve, reject) => {
+		if (!src) {
+			reject(new Error("Missing image source."));
+			return;
+		}
+		const image = new Image();
+		image.crossOrigin = "anonymous";
+		image.decoding = "async";
+		image.onload = () => {
+			resolve({
+				image,
+				width: image.naturalWidth || image.width || 0,
+				height: image.naturalHeight || image.height || 0,
+			});
+		};
+		image.onerror = () => reject(new Error(`Failed to load analysis image: ${src}`));
+		image.src = src;
+	});
+}
+
+function extractAnalysisImageData(image, width = 1, height = 1) {
+	const canvas = createAnalysisCanvas(width, height);
+	const context = canvas.getContext("2d", { willReadFrequently: true });
+	context.clearRect(0, 0, canvas.width, canvas.height);
+	context.drawImage(image, 0, 0, canvas.width, canvas.height);
+	return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+function computeAveragePixelDifference(baseData, compareData, step = 1) {
+	const stride = Math.max(1, Number(step) || 1);
+	let total = 0;
+	let count = 0;
+	for (let y = 0; y < baseData.height; y += stride) {
+		for (let x = 0; x < baseData.width; x += stride) {
+			const offset = (y * baseData.width + x) * 4;
+			total +=
+				Math.abs(baseData.data[offset] - compareData.data[offset]) +
+				Math.abs(baseData.data[offset + 1] - compareData.data[offset + 1]) +
+				Math.abs(baseData.data[offset + 2] - compareData.data[offset + 2]);
+			count += 3;
+		}
+	}
+	return count > 0 ? total / count : Number.POSITIVE_INFINITY;
+}
+
+function detectNormalizedDifferenceBounds(
+	baseData,
+	compareData,
+	{
+		pixelThreshold = 34,
+		minChangedColumnsRatio = 0.004,
+		minChangedRowsRatio = 0.004,
+	} = {}
+) {
+	const width = baseData.width;
+	const height = baseData.height;
+	const rowCounts = new Array(height).fill(0);
+	const columnCounts = new Array(width).fill(0);
+	let changedPixels = 0;
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			const offset = (y * width + x) * 4;
+			const diff =
+				Math.abs(baseData.data[offset] - compareData.data[offset]) +
+				Math.abs(baseData.data[offset + 1] - compareData.data[offset + 1]) +
+				Math.abs(baseData.data[offset + 2] - compareData.data[offset + 2]);
+			if (diff < pixelThreshold) continue;
+			rowCounts[y] += 1;
+			columnCounts[x] += 1;
+			changedPixels += 1;
+		}
+	}
+
+	if (!changedPixels) return null;
+
+	const minChangedColumns = Math.max(1, Math.round(height * minChangedColumnsRatio));
+	const minChangedRows = Math.max(1, Math.round(width * minChangedRowsRatio));
+	let minX = width;
+	let maxX = -1;
+	let minY = height;
+	let maxY = -1;
+
+	for (let x = 0; x < width; x += 1) {
+		if (columnCounts[x] < minChangedColumns) continue;
+		minX = Math.min(minX, x);
+		maxX = Math.max(maxX, x);
+	}
+	for (let y = 0; y < height; y += 1) {
+		if (rowCounts[y] < minChangedRows) continue;
+		minY = Math.min(minY, y);
+		maxY = Math.max(maxY, y);
+	}
+
+	if (maxX < minX || maxY < minY) return null;
+
+	const padX = Math.max(1, Math.round((maxX - minX + 1) * 0.06));
+	const padY = Math.max(1, Math.round((maxY - minY + 1) * 0.08));
+	const paddedMinX = clampNumber(minX - padX, 0, width);
+	const paddedMinY = clampNumber(minY - padY, 0, height);
+	const paddedMaxX = clampNumber(maxX + padX, 0, width - 1);
+	const paddedMaxY = clampNumber(maxY + padY, 0, height - 1);
+	const bboxWidth = Math.max(1, paddedMaxX - paddedMinX + 1);
+	const bboxHeight = Math.max(1, paddedMaxY - paddedMinY + 1);
+	const areaRatio = (bboxWidth * bboxHeight) / Math.max(1, width * height);
+
+	return {
+		x: paddedMinX / width,
+		y: paddedMinY / height,
+		width: bboxWidth / width,
+		height: bboxHeight / height,
+		areaRatio,
+	};
+}
+
+function getCoverPlacement(containerWidth, containerHeight, imageWidth, imageHeight) {
+	const safeContainerWidth = Math.max(1, Number(containerWidth) || 1);
+	const safeContainerHeight = Math.max(1, Number(containerHeight) || 1);
+	const safeImageWidth = Math.max(1, Number(imageWidth) || 1);
+	const safeImageHeight = Math.max(1, Number(imageHeight) || 1);
+	const scale = Math.max(
+		safeContainerWidth / safeImageWidth,
+		safeContainerHeight / safeImageHeight
+	);
+	const width = safeImageWidth * scale;
+	const height = safeImageHeight * scale;
+	return {
+		x: (safeContainerWidth - width) / 2,
+		y: (safeContainerHeight - height) / 2,
+		width,
+		height,
+	};
+}
+
+function mapNormalizedRectToPixelRect(normalizedRect = {}, placement = {}) {
+	return {
+		x: placement.x + Number(normalizedRect.x || 0) * placement.width,
+		y: placement.y + Number(normalizedRect.y || 0) * placement.height,
+		width: Number(normalizedRect.width || 0) * placement.width,
+		height: Number(normalizedRect.height || 0) * placement.height,
+	};
+}
+
+async function inferDynamicPrintAreaFrameFromReferenceImages({
+	baseImageSrc = "",
+	referenceImageUrls = [],
+	containerWidth = 0,
+	containerHeight = 0,
+	relativeDesignBounds = null,
+} = {}) {
+	if (
+		typeof window === "undefined" ||
+		!baseImageSrc ||
+		!Array.isArray(referenceImageUrls) ||
+		!referenceImageUrls.length ||
+		!relativeDesignBounds
+	) {
+		return null;
+	}
+
+	const baseImage = await loadAnalysisImage(baseImageSrc);
+	if (!(baseImage.width > 0) || !(baseImage.height > 0)) return null;
+
+	const maxDimension = Math.max(baseImage.width, baseImage.height);
+	const scale = maxDimension > 420 ? 420 / maxDimension : 1;
+	const analysisWidth = Math.max(64, Math.round(baseImage.width * scale));
+	const analysisHeight = Math.max(64, Math.round(baseImage.height * scale));
+	const baseData = extractAnalysisImageData(
+		baseImage.image,
+		analysisWidth,
+		analysisHeight
+	);
+
+	let bestMatch = null;
+	for (const referenceUrl of referenceImageUrls) {
+		try {
+			const referenceImage = await loadAnalysisImage(referenceUrl);
+			const referenceData = extractAnalysisImageData(
+				referenceImage.image,
+				analysisWidth,
+				analysisHeight
+			);
+			const similarity = computeAveragePixelDifference(baseData, referenceData, 2);
+			const diffBounds = detectNormalizedDifferenceBounds(baseData, referenceData);
+			if (!diffBounds) continue;
+			if (diffBounds.areaRatio <= 0.0015 || diffBounds.areaRatio >= 0.42) {
+				continue;
+			}
+			if (!bestMatch || similarity < bestMatch.similarity) {
+				bestMatch = {
+					similarity,
+					diffBounds,
+				};
+			}
+		} catch {}
+	}
+
+	if (!bestMatch?.diffBounds) return null;
+
+	const coverPlacement = getCoverPlacement(
+		containerWidth,
+		containerHeight,
+		baseImage.width,
+		baseImage.height
+	);
+	const detectedDesignRect = mapNormalizedRectToPixelRect(
+		bestMatch.diffBounds,
+		coverPlacement
+	);
+	if (
+		!(relativeDesignBounds.width > 0) ||
+		!(relativeDesignBounds.height > 0) ||
+		!(detectedDesignRect.width > 0) ||
+		!(detectedDesignRect.height > 0)
+	) {
+		return null;
+	}
+
+	const inferredFrameRect = clampPixelRectWithinContainer(
+		{
+			x:
+				detectedDesignRect.x -
+				Number(relativeDesignBounds.x || 0) *
+					(detectedDesignRect.width / Number(relativeDesignBounds.width || 1)),
+			y:
+				detectedDesignRect.y -
+				Number(relativeDesignBounds.y || 0) *
+					(detectedDesignRect.height / Number(relativeDesignBounds.height || 1)),
+			width:
+				detectedDesignRect.width / Number(relativeDesignBounds.width || 1),
+			height:
+				detectedDesignRect.height / Number(relativeDesignBounds.height || 1),
+		},
+		containerWidth,
+		containerHeight
+	);
+
+	return buildPercentFrameFromPixelRect(
+		inferredFrameRect,
+		containerWidth,
+		containerHeight
+	);
+}
+
+function fitFrameToPlaceholderAspectRatio(frame = {}, placeholder = null) {
+	const aspectRatio = getPodPlaceholderAspectRatio(placeholder);
+	if (!(aspectRatio > 0)) return frame;
+
+	const regionTop = parsePercentValue(frame.top);
+	const regionLeft = parsePercentValue(frame.left);
+	const regionWidth = Math.max(0, parsePercentValue(frame.width));
+	const regionHeight = Math.max(0, parsePercentValue(frame.height));
+	if (!(regionWidth > 0) || !(regionHeight > 0)) return frame;
+
+	let nextWidth = regionWidth;
+	let nextHeight = nextWidth / aspectRatio;
+	if (nextHeight > regionHeight) {
+		nextHeight = regionHeight;
+		nextWidth = nextHeight * aspectRatio;
+	}
+
+	const nextLeft = regionLeft + (regionWidth - nextWidth) / 2;
+	const nextTop = regionTop + (regionHeight - nextHeight) / 2;
+	return {
+		top: formatPercentValue(nextTop),
+		left: formatPercentValue(nextLeft),
+		width: formatPercentValue(nextWidth),
+		height: formatPercentValue(nextHeight),
+	};
+}
+
+function shouldKeepBaseEditorFrame(product = {}, positionInput = "") {
+	const kind = getPodProductKindForDefaultDesign(product);
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	const blueprintId = Number(product?.printifyProductDetails?.blueprint_id || 0);
+	return (
+		(kind === "bag" && position === "front" && blueprintId === 326) ||
+		(kind === "mug" && position === "front") ||
+		(kind === "pillow" && position === "front") ||
+		(kind === "magnet" && position === "front") ||
+		(kind === "candle" && position === "front")
+	);
+}
+
+function getPodPrintAreaFrame(product = {}, positionInput = "", placeholder = null) {
+	const config = getPodEditorSurfaceConfig(product, positionInput);
+	const baseFrame = {
+		top: config.top,
+		left: config.left,
+		width: config.width,
+		height: config.height,
+	};
+	if (shouldKeepBaseEditorFrame(product, positionInput)) {
+		return baseFrame;
+	}
+	return fitFrameToPlaceholderAspectRatio(baseFrame, placeholder);
+}
+
+function getPodPrintifySafeInsetPercent(product = {}, positionInput = "") {
+	return Number(getPodEditorSurfaceConfig(product, positionInput)?.clampInset || 0);
+}
+
+function supportsDynamicVisualFrameInference(product = {}, positionInput = "") {
+	return !shouldKeepBaseEditorFrame(product, positionInput);
+}
+
+function tunePodVisualPrintAreaFrame(frame = {}, product = {}, positionInput = "") {
+	const kind = getPodProductKindForDefaultDesign(product);
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	if (kind !== "bag" || position !== "front") return frame;
+	const blueprintId = Number(product?.printifyProductDetails?.blueprint_id || 0);
+	const top = parsePercentValue(frame.top);
+	const height = parsePercentValue(frame.height);
+	const shrinkFactor = blueprintId === 326 ? 0.66 : 0.84;
+	const nextHeight = clampNumber(
+		height * shrinkFactor,
+		8,
+		Math.max(8, 100 - top)
+	);
+	const centerPreservingTop =
+		blueprintId === 326
+			? top + (height - nextHeight) * 0.57
+			: top + (height - nextHeight) / 2;
+	return {
+		...frame,
+		top: formatPercentValue(
+			clampNumber(centerPreservingTop + (blueprintId === 326 ? 0.35 : 0.4), 0, 100 - nextHeight)
+		),
+		height: formatPercentValue(nextHeight),
+	};
+}
+
+function getPodCaptureProjection(product = {}, positionInput = "") {
+	const kind = getPodProductKindForDefaultDesign(product);
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	if (kind === "mug" && position === "front") {
+		return {
+			x: 0.5,
+			y: 0.5,
+			scale: 0.86,
+		};
+	}
+	if (kind === "pillow" && position === "front") {
+		return {
+			x: 0.25,
+			y: 0.5,
+			scale: 0.56,
+		};
+	}
+	if (kind === "bag" && position === "front") {
+		const blueprintId = Number(product?.printifyProductDetails?.blueprint_id || 0);
+		if (blueprintId === 326) {
+			return {
+				x: 0.5,
+				y: 0.272,
+				scale: 1.05,
+			};
+		}
+		return {
+			x: 0.5,
+			y: 0.31,
+			scale: 0.99,
+		};
+	}
+	return null;
+}
+
+function getSupportedPrintAreaPositions(product = {}, variantLayouts = []) {
+	const positions = new Set();
+	const sourcePrintAreas = Array.isArray(product?.printifyProductDetails?.print_areas)
+		? product.printifyProductDetails.print_areas
+		: [];
+	sourcePrintAreas.forEach((area) => {
+		(area?.placeholders || []).forEach((placeholder) => {
+			const position = normalizePrintAreaPosition(placeholder?.position || "");
+			if (position) positions.add(position);
+		});
+	});
+	(variantLayouts || []).forEach((variant) => {
+		(variant?.placeholders || []).forEach((placeholder) => {
+			const position = normalizePrintAreaPosition(placeholder?.position || "");
+			if (position) positions.add(position);
+		});
+	});
+	if (!positions.size) positions.add("front");
+	const preferredOrder = [
+		"front",
+		"back",
+		"left_chest",
+		"right_chest",
+		"left_sleeve",
+		"right_sleeve",
+		"neck",
+	];
+	return Array.from(positions).sort((left, right) => {
+		const leftIndex = preferredOrder.indexOf(left);
+		const rightIndex = preferredOrder.indexOf(right);
+		if (leftIndex === -1 && rightIndex === -1) {
+			return left.localeCompare(right);
+		}
+		if (leftIndex === -1) return 1;
+		if (rightIndex === -1) return -1;
+		return leftIndex - rightIndex;
+	});
+}
+
+function getMockupCameraLabel(image = {}) {
+	const explicit = `${image?.camera_label || image?.cameraLabel || ""}`.trim();
+	if (explicit) return explicit.toLowerCase();
+	const src = `${image?.src || ""}`;
+	try {
+		const url = new URL(src);
+		const label = `${url.searchParams.get("camera_label") || ""}`.trim();
+		if (label) return label.toLowerCase();
+	} catch {}
+	const match = src.toLowerCase().match(/camera_label=([a-z0-9_-]+)/i);
+	return match?.[1] || "";
+}
+
+function scoreMockupImageForSurface(image = {}, positionInput = "", product = {}) {
+	const cameraLabel = getMockupCameraLabel(image);
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	const kind = getPodProductKindForDefaultDesign(product);
+	let score = 0;
+
+	if (position === "front" && cameraLabel === "front") score += 30;
+	if (position === "back" && cameraLabel === "back") score += 30;
+	if (position.includes("left") && cameraLabel.includes("left")) score += 18;
+	if (position.includes("right") && cameraLabel.includes("right")) score += 18;
+	if (position.includes("neck") && cameraLabel === "front") score += 14;
+	if (cameraLabel.includes("angled")) score += kind === "mug" ? 10 : 2;
+	if (kind === "mug" && (cameraLabel === "right" || cameraLabel === "left")) {
+		score += 12;
+	}
+	if (/(inside|open|bottom)/.test(cameraLabel)) score -= 20;
+	if (image?.is_default) score += 2;
+	if (!cameraLabel && image?.is_default) score += 1;
+	return score;
 }
 
 function resolvePrintifySafeBounds(containerWidth, containerHeight, insetPercent = 0) {
@@ -260,6 +908,27 @@ function clampElementRectWithinBounds(rect = {}, bounds) {
 	};
 }
 
+function normalizeElementRectsWithinBounds(elements = [], bounds) {
+	return (Array.isArray(elements) ? elements : []).map((item) => {
+		const clamped = clampElementRectWithinBounds(
+			{
+				x: item.x,
+				y: item.y,
+				width: item.width,
+				height: item.height,
+			},
+			bounds
+		);
+		return {
+			...item,
+			x: clamped.x,
+			y: clamped.y,
+			width: clamped.width,
+			height: clamped.height,
+		};
+	});
+}
+
 function resolveAutoDesignGeometry(product = {}, preset = {}) {
 	const kind = getPodProductKindForDefaultDesign(product);
 	const normalizedName = `${product?.title || product?.productName || ""}`.toLowerCase();
@@ -287,49 +956,58 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			maxIconSize: 48,
 		},
 		tote: {
-			messageWidthRatio: 0.66,
-			messageHeightRatio: 0.24,
+			messageWidthRatio: 0.74,
+			messageHeightRatio: 0.3,
 			messageCenterYRatio: 0.48,
-			iconSizeRatio: 0.086,
-			iconOverlapPx: 6,
-			maxMessageHeight: 104,
-			maxIconSize: 50,
+			iconSizeRatio: 0.104,
+			iconOverlapPx: 10,
+			maxMessageHeight: 126,
+			maxIconSize: 58,
 		},
 		bag: {
-			messageWidthRatio: 0.64,
-			messageHeightRatio: 0.23,
-			messageCenterYRatio: 0.47,
-			iconSizeRatio: 0.084,
+			messageWidthRatio: 0.7,
+			messageHeightRatio: 0.24,
+			messageCenterYRatio: 0.5,
+			iconSizeRatio: 0.09,
 			iconOverlapPx: 6,
-			maxMessageHeight: 102,
-			maxIconSize: 48,
+			maxMessageHeight: 94,
+			maxIconSize: 52,
 		},
 		mug: {
-			messageWidthRatio: 0.6,
-			messageHeightRatio: 0.245,
-			messageCenterYRatio: 0.54,
-			iconSizeRatio: 0.08,
+			messageWidthRatio: 0.58,
+			messageHeightRatio: 0.285,
+			messageCenterYRatio: 0.36,
+			iconSizeRatio: 0.102,
 			iconOverlapPx: 6,
-			maxMessageHeight: 100,
-			maxIconSize: 50,
+			maxMessageHeight: 98,
+			maxIconSize: 52,
 		},
 		pillow: {
-			messageWidthRatio: 0.62,
-			messageHeightRatio: 0.24,
+			messageWidthRatio: 0.96,
+			messageHeightRatio: 0.95,
 			messageCenterYRatio: 0.54,
-			iconSizeRatio: 0.078,
-			iconOverlapPx: 6,
-			maxMessageHeight: 104,
-			maxIconSize: 52,
+			iconSizeRatio: 0.112,
+			iconOverlapPx: 44,
+			maxMessageHeight: 360,
+			maxIconSize: 60,
 		},
 		magnet: {
-			messageWidthRatio: 0.62,
-			messageHeightRatio: 0.24,
-			messageCenterYRatio: 0.53,
-			iconSizeRatio: 0.078,
-			iconOverlapPx: 6,
-			maxMessageHeight: 102,
-			maxIconSize: 52,
+			messageWidthRatio: 0.985,
+			messageHeightRatio: 0.955,
+			messageCenterYRatio: 0.54,
+			iconSizeRatio: 0.138,
+			iconOverlapPx: 22,
+			maxMessageHeight: 560,
+			maxIconSize: 68,
+		},
+		candle: {
+			messageWidthRatio: 0.98,
+			messageHeightRatio: 0.9,
+			messageCenterYRatio: 0.58,
+			iconSizeRatio: 0.13,
+			iconOverlapPx: 34,
+			maxMessageHeight: 284,
+			maxIconSize: 58,
 		},
 		default: {
 			messageWidthRatio: 0.52,
@@ -366,6 +1044,24 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			iconSizeFactor: 1,
 			centerYOffset: 0,
 		},
+		mug: {
+			messageWidthFactor: 1,
+			messageHeightFactor: 1,
+			iconSizeFactor: 1,
+			centerYOffset: -0.01,
+		},
+		pillow: {
+			messageWidthFactor: 1,
+			messageHeightFactor: 1,
+			iconSizeFactor: 1,
+			centerYOffset: 0,
+		},
+		candle: {
+			messageWidthFactor: 1,
+			messageHeightFactor: 1,
+			iconSizeFactor: 1,
+			centerYOffset: 0.02,
+		},
 		default: {
 			messageWidthFactor: 1,
 			messageHeightFactor: 1,
@@ -376,24 +1072,28 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 	const productSpecificCenterYOffset = isCottonCanvasTote ? 0.17 : 0;
 	const base = defaultsByKind[kind] || defaultsByKind.default;
 	const visualTune = visualTuneByKind[kind] || visualTuneByKind.default;
+	const geometryOverrides =
+		preset && typeof preset === "object" && preset.geometryOverrides
+			? preset.geometryOverrides
+			: {};
 	const numberOrFallback = (value, fallback) => {
 		const num = Number(value);
 		return Number.isFinite(num) ? num : fallback;
 	};
 	const rawMessageWidthRatio = numberOrFallback(
-		preset.messageWidthRatio,
+		geometryOverrides.messageWidthRatio,
 		base.messageWidthRatio,
 	);
 	const rawMessageHeightRatio = numberOrFallback(
-		preset.messageHeightRatio,
+		geometryOverrides.messageHeightRatio,
 		base.messageHeightRatio,
 	);
 	const rawMessageCenterYRatio = numberOrFallback(
-		preset.messageCenterYRatio,
+		geometryOverrides.messageCenterYRatio,
 		base.messageCenterYRatio,
 	);
 	const rawIconSizeRatio = numberOrFallback(
-		preset.iconSizeRatio,
+		geometryOverrides.iconSizeRatio,
 		base.iconSizeRatio,
 	);
 	return {
@@ -401,12 +1101,24 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 		messageWidthRatio: clampNumber(
 			rawMessageWidthRatio * Number(visualTune.messageWidthFactor || 1),
 			0.34,
-			0.72,
+			kind === "candle"
+				? 0.98
+				: kind === "magnet"
+					? 0.99
+					: kind === "pillow"
+						? 0.95
+						: 0.72,
 		),
 		messageHeightRatio: clampNumber(
 			rawMessageHeightRatio * Number(visualTune.messageHeightFactor || 1),
 			0.1,
-			0.3,
+			kind === "candle"
+				? 0.92
+				: kind === "magnet"
+					? 0.97
+					: kind === "pillow"
+						? 0.84
+						: 0.3,
 		),
 		messageCenterYRatio: clampNumber(
 			rawMessageCenterYRatio +
@@ -420,14 +1132,29 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			0.05,
 			0.16,
 		),
-		iconOverlapPx: numberOrFallback(preset.iconOverlapPx, base.iconOverlapPx),
+		iconOverlapPx: numberOrFallback(
+			geometryOverrides.iconOverlapPx,
+			base.iconOverlapPx
+		),
 		maxMessageHeight: clampNumber(
-			numberOrFallback(preset.maxMessageHeight, base.maxMessageHeight || 74),
+			numberOrFallback(
+				geometryOverrides.maxMessageHeight,
+				base.maxMessageHeight || 74
+			),
 			74,
-			140,
+			kind === "candle"
+				? 300
+				: kind === "magnet"
+					? 560
+					: kind === "pillow"
+						? 320
+						: 140,
 		),
 		maxIconSize: clampNumber(
-			numberOrFallback(preset.maxIconSize, base.maxIconSize || 44),
+			numberOrFallback(
+				geometryOverrides.maxIconSize,
+				base.maxIconSize || 44
+			),
 			44,
 			84,
 		),
@@ -443,6 +1170,7 @@ function buildTextElementStyle(el = {}) {
 	const safeBorderRadius = clampNumber(Number(el.borderRadius) || 0, 0, 999);
 	return {
 		whiteSpace: "pre-wrap",
+		boxSizing: "border-box",
 		color: el.color,
 		backgroundColor: safeBackgroundColor,
 		backgroundImage: hasGradient ? el.backgroundImage : "none",
@@ -570,6 +1298,418 @@ function compressCanvas(canvas, { mimeType = "image/png", quality = 1 } = {}) {
 			reject(err);
 		}
 	});
+}
+
+function configureCanvasRenderingQuality(context) {
+	if (!context) return;
+	context.imageSmoothingEnabled = true;
+	if ("imageSmoothingQuality" in context) {
+		context.imageSmoothingQuality = "high";
+	}
+}
+
+function remapCanvasToAspectRatio(canvas, targetAspectRatio = 0) {
+	const safeTargetAspectRatio = Number(targetAspectRatio) || 0;
+	if (!canvas || !(safeTargetAspectRatio > 0)) return canvas;
+	const sourceWidth = Math.max(1, Number(canvas.width) || 1);
+	const sourceHeight = Math.max(1, Number(canvas.height) || 1);
+	const currentAspectRatio = sourceWidth / sourceHeight;
+	if (Math.abs(currentAspectRatio - safeTargetAspectRatio) <= 0.01) {
+		return canvas;
+	}
+	const targetWidth =
+		currentAspectRatio < safeTargetAspectRatio
+			? Math.max(1, Math.round(sourceHeight * safeTargetAspectRatio))
+			: sourceWidth;
+	const targetHeight =
+		currentAspectRatio > safeTargetAspectRatio
+			? Math.max(1, Math.round(sourceWidth / safeTargetAspectRatio))
+			: sourceHeight;
+	const remappedCanvas = document.createElement("canvas");
+	remappedCanvas.width = targetWidth;
+	remappedCanvas.height = targetHeight;
+	const context = remappedCanvas.getContext("2d");
+	configureCanvasRenderingQuality(context);
+	context.clearRect(0, 0, targetWidth, targetHeight);
+	const drawX = Math.round((targetWidth - sourceWidth) / 2);
+	const drawY = Math.round((targetHeight - sourceHeight) / 2);
+	context.drawImage(canvas, drawX, drawY, sourceWidth, sourceHeight);
+	return remappedCanvas;
+}
+
+function projectCanvasToPrintifyPlaceholder(
+	canvas,
+	{ targetAspectRatio = 0, projection = null } = {}
+) {
+	const safeTargetAspectRatio = Number(targetAspectRatio) || 0;
+	const safeProjectionScale = Math.max(0.08, Number(projection?.scale) || 0);
+	if (!canvas || !projection || !(safeProjectionScale > 0) || !(safeTargetAspectRatio > 0)) {
+		return remapCanvasToAspectRatio(canvas, safeTargetAspectRatio);
+	}
+	const sourceWidth = Math.max(1, Number(canvas.width) || 1);
+	const sourceHeight = Math.max(1, Number(canvas.height) || 1);
+	const targetWidth = Math.max(1, Math.round(sourceWidth / safeProjectionScale));
+	const targetHeight = Math.max(
+		1,
+		Math.round(targetWidth / safeTargetAspectRatio)
+	);
+	const drawWidth = Math.max(
+		1,
+		Math.round(targetWidth * safeProjectionScale)
+	);
+	const drawHeight = Math.max(
+		1,
+		Math.round(drawWidth / Math.max(0.08, sourceWidth / sourceHeight))
+	);
+	const drawX = Math.round(
+		(Number(projection.x || 0.5) * targetWidth) - drawWidth / 2
+	);
+	const drawY = Math.round(
+		(Number(projection.y || 0.5) * targetHeight) - drawHeight / 2
+	);
+	const projectedCanvas = document.createElement("canvas");
+	projectedCanvas.width = targetWidth;
+	projectedCanvas.height = targetHeight;
+	const context = projectedCanvas.getContext("2d");
+	configureCanvasRenderingQuality(context);
+	context.clearRect(0, 0, targetWidth, targetHeight);
+	// Project the raw print-area capture into the Printify placeholder once.
+	context.drawImage(canvas, drawX, drawY, drawWidth, drawHeight);
+	return projectedCanvas;
+}
+
+function getNonTransparentCanvasBounds(
+	canvas,
+	{ alphaThreshold = 8, padding = 2 } = {}
+) {
+	if (!canvas) return null;
+	const width = Math.max(1, Number(canvas.width) || 1);
+	const height = Math.max(1, Number(canvas.height) || 1);
+	const context = canvas.getContext("2d", { willReadFrequently: true });
+	if (!context) return null;
+	const imageData = context.getImageData(0, 0, width, height).data;
+	let minX = width;
+	let minY = height;
+	let maxX = -1;
+	let maxY = -1;
+
+	for (let y = 0; y < height; y += 1) {
+		for (let x = 0; x < width; x += 1) {
+			const alpha = imageData[(y * width + x) * 4 + 3];
+			if (alpha <= alphaThreshold) continue;
+			if (x < minX) minX = x;
+			if (y < minY) minY = y;
+			if (x > maxX) maxX = x;
+			if (y > maxY) maxY = y;
+		}
+	}
+
+	if (maxX < minX || maxY < minY) return null;
+	const safePadding = Math.max(0, Math.round(Number(padding) || 0));
+	const x = clampNumber(minX - safePadding, 0, width - 1);
+	const y = clampNumber(minY - safePadding, 0, height - 1);
+	const right = clampNumber(maxX + safePadding, 0, width - 1);
+	const bottom = clampNumber(maxY + safePadding, 0, height - 1);
+	return {
+		x,
+		y,
+		width: Math.max(1, right - x + 1),
+		height: Math.max(1, bottom - y + 1),
+	};
+}
+
+function cropCanvasToBounds(canvas, bounds = null) {
+	if (!canvas || !bounds) return canvas;
+	const croppedCanvas = document.createElement("canvas");
+	croppedCanvas.width = Math.max(1, Math.round(bounds.width) || 1);
+	croppedCanvas.height = Math.max(1, Math.round(bounds.height) || 1);
+	const context = croppedCanvas.getContext("2d");
+	configureCanvasRenderingQuality(context);
+	context.clearRect(0, 0, croppedCanvas.width, croppedCanvas.height);
+	context.drawImage(
+		canvas,
+		bounds.x,
+		bounds.y,
+		bounds.width,
+		bounds.height,
+		0,
+		0,
+		croppedCanvas.width,
+		croppedCanvas.height
+	);
+	return croppedCanvas;
+}
+
+function getProjectedPanelRect({
+	sourceWidth = 0,
+	sourceHeight = 0,
+	targetAspectRatio = 0,
+	projection = null,
+} = {}) {
+	const safeSourceWidth = Math.max(1, Number(sourceWidth) || 1);
+	const safeSourceHeight = Math.max(1, Number(sourceHeight) || 1);
+	const safeTargetAspectRatio = Number(targetAspectRatio) || 0;
+	const safeProjectionScale = Math.max(0.08, Number(projection?.scale) || 0);
+	if (!projection || !(safeTargetAspectRatio > 0) || !(safeProjectionScale > 0)) {
+		return {
+			left: 0,
+			top: 0,
+			width: 1,
+			height: 1,
+		};
+	}
+	const sourceAspectRatio = safeSourceWidth / safeSourceHeight;
+	const width = safeProjectionScale;
+	const height = width * safeTargetAspectRatio / Math.max(0.08, sourceAspectRatio);
+	return {
+		left: Number(projection?.x || 0.5) - width / 2,
+		top: Number(projection?.y || 0.5) - height / 2,
+		width,
+		height,
+	};
+}
+
+function buildEditorDrivenPlacementAsset(
+	rawCanvas,
+	{ targetAspectRatio = 0, projection = null, contentBoundsNormalized = null } = {}
+) {
+	if (!projection || !(Number(targetAspectRatio) > 0)) return null;
+	if (!rawCanvas) return null;
+	const sourceWidth = Math.max(1, Number(rawCanvas.width) || 1);
+	const sourceHeight = Math.max(1, Number(rawCanvas.height) || 1);
+	const normalizedBounds =
+		contentBoundsNormalized &&
+		Number(contentBoundsNormalized.width) > 0 &&
+		Number(contentBoundsNormalized.height) > 0
+			? {
+					x: clampNumber(Number(contentBoundsNormalized.x) || 0, 0, 1),
+					y: clampNumber(Number(contentBoundsNormalized.y) || 0, 0, 1),
+					width: clampNumber(Number(contentBoundsNormalized.width) || 0, 0, 1),
+					height: clampNumber(Number(contentBoundsNormalized.height) || 0, 0, 1),
+				}
+			: null;
+	const bounds = normalizedBounds
+		? (() => {
+				const normalizedLeft = clampNumber(normalizedBounds.x, 0, 1);
+				const normalizedTop = clampNumber(normalizedBounds.y, 0, 1);
+				const normalizedRight = clampNumber(
+					normalizedBounds.x + normalizedBounds.width,
+					normalizedLeft,
+					1
+				);
+				const normalizedBottom = clampNumber(
+					normalizedBounds.y + normalizedBounds.height,
+					normalizedTop,
+					1
+				);
+				return {
+					x: Math.max(0, Math.round(normalizedLeft * sourceWidth)),
+					y: Math.max(0, Math.round(normalizedTop * sourceHeight)),
+					width: Math.max(
+						1,
+						Math.round((normalizedRight - normalizedLeft) * sourceWidth)
+					),
+					height: Math.max(
+						1,
+						Math.round((normalizedBottom - normalizedTop) * sourceHeight)
+					),
+				};
+			})()
+		: getNonTransparentCanvasBounds(rawCanvas);
+	if (!bounds) return null;
+	const croppedCanvas = cropCanvasToBounds(rawCanvas, bounds);
+	const effectiveNormalizedBounds = {
+		x: bounds.x / sourceWidth,
+		y: bounds.y / sourceHeight,
+		width: bounds.width / sourceWidth,
+		height: bounds.height / sourceHeight,
+	};
+	const panelRect = getProjectedPanelRect({
+		sourceWidth,
+		sourceHeight,
+		targetAspectRatio,
+		projection,
+	});
+	const placementParams = {
+		x: clampNumber(
+			panelRect.left +
+				(effectiveNormalizedBounds.x + effectiveNormalizedBounds.width / 2) *
+					panelRect.width,
+			0,
+			1
+		),
+		y: clampNumber(
+			panelRect.top +
+				(effectiveNormalizedBounds.y + effectiveNormalizedBounds.height / 2) *
+					panelRect.height,
+			0,
+			1
+		),
+		scale: clampNumber(panelRect.width * effectiveNormalizedBounds.width, 0.18, 2.6),
+		angle: 0,
+	};
+
+	return {
+		uploadCanvas: croppedCanvas,
+		placementParams,
+		designCoversPrintArea: false,
+		isFullPrintAreaCapture: false,
+		forceSourcePlacement: true,
+	};
+}
+
+function buildDirectWrapPlacementAsset(
+	rawCanvas,
+	{ contentBoundsNormalized = null } = {}
+) {
+	if (!rawCanvas) return null;
+	const sourceWidth = Math.max(1, Number(rawCanvas.width) || 1);
+	const sourceHeight = Math.max(1, Number(rawCanvas.height) || 1);
+	const normalizedBounds =
+		contentBoundsNormalized &&
+		Number(contentBoundsNormalized.width) > 0 &&
+		Number(contentBoundsNormalized.height) > 0
+			? {
+					x: clampNumber(Number(contentBoundsNormalized.x) || 0, 0, 1),
+					y: clampNumber(Number(contentBoundsNormalized.y) || 0, 0, 1),
+					width: clampNumber(Number(contentBoundsNormalized.width) || 0, 0, 1),
+					height: clampNumber(Number(contentBoundsNormalized.height) || 0, 0, 1),
+				}
+			: null;
+	const bounds = normalizedBounds
+		? (() => {
+				const normalizedLeft = clampNumber(normalizedBounds.x, 0, 1);
+				const normalizedTop = clampNumber(normalizedBounds.y, 0, 1);
+				const normalizedRight = clampNumber(
+					normalizedBounds.x + normalizedBounds.width,
+					normalizedLeft,
+					1
+				);
+				const normalizedBottom = clampNumber(
+					normalizedBounds.y + normalizedBounds.height,
+					normalizedTop,
+					1
+				);
+				return {
+					x: Math.max(0, Math.round(normalizedLeft * sourceWidth)),
+					y: Math.max(0, Math.round(normalizedTop * sourceHeight)),
+					width: Math.max(
+						1,
+						Math.round((normalizedRight - normalizedLeft) * sourceWidth)
+					),
+					height: Math.max(
+						1,
+						Math.round((normalizedBottom - normalizedTop) * sourceHeight)
+					),
+				};
+			})()
+		: getNonTransparentCanvasBounds(rawCanvas);
+	if (!bounds) return null;
+	const croppedCanvas = cropCanvasToBounds(rawCanvas, bounds);
+	const effectiveNormalizedBounds = {
+		x: bounds.x / sourceWidth,
+		y: bounds.y / sourceHeight,
+		width: bounds.width / sourceWidth,
+		height: bounds.height / sourceHeight,
+	};
+	return {
+		uploadCanvas: croppedCanvas,
+		placementParams: {
+			x: clampNumber(
+				effectiveNormalizedBounds.x + effectiveNormalizedBounds.width / 2,
+				0,
+				1
+			),
+			y: clampNumber(
+				effectiveNormalizedBounds.y + effectiveNormalizedBounds.height / 2,
+				0,
+				1
+			),
+			scale: clampNumber(effectiveNormalizedBounds.width, 0.18, 2.6),
+			angle: 0,
+		},
+		designCoversPrintArea: false,
+		isFullPrintAreaCapture: false,
+		forceSourcePlacement: true,
+	};
+}
+
+function buildPodBareCaptureAsset(rawCanvas, options = {}) {
+	if (options?.placementMode === "direct-wrap") {
+		const directAsset = buildDirectWrapPlacementAsset(rawCanvas, options);
+		if (directAsset) return directAsset;
+	}
+	const dynamicAsset = buildEditorDrivenPlacementAsset(rawCanvas, options);
+	if (dynamicAsset) return dynamicAsset;
+	return {
+		uploadCanvas: projectCanvasToPrintifyPlaceholder(rawCanvas, options),
+		placementParams: {
+			x: 0.5,
+			y: 0.5,
+			scale: 1,
+			angle: 0,
+		},
+		designCoversPrintArea: true,
+		isFullPrintAreaCapture: true,
+		forceSourcePlacement: false,
+	};
+}
+
+function getNormalizedContentBounds(
+	elements = [],
+	containerWidth = 0,
+	containerHeight = 0
+) {
+	const safeWidth = Math.max(1, Number(containerWidth) || 1);
+	const safeHeight = Math.max(1, Number(containerHeight) || 1);
+	const combinedBounds = getCombinedElementBounds(elements);
+	if (!(combinedBounds?.width > 0) || !(combinedBounds?.height > 0)) return null;
+	const padX = Math.max(2, Math.round(combinedBounds.width * 0.02));
+	const padY = Math.max(2, Math.round(combinedBounds.height * 0.04));
+	const x = clampNumber(combinedBounds.x - padX, 0, safeWidth - 1);
+	const y = clampNumber(combinedBounds.y - padY, 0, safeHeight - 1);
+	const right = clampNumber(
+		combinedBounds.x + combinedBounds.width + padX,
+		0,
+		safeWidth
+	);
+	const bottom = clampNumber(
+		combinedBounds.y + combinedBounds.height + padY,
+		0,
+		safeHeight
+	);
+	return {
+		x: x / safeWidth,
+		y: y / safeHeight,
+		width: Math.max(1, right - x) / safeWidth,
+		height: Math.max(1, bottom - y) / safeHeight,
+	};
+}
+
+function buildPodPlacementPrintAreas({
+	variantId = null,
+	position = "front",
+	placementParams = {},
+} = {}) {
+	return [
+		{
+			variant_ids: variantId ? [variantId] : [],
+			placeholders: [
+				{
+					position: normalizePrintAreaPosition(position || "front") || "front",
+					images: [
+						{
+							type: "image/png",
+							x: Number(placementParams?.x ?? 0.5),
+							y: Number(placementParams?.y ?? 0.5),
+							scale: Number(placementParams?.scale ?? 1),
+							angle: Number(placementParams?.angle ?? 0),
+						},
+					],
+				},
+			],
+		},
+	];
 }
 
 async function convertHeicToJpegIfNeeded(file) {
@@ -764,8 +1904,15 @@ export default function CustomizeSelectedProduct() {
 		) {
 			return routeBootstrap;
 		}
-		return null;
+			return null;
 	}, [productId, routeBootstrap]);
+	const initialBootstrapProductId = initialPodBootstrap?.productId || null;
+	const hasInitialBootstrapProduct = Boolean(
+		initialPodBootstrap?.product && initialBootstrapProductId === productId
+	);
+	const initialBootstrapColor = initialPodBootstrap?.selection?.color || "";
+	const initialBootstrapSize = initialPodBootstrap?.selection?.size || "";
+	const initialBootstrapScent = initialPodBootstrap?.selection?.scent || "";
 
 	useEffect(() => {
 		if (typeof document === "undefined") return undefined;
@@ -915,30 +2062,36 @@ export default function CustomizeSelectedProduct() {
 
 	const [product, setProduct] = useState(() => initialPodBootstrap?.product || null);
 	const [loading, setLoading] = useState(() => !initialPodBootstrap?.product);
-	const printAreaFrame = useMemo(
-		() => getPodPrintAreaFrame(product || {}),
-		[product],
-	);
-	const printifySafeInsetPercent = useMemo(
-		() => getPodPrintifySafeInsetPercent(product || {}),
-		[product],
-	);
+	const [catalogLayout, setCatalogLayout] = useState(null);
+	const [catalogLayoutResolved, setCatalogLayoutResolved] = useState(false);
+	const [activePrintAreaPosition, setActivePrintAreaPosition] = useState("front");
+	const [visualPrintAreaFrames, setVisualPrintAreaFrames] = useState({});
+	const [visualPrintAreaFrameStatus, setVisualPrintAreaFrameStatus] = useState({});
 
 	const [isDescriptionExpanded, setIsDescriptionExpanded] = useState(false);
 
 	// selected color, size, scent
 	const [selectedColor, setSelectedColor] = useState(
-		() => initialPodBootstrap?.selection?.color || ""
+		() => initialBootstrapColor
 	);
 	const [selectedSize, setSelectedSize] = useState(
-		() => initialPodBootstrap?.selection?.size || ""
+		() => initialBootstrapSize
 	);
 	const [selectedScent, setSelectedScent] = useState(
-		() => initialPodBootstrap?.selection?.scent || ""
+		() => initialBootstrapScent
 	);
 	const effectiveOccasionStylePreset = useMemo(
 		() => occasionStylePreset,
 		[occasionStylePreset],
+	);
+	const messageApi = useMemo(
+		() => ({
+			success: (content) => toast.success(content),
+			error: (content) => toast.error(content),
+			warning: (content) => toast.warn(content),
+			info: (content) => toast.info(content),
+		}),
+		[],
 	);
 
 	// Current text styling
@@ -1047,6 +2200,154 @@ export default function CustomizeSelectedProduct() {
 		};
 	}
 
+	const selectedVariantContext = useMemo(
+		() => buildSelectedVariantContext(product),
+		[order.variant_id, product, selectedColor, selectedScent, selectedSize]
+	);
+	const activeVariantId =
+		selectedVariantContext?.matchingVariant?.id || order.variant_id || null;
+	const activeCatalogVariantLayout = useMemo(() => {
+		const variants = Array.isArray(catalogLayout?.variants)
+			? catalogLayout.variants
+			: [];
+		return (
+			variants.find(
+				(variant) => `${variant?.id ?? ""}`.trim() === `${activeVariantId ?? ""}`.trim()
+			) || variants[0] || null
+		);
+	}, [activeVariantId, catalogLayout]);
+	const availablePrintAreaPositions = useMemo(
+		() =>
+			getSupportedPrintAreaPositions(
+				product || {},
+				activeCatalogVariantLayout ? [activeCatalogVariantLayout] : []
+			),
+		[activeCatalogVariantLayout, product]
+	);
+	const activePlaceholderLayout = useMemo(() => {
+		const position = normalizePrintAreaPosition(activePrintAreaPosition || "front");
+		if (!activeCatalogVariantLayout) return null;
+		if (activeCatalogVariantLayout?.placeholderMap?.[position]) {
+			return activeCatalogVariantLayout.placeholderMap[position];
+		}
+		return (
+			(activeCatalogVariantLayout.placeholders || []).find(
+				(placeholder) =>
+					normalizePrintAreaPosition(placeholder?.position || "") === position
+			) || null
+		);
+	}, [activeCatalogVariantLayout, activePrintAreaPosition]);
+	const activePrintAreaKey = normalizePrintAreaPosition(
+		activePrintAreaPosition || "front"
+	);
+	const activeVisualFrameKey = `${String(activeVariantId || "default")}::${activePrintAreaKey}`;
+	const activeSurfaceMockupImage = useMemo(
+		() => {
+			if (!product) return null;
+			const colorOpt = findProductOption(product, "color");
+			const sourceImages = Array.isArray(product?.images) ? product.images : [];
+			const sortBySurface = (images) =>
+				[...(Array.isArray(images) ? images : [])].sort(
+					(left, right) =>
+						scoreMockupImageForSurface(right, activePrintAreaPosition, product) -
+						scoreMockupImageForSurface(left, activePrintAreaPosition, product)
+				);
+			if (!selectedColor || !colorOpt) {
+				return sortBySurface(sourceImages)[0] || null;
+			}
+			const colorValue = findProductOptionValue(product, "color", selectedColor);
+			if (!colorValue) {
+				return sortBySurface(sourceImages)[0] || null;
+			}
+			const matchingVariantIds = new Set(
+				(product?.variants || [])
+					.filter((variant) =>
+						(Array.isArray(variant?.options) ? variant.options : []).some(
+							(optionId) => String(optionId) === String(colorValue.id)
+						)
+					)
+					.map((variant) => String(variant?.id || ""))
+					.filter(Boolean)
+			);
+			const filtered = sourceImages.filter((image) =>
+				(Array.isArray(image?.variant_ids) ? image.variant_ids : []).some((variantId) =>
+					matchingVariantIds.has(String(variantId))
+				)
+			);
+			return sortBySurface(filtered.length ? filtered : sourceImages)[0] || null;
+		},
+		[activePrintAreaPosition, product, selectedColor]
+	);
+	const defaultDesignReferenceImageUrls = useMemo(
+		() =>
+			getPodDefaultDesignReferenceImageUrls(product || {}, {
+				occasion: selectedOccasion,
+				color: selectedColor,
+				size: selectedSize,
+				scent: selectedScent,
+			}),
+		[product, selectedColor, selectedOccasion, selectedScent, selectedSize]
+	);
+	const shouldInferActiveVisualFrame = Boolean(
+		supportsDynamicVisualFrameInference(product || {}, activePrintAreaPosition) &&
+		activeSurfaceMockupImage?.src && defaultDesignReferenceImageUrls.length
+	);
+	const activeVisualFrameStatus =
+		visualPrintAreaFrameStatus[activeVisualFrameKey] ||
+		(shouldInferActiveVisualFrame ? "idle" : "ready");
+	const activeVisualFrameOverride =
+		shouldInferActiveVisualFrame
+			? visualPrintAreaFrames[activeVisualFrameKey] || null
+			: null;
+	const basePrintAreaFrame = useMemo(
+		() =>
+			getPodPrintAreaFrame(
+				product || {},
+				activePrintAreaPosition,
+				activePlaceholderLayout
+			),
+		[activePlaceholderLayout, activePrintAreaPosition, product],
+	);
+	const printAreaFrame = useMemo(
+		() =>
+			tunePodVisualPrintAreaFrame(
+				activeVisualFrameOverride || basePrintAreaFrame,
+				product || {},
+				activePrintAreaPosition
+			),
+		[activePrintAreaPosition, activeVisualFrameOverride, basePrintAreaFrame, product]
+	);
+	const printifySafeInsetPercent = useMemo(
+		() => getPodPrintifySafeInsetPercent(product || {}, activePrintAreaPosition),
+		[activePrintAreaPosition, product],
+	);
+	const activeProductKind = useMemo(
+		() => getPodProductKindForDefaultDesign(product || {}),
+		[product]
+	);
+	const activeCaptureAspectRatio = useMemo(
+		() => getPodPlaceholderAspectRatio(activePlaceholderLayout),
+		[activePlaceholderLayout]
+	);
+	const activeCaptureProjection = useMemo(
+		() => getPodCaptureProjection(product || {}, activePrintAreaPosition),
+		[activePrintAreaPosition, product]
+	);
+	const printAreaHelperText = useMemo(() => {
+		if (activeProductKind === "mug" && availablePrintAreaPositions.length <= 1) {
+			return "Mugs use one wrap print area. Keep the design centered for the front, or use Left Side / Right Side for quick wrap placement.";
+		}
+		if (availablePrintAreaPositions.length > 1) {
+			return "Choose the placement you want to preview and send with this order.";
+		}
+		return "";
+	}, [activeProductKind, availablePrintAreaPositions]);
+	const shouldShowMugQuickPlacements = Boolean(
+		activeProductKind === "mug" &&
+		availablePrintAreaPositions.length <= 1 &&
+		elements.length
+	);
+
 	const [isMobile, setIsMobile] = useState(
 		() => typeof window !== "undefined" && window.innerWidth < 800
 	);
@@ -1057,20 +2358,58 @@ export default function CustomizeSelectedProduct() {
 	}, []);
 
 	useEffect(() => {
+		setMugQuickPlacementPreset((prev) => (prev === "front" ? prev : "front"));
+	}, [activePrintAreaPosition, activeProductKind, product?._id]);
+
+	useEffect(() => {
+		const normalizedSearch = normalizeSearchParamsString(location.search);
+		if (lastAppliedPersonalizationSearchRef.current === normalizedSearch) {
+			return;
+		}
+		lastAppliedPersonalizationSearchRef.current = normalizedSearch;
+		if (lastRequestedPersonalizationSearchRef.current === normalizedSearch) {
+			lastRequestedPersonalizationSearchRef.current = "";
+		}
 		const resolved = resolvePodPersonalization(location.search);
-		setSelectedOccasion(resolved.occasion);
-		setSelectedGiftName(resolved.name);
+		setSelectedOccasion((prev) =>
+			prev === resolved.occasion ? prev : resolved.occasion
+		);
+		setSelectedGiftName((prev) => (prev === resolved.name ? prev : resolved.name));
 		savePodPersonalization(resolved);
 	}, [location.search]);
 
 	useEffect(() => {
 		// Keep text-tool defaults aligned with the selected occasion preset.
-		setTextColor(effectiveOccasionStylePreset.textColor);
-		setFontFamily(effectiveOccasionStylePreset.fontFamily);
-		setFontSize(effectiveOccasionStylePreset.fontSize);
-		setFontWeight(effectiveOccasionStylePreset.fontWeight);
-		setFontStyle(effectiveOccasionStylePreset.fontStyle);
-		setBorderRadius(effectiveOccasionStylePreset.borderRadius);
+		setTextColor((prev) =>
+			prev === effectiveOccasionStylePreset.textColor
+				? prev
+				: effectiveOccasionStylePreset.textColor
+		);
+		setFontFamily((prev) =>
+			prev === effectiveOccasionStylePreset.fontFamily
+				? prev
+				: effectiveOccasionStylePreset.fontFamily
+		);
+		setFontSize((prev) =>
+			prev === effectiveOccasionStylePreset.fontSize
+				? prev
+				: effectiveOccasionStylePreset.fontSize
+		);
+		setFontWeight((prev) =>
+			prev === effectiveOccasionStylePreset.fontWeight
+				? prev
+				: effectiveOccasionStylePreset.fontWeight
+		);
+		setFontStyle((prev) =>
+			prev === effectiveOccasionStylePreset.fontStyle
+				? prev
+				: effectiveOccasionStylePreset.fontStyle
+		);
+		setBorderRadius((prev) =>
+			prev === effectiveOccasionStylePreset.borderRadius
+				? prev
+				: effectiveOccasionStylePreset.borderRadius
+		);
 	}, [effectiveOccasionStylePreset]);
 
 	const { addToCart, openSidebar2 } = useCartContext();
@@ -1088,10 +2427,19 @@ export default function CustomizeSelectedProduct() {
 	const bareDesignRef = useRef(null);
 	const printAreaRef = useRef(null);
 	const barePrintAreaRef = useRef(null);
+	const elementsRef = useRef([]);
+	const surfaceDraftsRef = useRef({});
+	const activePrintAreaRef = useRef("front");
+	const autoGeneratedSnapshotRef = useRef({});
+	const autoGeneratedLayoutSignatureRef = useRef({});
+	const refinedVisualFrameKeysRef = useRef({});
+	const lastAppliedPersonalizationSearchRef = useRef("");
+	const lastRequestedPersonalizationSearchRef = useRef("");
 
 	// For mobile text modal
 	const [textModalVisible, setTextModalVisible] = useState(false);
 	const [mobileTextInput, setMobileTextInput] = useState("");
+	const [mugQuickPlacementPreset, setMugQuickPlacementPreset] = useState("front");
 
 	// For separate "gallery" vs "camera"
 	const hiddenGalleryInputRef = useRef(null);
@@ -1158,6 +2506,11 @@ export default function CustomizeSelectedProduct() {
 	const [hasChangedSizeOrColor, setHasChangedSizeOrColor] = useState(false);
 
 	useEffect(() => {
+		surfaceDraftsRef.current = {};
+		activePrintAreaRef.current = "front";
+		autoGeneratedSnapshotRef.current = {};
+		autoGeneratedLayoutSignatureRef.current = {};
+		refinedVisualFrameKeysRef.current = {};
 		setElements([]);
 		setSelectedElementId(null);
 		setInlineEditId(null);
@@ -1165,16 +2518,21 @@ export default function CustomizeSelectedProduct() {
 		setDefaultTextAdded(false);
 		setIsDescriptionExpanded(false);
 		setHasChangedSizeOrColor(false);
-		setSelectedColor(initialPodBootstrap?.selection?.color || "");
-		setSelectedSize(initialPodBootstrap?.selection?.size || "");
-		setSelectedScent(initialPodBootstrap?.selection?.scent || "");
+		setCatalogLayout(null);
+		setCatalogLayoutResolved(false);
+		setActivePrintAreaPosition("front");
+		setVisualPrintAreaFrames({});
+		setVisualPrintAreaFrameStatus({});
+		setSelectedColor(initialBootstrapColor);
+		setSelectedSize(initialBootstrapSize);
+		setSelectedScent(initialBootstrapScent);
 		setOrder((prev) => ({
 			...prev,
 			product_id: productId || null,
 			variant_id: null,
 			customizations: { texts: [], images: [] },
 		}));
-	}, [initialPodBootstrap, productId]);
+	}, [productId]);
 
 	/**
 	 * ----------------------------------------------------------------
@@ -1188,12 +2546,12 @@ export default function CustomizeSelectedProduct() {
 			if (!isActive) return false;
 			const normalizedProduct = normalizePodProduct(rawProduct);
 			if (!normalizedProduct) {
-				message.error("Product not found or no data returned.");
+				messageApi.error("Product not found or no data returned.");
 				setLoading(false);
 				return false;
 			}
 			if (!normalizedProduct.variants.length) {
-				message.error("No valid variants with pricing were found.");
+				messageApi.error("No valid variants with pricing were found.");
 				setLoading(false);
 				return false;
 			}
@@ -1212,7 +2570,7 @@ export default function CustomizeSelectedProduct() {
 			return true;
 		};
 
-		if (initialPodBootstrap?.product && initialPodBootstrap.productId === productId) {
+		if (hasInitialBootstrapProduct) {
 			applyResolvedProduct(initialPodBootstrap.product);
 			return () => {
 				isActive = false;
@@ -1226,14 +2584,14 @@ export default function CustomizeSelectedProduct() {
 					`${process.env.REACT_APP_API_URL}/product/${productId}`
 				);
 				if (!response.data) {
-					message.error("Product not found or no data returned.");
+					messageApi.error("Product not found or no data returned.");
 					setLoading(false);
 					return;
 				}
 				applyResolvedProduct(response.data);
 			} catch (err) {
 				console.error(err);
-				message.error("Failed to load product details.");
+				messageApi.error("Failed to load product details.");
 				setLoading(false);
 			}
 		};
@@ -1241,7 +2599,42 @@ export default function CustomizeSelectedProduct() {
 		return () => {
 			isActive = false;
 		};
-	}, [history, initialPodBootstrap, productId, productSlug]);
+	}, [hasInitialBootstrapProduct, history, productId, productSlug]);
+
+	useEffect(() => {
+		let cancelled = false;
+		if (!product?._id || !product?.printifyProductDetails?.POD) {
+			setCatalogLayout(null);
+			setCatalogLayoutResolved(true);
+			return undefined;
+		}
+		setCatalogLayoutResolved(false);
+
+		const fetchCatalogLayout = async () => {
+			try {
+				const response = await axios.get(
+					`${process.env.REACT_APP_API_URL}/pod/layout/${product._id}`
+				);
+				if (!cancelled) {
+					setCatalogLayout(response?.data || null);
+				}
+			} catch (error) {
+				console.warn("Failed loading POD layout metadata:", error);
+				if (!cancelled) {
+					setCatalogLayout(null);
+				}
+			} finally {
+				if (!cancelled) {
+					setCatalogLayoutResolved(true);
+				}
+			}
+		};
+
+		fetchCatalogLayout();
+		return () => {
+			cancelled = true;
+		};
+	}, [product?._id, product?.printifyProductDetails?.POD]);
 
 	useEffect(() => {
 		if (!product?._id) return;
@@ -1272,14 +2665,79 @@ export default function CustomizeSelectedProduct() {
 		}
 	}, [location.search, product]);
 
-	/**
-	 * 2) Add a default text box in the middle
-	 */
 	useEffect(() => {
-		if (!product || defaultTextAdded) return;
-		if (!printAreaRef.current) return;
+		if (!availablePrintAreaPositions.length) return;
+		if (!availablePrintAreaPositions.includes(activePrintAreaPosition)) {
+			setActivePrintAreaPosition(
+				availablePrintAreaPositions.includes("front")
+					? "front"
+					: availablePrintAreaPositions[0]
+			);
+		}
+	}, [activePrintAreaPosition, availablePrintAreaPositions]);
 
-		const boundingRect = printAreaRef.current.getBoundingClientRect();
+	useEffect(() => {
+		elementsRef.current = elements;
+		if (!activePrintAreaRef.current) return;
+		surfaceDraftsRef.current[activePrintAreaRef.current] = elements.map((element) => ({
+			...element,
+		}));
+	}, [elements]);
+
+	useEffect(() => {
+		if (!activePrintAreaPosition) return;
+		const previousPosition = activePrintAreaRef.current;
+		if (previousPosition && previousPosition !== activePrintAreaPosition) {
+			surfaceDraftsRef.current[previousPosition] = elements.map((element) => ({
+				...element,
+			}));
+		}
+		activePrintAreaRef.current = activePrintAreaPosition;
+		const draft = surfaceDraftsRef.current[activePrintAreaPosition];
+		const nextElements = Array.isArray(draft)
+			? draft.map((element) => ({ ...element }))
+			: [];
+		setElements((prev) => {
+			const prevComparable = JSON.stringify(prev);
+			const nextComparable = JSON.stringify(nextElements);
+			return prevComparable === nextComparable ? prev : nextElements;
+		});
+		setSelectedElementId(null);
+		setInlineEditId(null);
+		setInlineEditText("");
+		setDefaultTextAdded((prev) =>
+			prev === (nextElements.length > 0) ? prev : nextElements.length > 0
+		);
+	}, [activePrintAreaPosition]);
+
+	function rememberAutoGeneratedSnapshot(
+		positionInput = activePrintAreaPosition,
+		elementsInput = []
+	) {
+		const position = normalizePrintAreaPosition(positionInput || "front");
+		autoGeneratedSnapshotRef.current[position] = JSON.stringify(
+			Array.isArray(elementsInput) ? elementsInput : []
+		);
+	}
+
+	function buildAutoGeneratedDesignDrafts({
+		messageId = Date.now(),
+		iconId = messageId + 1,
+		boundsWidth = 0,
+		boundsHeight = 0,
+	} = {}) {
+		if (!product) return null;
+		const hasExplicitBounds =
+			Number(boundsWidth) > 0 && Number(boundsHeight) > 0;
+		const boundingRect = hasExplicitBounds
+			? {
+					width: Number(boundsWidth),
+					height: Number(boundsHeight),
+			  }
+			: printAreaRef.current
+				? printAreaRef.current.getBoundingClientRect()
+				: null;
+		if (!(boundingRect?.width > 0) || !(boundingRect?.height > 0)) return null;
 		const safeBounds = resolvePrintifySafeBounds(
 			boundingRect.width,
 			boundingRect.height,
@@ -1291,43 +2749,248 @@ export default function CustomizeSelectedProduct() {
 		const safeHeight = Math.max(90, safeBounds.maxY - safeBounds.minY);
 		const geometry = resolveAutoDesignGeometry(
 			product,
-			effectiveOccasionStylePreset,
+			effectiveOccasionStylePreset
 		);
-
-		const messageWidth = Math.min(
-			Math.round(safeWidth * 0.72),
-			Math.max(124, Math.round(safeWidth * geometry.messageWidthRatio))
+		const isBagDesign = geometry.kind === "bag";
+		const isToteDesign = geometry.kind === "tote";
+		const isPillowDesign = geometry.kind === "pillow";
+		const isMagnetDesign = geometry.kind === "magnet";
+		const isCandleDesign = geometry.kind === "candle";
+		const toteMessageFontFactor = isToteDesign
+			? isMobile
+				? 0.335
+				: 0.345
+			: 0.36;
+		const toteMessageFontMin = isToteDesign ? (isMobile ? 18 : 20) : 16;
+		const toteMessageFontMax = isToteDesign ? (isMobile ? 34 : 40) : 28;
+		const toteIconFontFactor = isToteDesign ? (isMobile ? 0.62 : 0.66) : 0.54;
+		const toteIconFontMin = isToteDesign ? (isMobile ? 18 : 20) : 18;
+		const toteIconFontMax = isToteDesign ? (isMobile ? 28 : 34) : 30;
+		const pillowMessageFontFactor = isPillowDesign
+			? isMobile
+				? 0.176
+				: 0.188
+			: 0.36;
+		const pillowMessageFontMin = isPillowDesign ? (isMobile ? 18 : 20) : 16;
+		const pillowMessageFontMax = isPillowDesign ? (isMobile ? 32 : 40) : 28;
+		const pillowIconFontFactor = isPillowDesign
+			? isMobile
+				? 0.58
+				: 0.64
+			: 0.54;
+		const pillowIconFontMin = isPillowDesign ? (isMobile ? 18 : 20) : 18;
+		const pillowIconFontMax = isPillowDesign ? (isMobile ? 28 : 32) : 30;
+		const magnetMessageFontFactor = isMagnetDesign
+			? isMobile
+				? 0.29
+				: 0.305
+			: 0.36;
+		const magnetMessageFontMin = isMagnetDesign ? (isMobile ? 18 : 20) : 16;
+		const magnetMessageFontMax = isMagnetDesign ? (isMobile ? 40 : 52) : 28;
+		const magnetIconFontFactor = isMagnetDesign
+			? isMobile
+				? 0.66
+				: 0.72
+			: 0.54;
+		const magnetIconFontMin = isMagnetDesign ? (isMobile ? 18 : 20) : 18;
+		const magnetIconFontMax = isMagnetDesign ? (isMobile ? 32 : 40) : 30;
+		const bagWidthBoost = isBagDesign ? (isMobile ? 1.04 : 1) : 1;
+		const bagHeightBoost = isBagDesign ? (isMobile ? 1.06 : 1) : 1;
+		const bagIconBoost = isBagDesign ? (isMobile ? 1.04 : 1) : 1;
+		const candleMessageFontFactor = isCandleDesign
+			? isMobile
+				? 0.215
+				: 0.235
+			: 0.36;
+		const candleMessageFontMin = isCandleDesign ? (isMobile ? 16 : 20) : 16;
+		const candleMessageFontMax = isCandleDesign ? (isMobile ? 42 : 52) : 28;
+		const candleIconFontFactor = isCandleDesign ? (isMobile ? 0.64 : 0.7) : 0.54;
+		const candleIconFontMin = isCandleDesign ? (isMobile ? 15 : 18) : 18;
+		const candleIconFontMax = isCandleDesign ? (isMobile ? 28 : 34) : 30;
+		const widthCapRatio = isBagDesign
+			? isMobile
+				? 0.88
+				: 0.84
+			: isToteDesign
+				? isMobile
+					? 0.84
+					: 0.86
+			: isPillowDesign
+				? isMobile
+					? 0.9
+					: 0.95
+			: isMagnetDesign
+				? isMobile
+					? 0.92
+					: 0.95
+			: isCandleDesign
+				? isMobile
+					? 0.88
+					: 0.98
+				: 0.8;
+		const minMessageWidth = isBagDesign
+			? 150
+			: isToteDesign
+				? isMobile
+					? 174
+					: 212
+			: isPillowDesign
+				? isMobile
+					? 176
+					: 270
+			: isMagnetDesign
+				? isMobile
+					? 184
+					: 258
+			: isCandleDesign
+				? isMobile
+					? 154
+					: 304
+				: 124;
+		const minMessageHeight = isBagDesign
+			? 56
+			: isToteDesign
+				? isMobile
+					? 88
+					: 104
+			: isPillowDesign
+				? isMobile
+					? 118
+					: 170
+			: isMagnetDesign
+				? isMobile
+					? 126
+					: 176
+			: isCandleDesign
+				? isMobile
+					? 154
+					: 282
+				: 48;
+		const minIconSize = isBagDesign
+			? 28
+			: isToteDesign
+				? isMobile
+					? 28
+					: 34
+			: isPillowDesign
+				? isMobile
+					? 28
+					: 34
+			: isMagnetDesign
+				? isMobile
+					? 32
+					: 40
+			: isCandleDesign
+				? isMobile
+					? 20
+					: 28
+				: 24;
+		let messageWidth = Math.min(
+			Math.round(safeWidth * widthCapRatio),
+			Math.max(
+				minMessageWidth,
+				Math.round(safeWidth * geometry.messageWidthRatio * bagWidthBoost)
+			)
 		);
-		const messageHeight = Math.min(
-			geometry.maxMessageHeight || 74,
-			Math.max(42, Math.round(safeHeight * geometry.messageHeightRatio))
+		let messageHeight = Math.min(
+			geometry.maxMessageHeight || 86,
+			Math.max(
+				minMessageHeight,
+				Math.round(safeHeight * geometry.messageHeightRatio * bagHeightBoost)
+			)
 		);
-		const iconSize = Math.min(
+		let iconSize = Math.min(
 			geometry.maxIconSize || 44,
-			Math.max(24, Math.round(safeWidth * geometry.iconSizeRatio)),
+			Math.max(
+				minIconSize,
+				Math.round(safeWidth * geometry.iconSizeRatio * bagIconBoost)
+			)
 		);
-		const messageYCenter = safeStartY + safeHeight * geometry.messageCenterYRatio;
-
 		const messageX = safeStartX + Math.round((safeWidth - messageWidth) / 2);
-		let messageY = Math.round(messageYCenter - messageHeight / 2);
-		messageY = Math.max(
-			safeStartY + iconSize - geometry.iconOverlapPx + 2,
-			Math.min(messageY, safeStartY + safeHeight - messageHeight)
-		);
 		const iconX = safeStartX + Math.round((safeWidth - iconSize) / 2);
-		const iconY = Math.max(
+		const minMessageY = isPillowDesign
+			? safeStartY
+			: safeStartY + Math.max(0, iconSize - geometry.iconOverlapPx);
+		const maxMessageY = safeStartY + safeHeight - messageHeight;
+		const messageY = clampNumber(
+			Math.round(safeStartY + (safeHeight - messageHeight) / 2),
+			minMessageY,
+			Math.max(minMessageY, maxMessageY)
+		);
+		const iconY = clampNumber(
+			isCandleDesign
+				? messageY + Math.round(messageHeight * (isMobile ? 0.14 : 0.145))
+				: isPillowDesign
+					? messageY + Math.round(messageHeight * (isMobile ? 0.16 : 0.155))
+				: isMagnetDesign
+					? messageY + Math.round(messageHeight * (isMobile ? 0.205 : 0.195))
+				: messageY - iconSize + geometry.iconOverlapPx,
 			safeStartY,
-			Math.min(messageY - 2, messageY - iconSize + geometry.iconOverlapPx)
+			safeStartY + safeHeight - iconSize
 		);
 		const messageFontSize = clampNumber(
-			Math.round(messageHeight * 0.3),
-			13,
-			20,
+			Math.round(
+				messageHeight *
+					(isBagDesign
+						? isMobile
+							? 0.44
+							: 0.4
+						: isToteDesign
+							? toteMessageFontFactor
+						: isPillowDesign
+							? pillowMessageFontFactor
+						: isMagnetDesign
+							? magnetMessageFontFactor
+						: isCandleDesign
+							? candleMessageFontFactor
+							: 0.36)
+			),
+			isBagDesign
+				? 18
+				: isToteDesign
+					? toteMessageFontMin
+					: isPillowDesign
+						? pillowMessageFontMin
+					: isMagnetDesign
+						? magnetMessageFontMin
+						: candleMessageFontMin,
+			isBagDesign
+				? isMobile
+					? 32
+					: 30
+				: isToteDesign
+					? toteMessageFontMax
+					: isPillowDesign
+						? pillowMessageFontMax
+					: isMagnetDesign
+						? magnetMessageFontMax
+					: candleMessageFontMax
 		);
 		const iconFontSize = clampNumber(
-			Math.round(iconSize * 0.48),
-			16,
-			26,
+			Math.round(
+				iconSize *
+					(isToteDesign
+						? toteIconFontFactor
+						: isPillowDesign
+							? pillowIconFontFactor
+						: isMagnetDesign
+							? magnetIconFontFactor
+							: candleIconFontFactor)
+			),
+			isToteDesign
+				? toteIconFontMin
+				: isPillowDesign
+					? pillowIconFontMin
+				: isMagnetDesign
+					? magnetIconFontMin
+					: candleIconFontMin,
+			isToteDesign
+				? toteIconFontMax
+				: isPillowDesign
+					? pillowIconFontMax
+				: isMagnetDesign
+					? magnetIconFontMax
+					: candleIconFontMax
 		);
 		const messageGradientStart =
 			effectiveOccasionStylePreset.messageGradientStart ||
@@ -1335,11 +2998,6 @@ export default function CustomizeSelectedProduct() {
 		const messageGradientEnd =
 			effectiveOccasionStylePreset.messageGradientEnd ||
 			effectiveOccasionStylePreset.backgroundColor;
-		const messageBorderWidth = clampNumber(
-			Number(effectiveOccasionStylePreset.messageBorderWidth) || 2,
-			1,
-			4,
-		);
 		const iconGradientStart =
 			effectiveOccasionStylePreset.accentBackgroundColor ||
 			effectiveOccasionStylePreset.messageGradientStart ||
@@ -1348,113 +3006,538 @@ export default function CustomizeSelectedProduct() {
 			effectiveOccasionStylePreset.accentBackgroundColor2 ||
 			effectiveOccasionStylePreset.accentBackgroundColor ||
 			"#f3f4f6";
-		const baseId = Date.now();
 
-		const messageEl = {
-			id: baseId,
-			type: "text",
-			text: buildGiftMessage(selectedOccasion, selectedGiftName),
-			color: effectiveOccasionStylePreset.textColor,
-			backgroundColor: effectiveOccasionStylePreset.backgroundColor,
-			backgroundImage: `linear-gradient(140deg, ${messageGradientStart} 0%, ${messageGradientEnd} 100%)`,
-			fontFamily: effectiveOccasionStylePreset.fontFamily,
-			fontSize: messageFontSize,
-			fontWeight: effectiveOccasionStylePreset.fontWeight,
-			fontStyle: effectiveOccasionStylePreset.fontStyle,
-			letterSpacing: effectiveOccasionStylePreset.letterSpacing || "0.08px",
-			textShadow:
-				effectiveOccasionStylePreset.textShadow ||
-				"0 1px 2px rgba(16, 33, 24, 0.16)",
-			borderRadius: effectiveOccasionStylePreset.borderRadius,
-			borderColor:
-				effectiveOccasionStylePreset.messageBorderColor ||
-				effectiveOccasionStylePreset.accentBorderColor ||
-				"rgba(31, 41, 55, 0.2)",
-			borderWidth: messageBorderWidth,
-			boxShadow:
-				effectiveOccasionStylePreset.messageShadow ||
-				"0 6px 16px rgba(16, 33, 24, 0.12)",
-			lineHeight: 1.08,
-			paddingX: clampNumber(
-				Number(effectiveOccasionStylePreset.paddingX) ||
-					Math.round(messageWidth * 0.055),
-				8,
-				20,
-			),
-			paddingY: clampNumber(
-				Number(effectiveOccasionStylePreset.paddingY) ||
-					Math.round(messageHeight * 0.09),
-				4,
-				10,
-			),
-			ornamentLeft: effectiveOccasionStylePreset.ornamentLeft || "",
-			ornamentRight: effectiveOccasionStylePreset.ornamentRight || "",
-			ornamentColor:
-				effectiveOccasionStylePreset.ornamentColor ||
-				"rgba(16, 33, 24, 0.35)",
-			rotation: 0,
-			x: messageX,
-			y: messageY,
-			width: messageWidth,
-			height: messageHeight,
-			wasReset: false,
-			isAutoGenerated: true,
-			autoKind: "message",
+		return {
+			message: {
+				id: messageId,
+				type: "text",
+				text: buildGiftMessage(selectedOccasion, selectedGiftName),
+				color: effectiveOccasionStylePreset.textColor,
+				backgroundColor: effectiveOccasionStylePreset.backgroundColor,
+				backgroundImage: `linear-gradient(140deg, ${messageGradientStart} 0%, ${messageGradientEnd} 100%)`,
+				fontFamily: effectiveOccasionStylePreset.fontFamily,
+				fontSize: messageFontSize,
+				fontWeight: effectiveOccasionStylePreset.fontWeight,
+				fontStyle: effectiveOccasionStylePreset.fontStyle,
+				letterSpacing: effectiveOccasionStylePreset.letterSpacing || "0.08px",
+				textShadow:
+					effectiveOccasionStylePreset.textShadow ||
+					"0 1px 2px rgba(16, 33, 24, 0.16)",
+				borderRadius: isCandleDesign
+					? isMobile
+						? 22
+						: 30
+					: isPillowDesign
+						? isMobile
+							? 22
+							: 26
+					: isMagnetDesign
+						? isMobile
+							? 18
+							: 22
+					: effectiveOccasionStylePreset.borderRadius,
+				borderColor:
+					effectiveOccasionStylePreset.messageBorderColor ||
+					effectiveOccasionStylePreset.accentBorderColor ||
+					"rgba(31, 41, 55, 0.2)",
+				borderWidth: clampNumber(
+					Number(effectiveOccasionStylePreset.messageBorderWidth) || 2,
+					1,
+					4
+				),
+				boxShadow:
+					effectiveOccasionStylePreset.messageShadow ||
+					"0 6px 16px rgba(16, 33, 24, 0.12)",
+				lineHeight: isCandleDesign
+					? 0.96
+					: isPillowDesign
+						? 1.01
+						: isMagnetDesign
+							? 1.01
+							: 1.08,
+				paddingX: clampNumber(
+					isBagDesign
+						? Math.round(messageWidth * (isMobile ? 0.042 : 0.045))
+						: isToteDesign
+							? Math.round(messageWidth * (isMobile ? 0.042 : 0.046))
+						: isPillowDesign
+							? Math.round(messageWidth * (isMobile ? 0.026 : 0.03))
+						: isMagnetDesign
+							? Math.round(messageWidth * (isMobile ? 0.024 : 0.028))
+						: isCandleDesign
+							? Math.round(messageWidth * (isMobile ? 0.026 : 0.034))
+						: Number(effectiveOccasionStylePreset.paddingX) ||
+							Math.round(messageWidth * 0.055),
+						isBagDesign
+							? 9
+							: isToteDesign
+								? (isMobile ? 8 : 10)
+							: isPillowDesign
+								? (isMobile ? 8 : 10)
+							: isMagnetDesign
+								? (isMobile ? 6 : 8)
+							: isCandleDesign
+								? (isMobile ? 6 : 10)
+								: 8,
+						isBagDesign
+							? 16
+							: isToteDesign
+								? (isMobile ? 16 : 20)
+							: isPillowDesign
+								? (isMobile ? 12 : 16)
+							: isMagnetDesign
+								? (isMobile ? 12 : 14)
+							: isCandleDesign
+								? (isMobile ? 12 : 18)
+								: 20
+				),
+				paddingY: clampNumber(
+					isBagDesign
+						? Math.round(messageHeight * 0.08)
+						: isToteDesign
+							? Math.round(messageHeight * (isMobile ? 0.085 : 0.09))
+						: isPillowDesign
+							? Math.round(messageHeight * (isMobile ? 0.044 : 0.05))
+						: isMagnetDesign
+							? Math.round(messageHeight * (isMobile ? 0.038 : 0.044))
+						: isCandleDesign
+							? Math.round(messageHeight * (isMobile ? 0.036 : 0.05))
+						: Number(effectiveOccasionStylePreset.paddingY) ||
+							Math.round(messageHeight * 0.09),
+						isBagDesign
+							? 4
+							: isToteDesign
+								? (isMobile ? 6 : 8)
+							: isPillowDesign
+								? (isMobile ? 6 : 8)
+							: isMagnetDesign
+								? (isMobile ? 4 : 6)
+							: isCandleDesign
+								? (isMobile ? 5 : 8)
+								: 4,
+						isBagDesign
+							? 8
+							: isToteDesign
+								? (isMobile ? 12 : 16)
+							: isPillowDesign
+								? (isMobile ? 9 : 12)
+							: isMagnetDesign
+								? (isMobile ? 10 : 12)
+							: isCandleDesign
+								? (isMobile ? 10 : 14)
+								: 10
+				),
+				ornamentLeft: effectiveOccasionStylePreset.ornamentLeft || "",
+				ornamentRight: effectiveOccasionStylePreset.ornamentRight || "",
+				ornamentColor:
+					effectiveOccasionStylePreset.ornamentColor ||
+					"rgba(16, 33, 24, 0.35)",
+				rotation: 0,
+				x: messageX,
+				y: messageY,
+				width: messageWidth,
+				height: messageHeight,
+				wasReset: false,
+				isAutoGenerated: true,
+				autoKind: "message",
+			},
+			icon: {
+				id: iconId,
+				type: "text",
+				text:
+					effectiveOccasionStylePreset.accentIcon || selectedOccasionMeta.icon,
+				color: effectiveOccasionStylePreset.accentTextColor,
+				backgroundColor: effectiveOccasionStylePreset.accentBackgroundColor,
+				backgroundImage: `linear-gradient(145deg, ${iconGradientStart} 0%, ${iconGradientEnd} 100%)`,
+				fontFamily: effectiveOccasionStylePreset.fontFamily,
+				fontSize: iconFontSize,
+				fontWeight: "600",
+				fontStyle: "normal",
+				textShadow:
+					effectiveOccasionStylePreset.textShadow ||
+					"0 1px 2px rgba(16, 33, 24, 0.16)",
+				borderRadius: 999,
+				borderColor:
+					effectiveOccasionStylePreset.accentBorderColor ||
+					"rgba(31, 41, 55, 0.2)",
+				borderWidth: clampNumber(
+					Number(effectiveOccasionStylePreset.accentBorderWidth) || 2,
+					1,
+					3
+				),
+				boxShadow:
+					effectiveOccasionStylePreset.accentShadow ||
+					"0 5px 13px rgba(16, 33, 24, 0.1)",
+				paddingX: 1,
+				paddingY: 1,
+				lineHeight: 1,
+				rotation: 0,
+				x: iconX,
+				y: iconY,
+				width: iconSize,
+				height: iconSize,
+				wasReset: false,
+				isAutoGenerated: true,
+				autoKind: "icon",
+			},
+		};
+	}
+
+	useEffect(() => {
+		if (!catalogLayoutResolved || !product || !activePrintAreaKey) return undefined;
+		if (!shouldInferActiveVisualFrame) {
+			return undefined;
+		}
+		if (visualPrintAreaFrames[activeVisualFrameKey]) {
+			if (visualPrintAreaFrameStatus[activeVisualFrameKey] === "ready") {
+				return undefined;
+			}
+			setVisualPrintAreaFrameStatus((prev) => ({
+				...prev,
+				[activeVisualFrameKey]: "ready",
+			}));
+			return undefined;
+		}
+		if (
+			visualPrintAreaFrameStatus[activeVisualFrameKey] === "ready" ||
+			visualPrintAreaFrameStatus[activeVisualFrameKey] === "failed"
+		) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		let frameId = null;
+		let nestedFrameId = null;
+
+		const failInference = () => {
+			if (cancelled) return;
+			setVisualPrintAreaFrameStatus((prev) => {
+				if (prev[activeVisualFrameKey] === "failed") return prev;
+				return {
+					...prev,
+					[activeVisualFrameKey]: "failed",
+				};
+			});
 		};
 
-		const iconEl = {
-			id: baseId + 1,
-			type: "text",
-			text: effectiveOccasionStylePreset.accentIcon || selectedOccasionMeta.icon,
-			color: effectiveOccasionStylePreset.accentTextColor,
-			backgroundColor: effectiveOccasionStylePreset.accentBackgroundColor,
-			backgroundImage: `linear-gradient(145deg, ${iconGradientStart} 0%, ${iconGradientEnd} 100%)`,
-			fontFamily: effectiveOccasionStylePreset.fontFamily,
-			fontSize: iconFontSize,
-			fontWeight: "600",
-			fontStyle: "normal",
-			textShadow:
-				effectiveOccasionStylePreset.textShadow ||
-				"0 1px 2px rgba(16, 33, 24, 0.16)",
-			borderRadius: 999,
-			borderColor:
-				effectiveOccasionStylePreset.accentBorderColor ||
-				"rgba(31, 41, 55, 0.2)",
-			borderWidth: clampNumber(
-				Number(effectiveOccasionStylePreset.accentBorderWidth) || 2,
-				1,
-				3,
-			),
-			boxShadow:
-				effectiveOccasionStylePreset.accentShadow ||
-				"0 5px 13px rgba(16, 33, 24, 0.1)",
-			paddingX: 1,
-			paddingY: 1,
-			lineHeight: 1,
-			rotation: 0,
-			x: iconX,
-			y: iconY,
-			width: iconSize,
-			height: iconSize,
-			wasReset: false,
-			isAutoGenerated: true,
-			autoKind: "icon",
+		const runInference = async () => {
+			const overlayRect = designOverlayRef.current?.getBoundingClientRect();
+			if (!(overlayRect?.width > 0) || !(overlayRect?.height > 0)) {
+				frameId = window.requestAnimationFrame(() => {
+					nestedFrameId = window.requestAnimationFrame(() => {
+						void runInference();
+					});
+				});
+				return;
+			}
+
+			const baseFrameRect = buildFramePixelRectFromPercent(
+				basePrintAreaFrame,
+				overlayRect.width,
+				overlayRect.height
+			);
+			if (!(baseFrameRect.width > 0) || !(baseFrameRect.height > 0)) {
+				failInference();
+				return;
+			}
+
+			const drafts = buildAutoGeneratedDesignDrafts({
+				messageId: 1,
+				iconId: 2,
+				boundsWidth: baseFrameRect.width,
+				boundsHeight: baseFrameRect.height,
+			});
+			const draftBounds = drafts
+				? getCombinedElementBounds([drafts.message, drafts.icon])
+				: null;
+			if (!(draftBounds?.width > 0) || !(draftBounds?.height > 0)) {
+				failInference();
+				return;
+			}
+
+			try {
+				const inferredFrame = await inferDynamicPrintAreaFrameFromReferenceImages({
+					baseImageSrc: activeSurfaceMockupImage?.src || "",
+					referenceImageUrls: defaultDesignReferenceImageUrls,
+					containerWidth: overlayRect.width,
+					containerHeight: overlayRect.height,
+					relativeDesignBounds: {
+						x: draftBounds.x / baseFrameRect.width,
+						y: draftBounds.y / baseFrameRect.height,
+						width: draftBounds.width / baseFrameRect.width,
+						height: draftBounds.height / baseFrameRect.height,
+					},
+				});
+				if (cancelled) return;
+				if (!inferredFrame) {
+					failInference();
+					return;
+				}
+				setVisualPrintAreaFrames((prev) => ({
+					...prev,
+					[activeVisualFrameKey]: inferredFrame,
+				}));
+				setVisualPrintAreaFrameStatus((prev) => ({
+					...prev,
+					[activeVisualFrameKey]: "ready",
+				}));
+			} catch (error) {
+				console.warn("Failed inferring POD print-area frame from reference images:", {
+					productId: product?._id || null,
+					variantId: activeVariantId || null,
+					position: activePrintAreaKey,
+					message: error?.message || "Unknown error",
+				});
+				failInference();
+			}
 		};
 
-		setElements((prev) => [...prev, messageEl, iconEl]);
-		setSelectedElementId(messageEl.id);
-		setDefaultTextAdded(true);
+		if (visualPrintAreaFrameStatus[activeVisualFrameKey] !== "pending") {
+			setVisualPrintAreaFrameStatus((prev) => ({
+				...prev,
+				[activeVisualFrameKey]: "pending",
+			}));
+		}
+		frameId = window.requestAnimationFrame(() => {
+			nestedFrameId = window.requestAnimationFrame(() => {
+				void runInference();
+			});
+		});
+
+		return () => {
+			cancelled = true;
+			if (frameId) {
+				window.cancelAnimationFrame(frameId);
+			}
+			if (nestedFrameId) {
+				window.cancelAnimationFrame(nestedFrameId);
+			}
+		};
 	}, [
+		activePrintAreaKey,
+		activeSurfaceMockupImage,
+		activeVariantId,
+		activeVisualFrameKey,
+		basePrintAreaFrame,
+		catalogLayoutResolved,
+		defaultDesignReferenceImageUrls,
+		printifySafeInsetPercent,
+		product,
+		shouldInferActiveVisualFrame,
+		visualPrintAreaFrames,
+		visualPrintAreaFrameStatus,
+	]);
+
+	/**
+	 * 2) Add a default text box in the middle
+	 */
+	useEffect(() => {
+		if (!catalogLayoutResolved || !product || defaultTextAdded) return;
+		if (
+			shouldInferActiveVisualFrame &&
+			!["ready", "failed"].includes(activeVisualFrameStatus)
+		) {
+			return;
+		}
+
+		let frameId = null;
+		let nestedFrameId = null;
+		const applyDefaultDrafts = () => {
+			const drafts = buildAutoGeneratedDesignDrafts();
+			if (!drafts) return;
+			const next = [drafts.message, drafts.icon];
+			rememberAutoGeneratedSnapshot(activePrintAreaPosition, next);
+			setElements((prev) => {
+				const prevComparable = JSON.stringify(prev);
+				const nextComparable = JSON.stringify(next);
+				return prevComparable === nextComparable ? prev : next;
+			});
+			setSelectedElementId(null);
+			setDefaultTextAdded((prev) => (prev ? prev : true));
+		};
+
+		if (typeof window === "undefined") {
+			applyDefaultDrafts();
+			return undefined;
+		}
+		frameId = window.requestAnimationFrame(() => {
+			nestedFrameId = window.requestAnimationFrame(() => {
+				applyDefaultDrafts();
+			});
+		});
+
+		return () => {
+			if (frameId) {
+				window.cancelAnimationFrame(frameId);
+			}
+			if (nestedFrameId) {
+				window.cancelAnimationFrame(nestedFrameId);
+			}
+		};
+	}, [
+		activeVisualFrameStatus,
+		activePrintAreaPosition,
+		catalogLayoutResolved,
 		defaultTextAdded,
 		effectiveOccasionStylePreset,
+		printAreaFrame,
 		product,
 		selectedGiftName,
 		selectedOccasionMeta.icon,
 		selectedOccasion,
 		printifySafeInsetPercent,
+		shouldInferActiveVisualFrame,
 	]);
 
 	useEffect(() => {
+		if (
+			!catalogLayoutResolved ||
+			!product ||
+			!defaultTextAdded ||
+			activeVisualFrameStatus !== "ready" ||
+			!activeVisualFrameOverride ||
+			refinedVisualFrameKeysRef.current[activeVisualFrameKey]
+		) {
+			return undefined;
+		}
+		if (!elements.length || !elements.every((item) => item.isAutoGenerated)) {
+			return undefined;
+		}
+		if (!shouldInferActiveVisualFrame) {
+			refinedVisualFrameKeysRef.current[activeVisualFrameKey] = true;
+			return undefined;
+		}
+
+		let cancelled = false;
+		let frameId = null;
+
+		const refineFrame = async () => {
+			const overlayRect = designOverlayRef.current?.getBoundingClientRect();
+			const printAreaRect = printAreaRef.current?.getBoundingClientRect();
+			if (
+				!(overlayRect?.width > 0) ||
+				!(overlayRect?.height > 0) ||
+				!(printAreaRect?.width > 0) ||
+				!(printAreaRect?.height > 0)
+			) {
+				frameId = window.requestAnimationFrame(() => {
+					void refineFrame();
+				});
+				return;
+			}
+
+			const combinedBounds = getCombinedElementBounds(elements);
+			if (!(combinedBounds?.width > 0) || !(combinedBounds?.height > 0)) {
+				refinedVisualFrameKeysRef.current[activeVisualFrameKey] = true;
+				return;
+			}
+
+			try {
+				const refinedFrame = await inferDynamicPrintAreaFrameFromReferenceImages({
+					baseImageSrc: activeSurfaceMockupImage?.src || "",
+					referenceImageUrls: defaultDesignReferenceImageUrls,
+					containerWidth: overlayRect.width,
+					containerHeight: overlayRect.height,
+					relativeDesignBounds: {
+						x: combinedBounds.x / printAreaRect.width,
+						y: combinedBounds.y / printAreaRect.height,
+						width: combinedBounds.width / printAreaRect.width,
+						height: combinedBounds.height / printAreaRect.height,
+					},
+				});
+				if (cancelled) return;
+				refinedVisualFrameKeysRef.current[activeVisualFrameKey] = true;
+				if (!refinedFrame) return;
+				if (getFrameDifferenceScore(refinedFrame, activeVisualFrameOverride) < 1.5) {
+					return;
+				}
+
+				const tunedRefinedFrame = tunePodVisualPrintAreaFrame(
+					refinedFrame,
+					product || {},
+					activePrintAreaPosition
+				);
+				const refinedFrameRect = buildFramePixelRectFromPercent(
+					tunedRefinedFrame,
+					overlayRect.width,
+					overlayRect.height
+				);
+				if (!(refinedFrameRect.width > 0) || !(refinedFrameRect.height > 0)) {
+					return;
+				}
+
+				const currentIds = elements.reduce((accumulator, item) => {
+					if (item.autoKind === "message") accumulator.messageId = item.id;
+					if (item.autoKind === "icon") accumulator.iconId = item.id;
+					return accumulator;
+				}, {});
+				const drafts = buildAutoGeneratedDesignDrafts({
+					messageId: currentIds.messageId || Date.now(),
+					iconId: currentIds.iconId || Date.now() + 1,
+					boundsWidth: refinedFrameRect.width,
+					boundsHeight: refinedFrameRect.height,
+				});
+				if (!drafts) return;
+				const next = [drafts.message, drafts.icon];
+				rememberAutoGeneratedSnapshot(activePrintAreaPosition, next);
+				setVisualPrintAreaFrames((prev) => {
+					const currentFrame = prev[activeVisualFrameKey];
+					if (
+						currentFrame &&
+						JSON.stringify(currentFrame) === JSON.stringify(refinedFrame)
+					) {
+						return prev;
+					}
+					return {
+						...prev,
+						[activeVisualFrameKey]: refinedFrame,
+					};
+				});
+				setElements((prev) => {
+					const prevComparable = JSON.stringify(prev);
+					const nextComparable = JSON.stringify(next);
+					return prevComparable === nextComparable ? prev : next;
+				});
+			} catch (error) {
+				console.warn("Failed refining POD visual frame:", {
+					productId: product?._id || null,
+					variantId: activeVariantId || null,
+					position: activePrintAreaKey,
+					message: error?.message || "Unknown error",
+				});
+				refinedVisualFrameKeysRef.current[activeVisualFrameKey] = true;
+			}
+		};
+
+		frameId = window.requestAnimationFrame(() => {
+			void refineFrame();
+		});
+
+		return () => {
+			cancelled = true;
+			if (frameId) {
+				window.cancelAnimationFrame(frameId);
+			}
+		};
+	}, [
+		activePrintAreaKey,
+		activePrintAreaPosition,
+		activeSurfaceMockupImage,
+		activeVariantId,
+		activeVisualFrameKey,
+		activeVisualFrameOverride,
+		activeVisualFrameStatus,
+		catalogLayoutResolved,
+		defaultDesignReferenceImageUrls,
+		defaultTextAdded,
+		elements,
+		product,
+		shouldInferActiveVisualFrame,
+	]);
+
+	useEffect(() => {
+		if (!catalogLayoutResolved || !product || !defaultTextAdded) return;
+		const position = normalizePrintAreaPosition(activePrintAreaPosition || "front");
 		const autoMessage = buildGiftMessage(selectedOccasion, selectedGiftName);
 		const autoIcon =
 			effectiveOccasionStylePreset.accentIcon || selectedOccasionMeta.icon;
@@ -1472,15 +3555,80 @@ export default function CustomizeSelectedProduct() {
 			effectiveOccasionStylePreset.accentBackgroundColor2 ||
 			effectiveOccasionStylePreset.accentBackgroundColor ||
 			"#f3f4f6";
+		const productKind = getPodProductKindForDefaultDesign(product || {});
+		const isBagAutoDesign = productKind === "bag";
+		const isToteAutoDesign = productKind === "tote";
+		const isPillowAutoDesign = productKind === "pillow";
+		const isMagnetAutoDesign = productKind === "magnet";
+		const isCandleAutoDesign = productKind === "candle";
+		const toteMessageFontFactor = isToteAutoDesign
+			? isMobile
+				? 0.335
+				: 0.345
+			: 0.36;
+		const toteMessageFontMin = isToteAutoDesign ? (isMobile ? 18 : 20) : 16;
+		const toteMessageFontMax = isToteAutoDesign ? (isMobile ? 34 : 40) : 28;
+		const toteIconFontFactor = isToteAutoDesign
+			? isMobile
+				? 0.62
+				: 0.66
+			: 0.54;
+		const toteIconFontMin = isToteAutoDesign ? (isMobile ? 18 : 20) : 18;
+		const toteIconFontMax = isToteAutoDesign ? (isMobile ? 28 : 34) : 30;
+		const pillowMessageFontFactor = isPillowAutoDesign
+			? isMobile
+				? 0.176
+				: 0.188
+			: 0.36;
+		const pillowMessageFontMin = isPillowAutoDesign ? (isMobile ? 18 : 20) : 16;
+		const pillowMessageFontMax = isPillowAutoDesign ? (isMobile ? 32 : 40) : 28;
+		const pillowIconFontFactor = isPillowAutoDesign
+			? isMobile
+				? 0.58
+				: 0.64
+			: 0.54;
+		const pillowIconFontMin = isPillowAutoDesign ? (isMobile ? 18 : 20) : 18;
+		const pillowIconFontMax = isPillowAutoDesign ? (isMobile ? 28 : 32) : 30;
+		const magnetMessageFontFactor = isMagnetAutoDesign
+			? isMobile
+				? 0.29
+				: 0.305
+			: 0.36;
+		const magnetMessageFontMin = isMagnetAutoDesign ? (isMobile ? 18 : 20) : 16;
+		const magnetMessageFontMax = isMagnetAutoDesign ? (isMobile ? 40 : 52) : 28;
+		const magnetIconFontFactor = isMagnetAutoDesign
+			? isMobile
+				? 0.66
+				: 0.72
+			: 0.54;
+		const magnetIconFontMin = isMagnetAutoDesign ? (isMobile ? 18 : 20) : 18;
+		const magnetIconFontMax = isMagnetAutoDesign ? (isMobile ? 32 : 40) : 30;
+		const candleMessageFontFactor = isCandleAutoDesign
+			? isMobile
+				? 0.215
+				: 0.235
+			: 0.36;
+		const candleMessageFontMin = isCandleAutoDesign ? (isMobile ? 16 : 20) : 16;
+		const candleMessageFontMax = isCandleAutoDesign ? (isMobile ? 42 : 52) : 28;
+		const candleIconFontFactor = isCandleAutoDesign
+			? isMobile
+				? 0.64
+				: 0.7
+			: 0.54;
+		const candleIconFontMin = isCandleAutoDesign ? (isMobile ? 15 : 18) : 18;
+		const candleIconFontMax = isCandleAutoDesign ? (isMobile ? 28 : 34) : 30;
 		setElements((prev) => {
+			if (!prev.length || !prev.every((item) => item.isAutoGenerated)) {
+				return prev;
+			}
+			const currentComparable = JSON.stringify(prev);
+			const lastAutoSnapshot = autoGeneratedSnapshotRef.current[position];
+			if (lastAutoSnapshot && currentComparable !== lastAutoSnapshot) {
+				return prev;
+			}
 			const next = prev.map((item) => {
 				if (item.type !== "text" || !item.isAutoGenerated) return item;
 				if (item.autoKind === "icon") {
-					const iconFontSize = clampNumber(
-						Math.round((item.height || 36) * 0.48),
-						16,
-						26,
-					);
 					return {
 						...item,
 						text: autoIcon,
@@ -1488,7 +3636,32 @@ export default function CustomizeSelectedProduct() {
 						backgroundColor: effectiveOccasionStylePreset.accentBackgroundColor,
 						backgroundImage: `linear-gradient(145deg, ${iconGradientStart} 0%, ${iconGradientEnd} 100%)`,
 						fontFamily: effectiveOccasionStylePreset.fontFamily,
-						fontSize: iconFontSize,
+						fontSize: clampNumber(
+							Math.round(
+								(item.height || 36) *
+									(isToteAutoDesign
+										? toteIconFontFactor
+										: isPillowAutoDesign
+											? pillowIconFontFactor
+										: isMagnetAutoDesign
+											? magnetIconFontFactor
+										: candleIconFontFactor)
+							),
+							isToteAutoDesign
+								? toteIconFontMin
+								: isPillowAutoDesign
+									? pillowIconFontMin
+								: isMagnetAutoDesign
+									? magnetIconFontMin
+									: candleIconFontMin,
+							isToteAutoDesign
+								? toteIconFontMax
+								: isPillowAutoDesign
+									? pillowIconFontMax
+								: isMagnetAutoDesign
+									? magnetIconFontMax
+									: candleIconFontMax
+						),
 						fontWeight: "600",
 						fontStyle: "normal",
 						textShadow:
@@ -1501,7 +3674,7 @@ export default function CustomizeSelectedProduct() {
 						borderWidth: clampNumber(
 							Number(effectiveOccasionStylePreset.accentBorderWidth) || 2,
 							1,
-							3,
+							3
 						),
 						boxShadow:
 							effectiveOccasionStylePreset.accentShadow ||
@@ -1511,12 +3684,6 @@ export default function CustomizeSelectedProduct() {
 						lineHeight: 1,
 					};
 				}
-
-				const messageFontSize = clampNumber(
-					Math.round((item.height || 56) * 0.3),
-					13,
-					20,
-				);
 				return {
 					...item,
 					text: autoMessage,
@@ -1524,14 +3691,63 @@ export default function CustomizeSelectedProduct() {
 					backgroundColor: effectiveOccasionStylePreset.backgroundColor,
 					backgroundImage: `linear-gradient(140deg, ${messageGradientStart} 0%, ${messageGradientEnd} 100%)`,
 					fontFamily: effectiveOccasionStylePreset.fontFamily,
-					fontSize: messageFontSize,
+					fontSize: clampNumber(
+						Math.round(
+							(item.height || 56) *
+								(isBagAutoDesign
+									? isMobile
+										? 0.44
+										: 0.4
+									: isToteAutoDesign
+										? toteMessageFontFactor
+									: isPillowAutoDesign
+										? pillowMessageFontFactor
+									: isMagnetAutoDesign
+										? magnetMessageFontFactor
+									: isCandleAutoDesign
+										? candleMessageFontFactor
+										: 0.36)
+						),
+						isBagAutoDesign
+							? 18
+							: isToteAutoDesign
+								? toteMessageFontMin
+								: isPillowAutoDesign
+									? pillowMessageFontMin
+								: isMagnetAutoDesign
+									? magnetMessageFontMin
+								: candleMessageFontMin,
+						isBagAutoDesign
+							? isMobile
+								? 32
+								: 30
+							: isToteAutoDesign
+								? toteMessageFontMax
+								: isPillowAutoDesign
+									? pillowMessageFontMax
+								: isMagnetAutoDesign
+									? magnetMessageFontMax
+								: candleMessageFontMax
+					),
 					fontWeight: effectiveOccasionStylePreset.fontWeight,
 					fontStyle: effectiveOccasionStylePreset.fontStyle,
 					letterSpacing: effectiveOccasionStylePreset.letterSpacing || "0.08px",
 					textShadow:
 						effectiveOccasionStylePreset.textShadow ||
 						"0 1px 2px rgba(16, 33, 24, 0.16)",
-					borderRadius: effectiveOccasionStylePreset.borderRadius,
+					borderRadius: isCandleAutoDesign
+						? isMobile
+							? 22
+							: 30
+						: isPillowAutoDesign
+							? isMobile
+								? 22
+								: 26
+						: isMagnetAutoDesign
+							? isMobile
+								? 18
+								: 22
+						: effectiveOccasionStylePreset.borderRadius,
 					borderColor:
 						effectiveOccasionStylePreset.messageBorderColor ||
 						effectiveOccasionStylePreset.accentBorderColor ||
@@ -1539,24 +3755,90 @@ export default function CustomizeSelectedProduct() {
 					borderWidth: clampNumber(
 						Number(effectiveOccasionStylePreset.messageBorderWidth) || 2,
 						1,
-						4,
+						4
 					),
 					boxShadow:
 						effectiveOccasionStylePreset.messageShadow ||
 						"0 6px 16px rgba(16, 33, 24, 0.12)",
-					lineHeight: 1.08,
 					paddingX: clampNumber(
-						Number(effectiveOccasionStylePreset.paddingX) ||
-							Math.round((item.width || 180) * 0.055),
-						8,
-						20,
+						isBagAutoDesign
+							? Math.round((item.width || 180) * (isMobile ? 0.042 : 0.045))
+							: isToteAutoDesign
+								? Math.round((item.width || 180) * (isMobile ? 0.042 : 0.046))
+							: isPillowAutoDesign
+								? Math.round((item.width || 180) * (isMobile ? 0.026 : 0.03))
+							: isMagnetAutoDesign
+								? Math.round((item.width || 180) * (isMobile ? 0.024 : 0.028))
+							: isCandleAutoDesign
+								? Math.round((item.width || 180) * (isMobile ? 0.026 : 0.034))
+							: Number(effectiveOccasionStylePreset.paddingX) ||
+								Math.round((item.width || 180) * 0.055),
+						isBagAutoDesign
+							? 9
+							: isToteAutoDesign
+								? (isMobile ? 8 : 10)
+								: isPillowAutoDesign
+									? (isMobile ? 8 : 10)
+								: isMagnetAutoDesign
+									? (isMobile ? 6 : 8)
+								: isCandleAutoDesign
+									? (isMobile ? 6 : 10)
+									: 8,
+						isBagAutoDesign
+							? 16
+							: isToteAutoDesign
+								? (isMobile ? 16 : 20)
+							: isPillowAutoDesign
+								? (isMobile ? 12 : 16)
+								: isMagnetAutoDesign
+									? (isMobile ? 12 : 14)
+								: isCandleAutoDesign
+									? (isMobile ? 12 : 18)
+									: 20
 					),
 					paddingY: clampNumber(
-						Number(effectiveOccasionStylePreset.paddingY) ||
-							Math.round((item.height || 56) * 0.09),
-						4,
-						10,
+						isBagAutoDesign
+							? Math.round((item.height || 56) * 0.08)
+							: isToteAutoDesign
+								? Math.round((item.height || 56) * (isMobile ? 0.085 : 0.09))
+							: isPillowAutoDesign
+								? Math.round((item.height || 56) * (isMobile ? 0.044 : 0.05))
+							: isMagnetAutoDesign
+								? Math.round((item.height || 56) * (isMobile ? 0.038 : 0.044))
+							: isCandleAutoDesign
+								? Math.round((item.height || 56) * (isMobile ? 0.036 : 0.05))
+							: Number(effectiveOccasionStylePreset.paddingY) ||
+								Math.round((item.height || 56) * 0.09),
+						isBagAutoDesign
+							? 4
+							: isToteAutoDesign
+								? (isMobile ? 6 : 8)
+								: isPillowAutoDesign
+									? (isMobile ? 6 : 8)
+								: isMagnetAutoDesign
+									? (isMobile ? 4 : 6)
+								: isCandleAutoDesign
+									? (isMobile ? 5 : 8)
+									: 4,
+						isBagAutoDesign
+							? 8
+							: isToteAutoDesign
+								? (isMobile ? 12 : 16)
+							: isPillowAutoDesign
+								? (isMobile ? 9 : 12)
+								: isMagnetAutoDesign
+									? (isMobile ? 10 : 12)
+								: isCandleAutoDesign
+									? (isMobile ? 10 : 14)
+									: 10
 					),
+					lineHeight: isCandleAutoDesign
+						? 0.96
+						: isPillowAutoDesign
+							? 1.01
+						: isMagnetAutoDesign
+							? 1.01
+							: 1.08,
 					ornamentLeft: effectiveOccasionStylePreset.ornamentLeft || "",
 					ornamentRight: effectiveOccasionStylePreset.ornamentRight || "",
 					ornamentColor:
@@ -1564,13 +3846,132 @@ export default function CustomizeSelectedProduct() {
 						"rgba(16, 33, 24, 0.35)",
 				};
 			});
-			return next;
+			const nextComparable = JSON.stringify(next);
+			rememberAutoGeneratedSnapshot(position, next);
+			return currentComparable === nextComparable ? prev : next;
 		});
 	}, [
+		activePrintAreaPosition,
+		catalogLayoutResolved,
+		defaultTextAdded,
 		effectiveOccasionStylePreset,
+		product,
 		selectedGiftName,
 		selectedOccasion,
 		selectedOccasionMeta.icon,
+		printifySafeInsetPercent,
+	]);
+
+	useEffect(() => {
+		if (
+			activeProductKind !== "magnet" ||
+			!catalogLayoutResolved ||
+			!product ||
+			!defaultTextAdded ||
+			typeof ResizeObserver === "undefined"
+		) {
+			return undefined;
+		}
+		const node = printAreaRef.current;
+		if (!node) return undefined;
+
+		let frameId = null;
+
+		const syncMagnetAutoLayout = () => {
+			const currentElements = Array.isArray(elementsRef.current)
+				? elementsRef.current
+				: [];
+			if (
+				!currentElements.length ||
+				!currentElements.every((item) => item.isAutoGenerated)
+			) {
+				return;
+			}
+			const position = normalizePrintAreaPosition(
+				activePrintAreaPosition || "front"
+			);
+			const currentComparable = JSON.stringify(currentElements);
+			const lastAutoSnapshot = autoGeneratedSnapshotRef.current[position];
+			if (lastAutoSnapshot && currentComparable !== lastAutoSnapshot) {
+				return;
+			}
+
+			const rect = node.getBoundingClientRect();
+			if (!(rect.width > 0) || !(rect.height > 0)) {
+				return;
+			}
+
+			const nextSignature = [
+				position,
+				Math.round(rect.width),
+				Math.round(rect.height),
+				isMobile ? "mobile" : "desktop",
+				selectedOccasion || "",
+				selectedGiftName || "",
+			].join(":");
+			if (autoGeneratedLayoutSignatureRef.current[position] === nextSignature) {
+				return;
+			}
+
+			const ids = currentElements.reduce(
+				(accumulator, item) => {
+					if (item.autoKind === "message") accumulator.messageId = item.id;
+					if (item.autoKind === "icon") accumulator.iconId = item.id;
+					return accumulator;
+				},
+				{}
+			);
+			const drafts = buildAutoGeneratedDesignDrafts({
+				messageId: ids.messageId || Date.now(),
+				iconId: ids.iconId || Date.now() + 1,
+				boundsWidth: rect.width,
+				boundsHeight: rect.height,
+			});
+			if (!drafts) return;
+
+			const next = [drafts.message, drafts.icon];
+			const nextComparable = JSON.stringify(next);
+			autoGeneratedLayoutSignatureRef.current[position] = nextSignature;
+			if (currentComparable === nextComparable) {
+				return;
+			}
+			rememberAutoGeneratedSnapshot(position, next);
+			setElements((prev) => {
+				const prevComparable = JSON.stringify(prev);
+				return prevComparable === nextComparable ? prev : next;
+			});
+		};
+
+		const queueSync = () => {
+			if (frameId) {
+				window.cancelAnimationFrame(frameId);
+			}
+			frameId = window.requestAnimationFrame(() => {
+				syncMagnetAutoLayout();
+			});
+		};
+
+		queueSync();
+		const observer = new ResizeObserver(() => {
+			queueSync();
+		});
+		observer.observe(node);
+
+		return () => {
+			if (frameId) {
+				window.cancelAnimationFrame(frameId);
+			}
+			observer.disconnect();
+		};
+	}, [
+		activePrintAreaPosition,
+		activeProductKind,
+		catalogLayoutResolved,
+		defaultTextAdded,
+		isMobile,
+		product,
+		selectedGiftName,
+		selectedOccasion,
 	]);
 
 	/**
@@ -1602,7 +4003,17 @@ export default function CustomizeSelectedProduct() {
 			size: selectedSize || undefined,
 			scent: selectedScent || undefined,
 		});
-		if (nextSearch !== location.search) {
+		const normalizedNextSearch = normalizeSearchParamsString(nextSearch);
+		const normalizedCurrentSearch = normalizeSearchParamsString(location.search);
+		if (normalizedNextSearch === normalizedCurrentSearch) {
+			lastRequestedPersonalizationSearchRef.current = "";
+			return;
+		}
+		if (lastRequestedPersonalizationSearchRef.current === normalizedNextSearch) {
+			return;
+		}
+		lastRequestedPersonalizationSearchRef.current = normalizedNextSearch;
+		if (normalizedNextSearch !== normalizedCurrentSearch) {
 			history.replace({ pathname: location.pathname, search: nextSearch });
 		}
 	}, [
@@ -1735,7 +4146,7 @@ export default function CustomizeSelectedProduct() {
 			file.type?.toLowerCase().includes("video") ||
 			file.name?.toLowerCase().endsWith(".mov")
 		) {
-			message.error(
+			messageApi.error(
 				"This file is a video/Live Photo. Please select a standard image."
 			);
 			return;
@@ -1786,7 +4197,7 @@ export default function CustomizeSelectedProduct() {
 								// try requestImagePermissions => re-try
 								try {
 									await requestImagePermissions();
-									message.info(
+									messageApi.info(
 										"Trying final fallback once more with permission granted..."
 									);
 									const { public_id, url } = await fallbackVanillaJSXHRUpload(
@@ -1800,7 +4211,7 @@ export default function CustomizeSelectedProduct() {
 										"Even after permissions, final attempt failed.",
 										permFail
 									);
-									message.error(
+									messageApi.error(
 										"We encountered an issue uploading your image. Please try again or pick a different photo."
 									);
 								}
@@ -1811,7 +4222,7 @@ export default function CustomizeSelectedProduct() {
 			}
 		} catch (finalErr) {
 			console.error("Image upload (all attempts) failed:", finalErr);
-			message.error(
+			messageApi.error(
 				"We encountered an issue uploading your image. Please try again."
 			);
 		} finally {
@@ -1990,7 +4401,7 @@ export default function CustomizeSelectedProduct() {
 	function addTextElement(textValue, fromRightSide = false) {
 		const finalText = textValue ? textValue.trim() : userText.trim();
 		if (!finalText) {
-			message.warning("Please enter some text first.");
+			messageApi.warning("Please enter some text first.");
 			return;
 		}
 		if (!printAreaRef.current) return;
@@ -2081,10 +4492,10 @@ export default function CustomizeSelectedProduct() {
 					{ public_id: el.public_id },
 					{ headers: { Authorization: `Bearer ${fallbackToken}` } }
 				);
-				message.success("Image Successfully Deleted.");
+				messageApi.success("Image Successfully Deleted.");
 			} catch (error) {
 				console.error("Failed to delete image:", error);
-				message.error("Failed to delete image from server.");
+				messageApi.error("Failed to delete image from server.");
 			}
 		}
 		setElements((prev) => prev.filter((item) => item.id !== elId));
@@ -2094,6 +4505,10 @@ export default function CustomizeSelectedProduct() {
 	const [showCenterGuides, setShowCenterGuides] = useState({
 		vertical: false,
 		horizontal: false,
+	});
+	const [elementAlignmentGuides, setElementAlignmentGuides] = useState({
+		vertical: null,
+		horizontal: null,
 	});
 	const [forceDragRelease, setForceDragRelease] = useState(false);
 	const dragSessionRef = useRef(false);
@@ -2114,6 +4529,9 @@ export default function CustomizeSelectedProduct() {
 	const centerGuideStateRef = useRef({ vertical: false, horizontal: false });
 	const centerGuidePendingRef = useRef({ vertical: false, horizontal: false });
 	const centerGuideRafRef = useRef(null);
+	const elementGuideStateRef = useRef({ vertical: null, horizontal: null });
+	const elementGuidePendingRef = useRef({ vertical: null, horizontal: null });
+	const elementGuideRafRef = useRef(null);
 	const hideFrameContextMenuRef = useRef(() => {});
 	const copyFrameToClipboardRef = useRef(() => false);
 	const pasteFrameFromClipboardRef = useRef(() => null);
@@ -2145,16 +4563,59 @@ export default function CustomizeSelectedProduct() {
 		});
 	}
 
+	function queueElementAlignmentGuides(nextGuides) {
+		const next = {
+			vertical:
+				Number.isFinite(Number(nextGuides?.vertical))
+					? Number(nextGuides.vertical)
+					: null,
+			horizontal:
+				Number.isFinite(Number(nextGuides?.horizontal))
+					? Number(nextGuides.horizontal)
+					: null,
+		};
+		elementGuidePendingRef.current = next;
+		if (elementGuideRafRef.current) return;
+		elementGuideRafRef.current = window.requestAnimationFrame(() => {
+			elementGuideRafRef.current = null;
+			const pending = elementGuidePendingRef.current;
+			const current = elementGuideStateRef.current;
+			if (
+				current.vertical === pending.vertical &&
+				current.horizontal === pending.horizontal
+			) {
+				return;
+			}
+			elementGuideStateRef.current = pending;
+			setElementAlignmentGuides(pending);
+		});
+	}
+
 	function hideCenterGuidesImmediate() {
 		if (centerGuideRafRef.current) {
 			window.cancelAnimationFrame(centerGuideRafRef.current);
 			centerGuideRafRef.current = null;
 		}
+		if (elementGuideRafRef.current) {
+			window.cancelAnimationFrame(elementGuideRafRef.current);
+			elementGuideRafRef.current = null;
+		}
 		centerGuidePendingRef.current = { vertical: false, horizontal: false };
+		elementGuidePendingRef.current = { vertical: null, horizontal: null };
 		const current = centerGuideStateRef.current;
-		if (!current.vertical && !current.horizontal) return;
+		const currentElementGuides = elementGuideStateRef.current;
+		if (
+			!current.vertical &&
+			!current.horizontal &&
+			currentElementGuides.vertical == null &&
+			currentElementGuides.horizontal == null
+		) {
+			return;
+		}
 		centerGuideStateRef.current = { vertical: false, horizontal: false };
+		elementGuideStateRef.current = { vertical: null, horizontal: null };
 		setShowCenterGuides({ vertical: false, horizontal: false });
+		setElementAlignmentGuides({ vertical: null, horizontal: null });
 	}
 	hideCenterGuidesImmediateRef.current = hideCenterGuidesImmediate;
 
@@ -2185,6 +4646,63 @@ export default function CustomizeSelectedProduct() {
 		);
 	}
 	getActivePrintifySafeBoundsRef.current = getActivePrintifySafeBounds;
+
+	function didElementGeometryChange(previousElements = [], nextElements = []) {
+		if (previousElements.length !== nextElements.length) return true;
+		for (let index = 0; index < previousElements.length; index += 1) {
+			const previous = previousElements[index];
+			const next = nextElements[index];
+			if (
+				previous?.id !== next?.id ||
+				previous?.x !== next?.x ||
+				previous?.y !== next?.y ||
+				previous?.width !== next?.width ||
+				previous?.height !== next?.height
+			) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	async function normalizeDesignElementsForCapture() {
+		const currentElements = Array.isArray(elementsRef.current)
+			? elementsRef.current
+			: [];
+		const last = dragLastPositionRef.current;
+		if (
+			last?.elementId &&
+			Number.isFinite(last.x) &&
+			Number.isFinite(last.y)
+		) {
+			clearPendingDragPositionRafRef.current();
+			commitElementDragPositionRef.current(last.elementId, last.x, last.y);
+			dragLastPositionRef.current = { elementId: null, x: null, y: null };
+		}
+		dragSessionRef.current = false;
+		dragGeometryRef.current.ready = false;
+		hideCenterGuidesImmediateRef.current();
+		if (rotationData.current.rotatingElementId) {
+			onRotationEndRef.current();
+		}
+
+		await waitForNextPaint(1);
+		const safeBounds = getActivePrintifySafeBoundsRef.current();
+		if (!safeBounds) return currentElements;
+
+		const normalizedElements = normalizeElementRectsWithinBounds(
+			currentElements,
+			safeBounds
+		);
+		if (!didElementGeometryChange(currentElements, normalizedElements)) {
+			return currentElements;
+		}
+
+		elementsRef.current = normalizedElements;
+		setElements(normalizedElements);
+		await waitForNextPaint(2);
+		return normalizedElements;
+	}
 
 	function clearPendingDragPositionRaf() {
 		if (dragPositionRafRef.current) {
@@ -2243,25 +4761,17 @@ export default function CustomizeSelectedProduct() {
 			return;
 		}
 		const printAreaBounds = printAreaRef.current.getBoundingClientRect();
-		const overlayBounds =
-			designOverlayRef.current?.getBoundingClientRect() || printAreaBounds;
-		const printAreaOffsetX = printAreaBounds.left - overlayBounds.left;
-		const printAreaOffsetY = printAreaBounds.top - overlayBounds.top;
-		const containerCenterX = clampNumber(
-			overlayBounds.width / 2 - printAreaOffsetX,
-			0,
-			printAreaBounds.width
-		);
-		const containerCenterY = clampNumber(
-			overlayBounds.height / 2 - printAreaOffsetY,
-			0,
-			printAreaBounds.height
-		);
 		const safeBounds = resolvePrintifySafeBounds(
 			printAreaBounds.width,
 			printAreaBounds.height,
 			printifySafeInsetPercent
 		);
+		const containerCenterX = safeBounds
+			? safeBounds.minX + (safeBounds.maxX - safeBounds.minX) / 2
+			: printAreaBounds.width / 2;
+		const containerCenterY = safeBounds
+			? safeBounds.minY + (safeBounds.maxY - safeBounds.minY) / 2
+			: printAreaBounds.height / 2;
 		dragGeometryRef.current = {
 			ready: true,
 			containerCenterX,
@@ -2274,7 +4784,7 @@ export default function CustomizeSelectedProduct() {
 		if (!frame) return false;
 		copiedElementRef.current = JSON.parse(JSON.stringify(frame));
 		pasteCountRef.current = 0;
-		if (notify) message.success("Frame copied.");
+		if (notify) messageApi.success("Frame copied.");
 		return true;
 	}
 	copyFrameToClipboardRef.current = copyFrameToClipboard;
@@ -2286,7 +4796,7 @@ export default function CustomizeSelectedProduct() {
 	} = {}) {
 		const source = copiedElementRef.current;
 		if (!source) {
-			if (notify) message.warning("Copy a frame first.");
+			if (notify) messageApi.warning("Copy a frame first.");
 			return null;
 		}
 
@@ -2337,7 +4847,7 @@ export default function CustomizeSelectedProduct() {
 		setElements((prev) => [...prev, cloned]);
 		setSelectedElementId(newElementId);
 		pasteCountRef.current += 1;
-		if (notify) message.success("Frame pasted.");
+		if (notify) messageApi.success("Frame pasted.");
 		return newElementId;
 	}
 	pasteFrameFromClipboardRef.current = pasteFrameFromClipboard;
@@ -2359,7 +4869,7 @@ export default function CustomizeSelectedProduct() {
 		const frameId = frameContextMenu.targetId || selectedElementId;
 		const target = elements.find((item) => item.id === frameId);
 		if (!target) {
-			message.warning("Select a frame to copy.");
+			messageApi.warning("Select a frame to copy.");
 			hideFrameContextMenu();
 			return;
 		}
@@ -2379,12 +4889,67 @@ export default function CustomizeSelectedProduct() {
 		if (!isMobile) return;
 		const selected = elements.find((item) => item.id === selectedElementId);
 		if (!selected) {
-			message.warning("Select a frame first.");
+			messageApi.warning("Select a frame first.");
 			return;
 		}
 		copyFrameToClipboard(selected, { notify: false });
 		pasteFrameFromClipboard({ notify: false });
-		message.success("Frame duplicated.");
+		messageApi.success("Frame duplicated.");
+	}
+
+	function moveElementsToHorizontalAnchor(anchorRatio = 0.5) {
+		const safeBounds = getActivePrintifySafeBoundsRef.current();
+		if (!safeBounds) return;
+		setElements((prev) => {
+			const combinedBounds = getCombinedElementBounds(prev);
+			if (!(combinedBounds?.width > 0) || !(combinedBounds?.height > 0)) {
+				return prev;
+			}
+			const safeAnchorRatio = clampNumber(Number(anchorRatio) || 0.5, 0, 1);
+			const safeWidth = Math.max(24, (Number(safeBounds.maxX) || 0) - (Number(safeBounds.minX) || 0));
+			const targetX = clampNumber(
+				(Number(safeBounds.minX) || 0) + safeWidth * safeAnchorRatio - combinedBounds.width / 2,
+				Number(safeBounds.minX) || 0,
+				(Math.max(Number(safeBounds.minX) || 0, Number(safeBounds.maxX) || 0) - combinedBounds.width)
+			);
+			const deltaX = targetX - combinedBounds.x;
+			if (Math.abs(deltaX) < 0.5) {
+				return prev;
+			}
+			const next = prev.map((item) => {
+				const clamped = clampElementRectWithinBounds(
+					{
+						x: item.x + deltaX,
+						y: item.y,
+						width: item.width,
+						height: item.height,
+					},
+					safeBounds
+				);
+				return {
+					...item,
+					x: clamped.x,
+					y: clamped.y,
+					width: clamped.width,
+					height: clamped.height,
+				};
+			});
+			elementsRef.current = next;
+			if (next.every((item) => item.isAutoGenerated)) {
+				rememberAutoGeneratedSnapshot(activePrintAreaPosition, next);
+			}
+			return next;
+		});
+	}
+
+	function handleMugQuickPlacement(anchor = "front") {
+		const anchors = {
+			left: 0.2,
+			front: 0.5,
+			right: 0.8,
+		};
+		setMugQuickPlacementPreset(anchor);
+		moveElementsToHorizontalAnchor(anchors[anchor] || 0.5);
 	}
 
 	useEffect(() => {
@@ -2477,6 +5042,57 @@ export default function CustomizeSelectedProduct() {
 		queueCenterGuides({
 			vertical: isCenteredVertically,
 			horizontal: isCenteredHorizontally,
+		});
+		const alignmentThreshold = 6;
+		const movingAnchorsX = [
+			clampedPoint.x,
+			clampedPoint.x + theElement.width / 2,
+			clampedPoint.x + theElement.width,
+		];
+		const movingAnchorsY = [
+			clampedPoint.y,
+			clampedPoint.y + theElement.height / 2,
+			clampedPoint.y + theElement.height,
+		];
+		let bestVerticalGuide = null;
+		let bestVerticalDiff = Infinity;
+		let bestHorizontalGuide = null;
+		let bestHorizontalDiff = Infinity;
+		elements
+			.filter((item) => item.id !== elId)
+			.forEach((item) => {
+				const candidateAnchorsX = [
+					item.x,
+					item.x + item.width / 2,
+					item.x + item.width,
+				];
+				const candidateAnchorsY = [
+					item.y,
+					item.y + item.height / 2,
+					item.y + item.height,
+				];
+				movingAnchorsX.forEach((movingAnchorX) => {
+					candidateAnchorsX.forEach((candidateAnchorX) => {
+						const diff = Math.abs(movingAnchorX - candidateAnchorX);
+						if (diff <= alignmentThreshold && diff < bestVerticalDiff) {
+							bestVerticalDiff = diff;
+							bestVerticalGuide = candidateAnchorX;
+						}
+					});
+				});
+				movingAnchorsY.forEach((movingAnchorY) => {
+					candidateAnchorsY.forEach((candidateAnchorY) => {
+						const diff = Math.abs(movingAnchorY - candidateAnchorY);
+						if (diff <= alignmentThreshold && diff < bestHorizontalDiff) {
+							bestHorizontalDiff = diff;
+							bestHorizontalGuide = candidateAnchorY;
+						}
+					});
+				});
+			});
+		queueElementAlignmentGuides({
+			vertical: bestVerticalGuide,
+			horizontal: bestHorizontalGuide,
 		});
 		queueDragPositionCommit(elId, clampedPoint.x, clampedPoint.y);
 	}
@@ -2679,25 +5295,34 @@ export default function CustomizeSelectedProduct() {
 	const filteredImages = useMemo(() => {
 		if (!product) return [];
 		const colorOpt = findProductOption(product, "color");
+		const sourceImages = Array.isArray(product.images) ? product.images : [];
+		const sortBySurface = (images) =>
+			[...images]
+				.sort(
+					(left, right) =>
+						scoreMockupImageForSurface(right, activePrintAreaPosition, product) -
+						scoreMockupImageForSurface(left, activePrintAreaPosition, product)
+				)
+				.slice(0, 6);
 		if (!selectedColor || !colorOpt) {
-			return product.images.slice(0, 6);
+			return sortBySurface(sourceImages);
 		}
 		function numOrStr(x) {
 			return typeof x === "number" ? x : parseInt(x, 10);
 		}
 		const colorVal = findProductOptionValue(product, "color", selectedColor);
-		if (!colorVal) return product.images.slice(0, 6);
+		if (!colorVal) return sortBySurface(sourceImages);
 
 		const matchingVars = product.variants.filter((v) => {
 			const varIds = v.options.map(numOrStr);
 			return varIds.includes(numOrStr(colorVal.id));
 		});
 		const matchingIds = matchingVars.map((mv) => mv.id);
-		const filtered = product.images.filter((img) =>
+		const filtered = sourceImages.filter((img) =>
 			img.variant_ids.some((id) => matchingIds.includes(id))
 		);
-		return filtered.length ? filtered.slice(0, 6) : product.images.slice(0, 6);
-	}, [product, selectedColor]);
+		return filtered.length ? sortBySurface(filtered) : sortBySurface(sourceImages);
+	}, [activePrintAreaPosition, product, selectedColor]);
 
 	const sliderSettings = {
 		ref: sliderRef,
@@ -2840,7 +5465,8 @@ export default function CustomizeSelectedProduct() {
 
 	async function generateCartMockupPreview(
 		bareUrl,
-		variantContext = buildSelectedVariantContext(product)
+		variantContext = buildSelectedVariantContext(product),
+		captureAsset = null
 	) {
 		const fallbackResult = {
 			mockupPreviewUrl: variantContext?.variantImage || "",
@@ -2869,10 +5495,21 @@ export default function CustomizeSelectedProduct() {
 					variant_id: variantContext.matchingVariant.id,
 					design_image_url: bareUrl,
 					bare_design_image_url: bareUrl,
-					design_covers_print_area: true,
-					design_is_full_print_area_capture: true,
+					design_covers_print_area:
+						captureAsset?.designCoversPrintArea !== false,
+					design_is_full_print_area_capture:
+						captureAsset?.isFullPrintAreaCapture !== false,
+					force_source_placement: Boolean(captureAsset?.forceSourcePlacement),
+					preferred_position: activePrintAreaPosition,
 					title: product.title || product.productName,
-					print_areas: product.printifyProductDetails?.print_areas || [],
+					print_areas:
+						captureAsset?.designCoversPrintArea === false
+							? buildPodPlacementPrintAreas({
+									variantId: variantContext.matchingVariant.id,
+									position: activePrintAreaPosition,
+									placementParams: captureAsset?.placementParams,
+								})
+							: product.printifyProductDetails?.print_areas || [],
 				}
 			);
 
@@ -2917,22 +5554,28 @@ export default function CustomizeSelectedProduct() {
 	 */
 	async function handleAddToCart() {
 		/* â”€â”€ StepÂ 0: remove default placeholder text, if still present â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
-		setElements((prev) =>
-			prev.filter(
+		setElements((prev) => {
+			const next = prev.filter(
 				(el) =>
 					!(el.type === "text" && el.text.trim() === "Start typing here...")
-			)
-		);
+			);
+			elementsRef.current = next;
+			return next;
+		});
 		// wait a tick so the DOM reflects the removal before capture
 		await new Promise((res) => setTimeout(res, 50));
 
 		/* â”€â”€ early guards â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 		if (isAddToCartDisabled) return false;
-		if (!order.variant_id) {
-			message.warning("Please select required options before adding to cart.");
+		const variantContext = buildSelectedVariantContext(product);
+		const resolvedVariantId =
+			variantContext?.matchingVariant?.id || order.variant_id || null;
+		if (!resolvedVariantId) {
+			messageApi.warning("Please select required options before adding to cart.");
 			return false;
 		}
 		setIsAddToCartDisabled(true);
+		const captureElements = await normalizeDesignElementsForCapture();
 
 		/* â”€â”€ StepÂ 1: deselect everything (so outlines arenâ€™t captured) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 		const previouslySelected = selectedElementId;
@@ -2941,6 +5584,7 @@ export default function CustomizeSelectedProduct() {
 
 		/* â”€â”€ StepÂ 2: try to capture screenshots (html2canvas â†’ domâ€‘toâ€‘image) â”€â”€â”€â”€ */
 		let bareUrl, finalUrl;
+		let bareCaptureAsset = null;
 		try {
 			const screenshotOptions = {
 				scale: isMobile ? 2 : 3,
@@ -2956,7 +5600,28 @@ export default function CustomizeSelectedProduct() {
 				throw new Error("Design capture area is not ready yet.");
 			}
 			await prepareCaptureNode(bareCaptureNode);
-			const bareCanvas = await html2canvas(bareCaptureNode, screenshotOptions);
+			const bareCaptureRect = bareCaptureNode.getBoundingClientRect();
+			const contentBoundsNormalized = getNormalizedContentBounds(
+				captureElements,
+				bareCaptureRect.width,
+				bareCaptureRect.height
+			);
+				bareCaptureAsset = buildPodBareCaptureAsset(
+					await html2canvas(bareCaptureNode, screenshotOptions),
+					{
+						targetAspectRatio: activeCaptureAspectRatio,
+						projection: activeCaptureProjection,
+						contentBoundsNormalized,
+						placementMode:
+							activeProductKind === "mug" ||
+							activeProductKind === "candle" ||
+							activeProductKind === "tote" ||
+							activeProductKind === "magnet"
+								? "direct-wrap"
+								: "projected",
+					}
+				);
+			const bareCanvas = bareCaptureAsset?.uploadCanvas;
 			const bareDataURL = await compressCanvas(bareCanvas, {
 				mimeType: "image/png",
 				quality: 1,
@@ -3004,11 +5669,32 @@ export default function CustomizeSelectedProduct() {
 				}
 				const domtoimage = await getDomToImage();
 				await prepareCaptureNode(bareCaptureNode);
+				const bareCaptureRect = bareCaptureNode.getBoundingClientRect();
+				const contentBoundsNormalized = getNormalizedContentBounds(
+					captureElements,
+					bareCaptureRect.width,
+					bareCaptureRect.height
+				);
 				const bareBlob = await domtoimage.toBlob(
 					bareCaptureNode,
 					domOptions
 				);
-				const bareCanvas = await blobToCanvas(bareBlob);
+				bareCaptureAsset = buildPodBareCaptureAsset(
+					await blobToCanvas(bareBlob),
+					{
+						targetAspectRatio: activeCaptureAspectRatio,
+						projection: activeCaptureProjection,
+						contentBoundsNormalized,
+						placementMode:
+							activeProductKind === "mug" ||
+							activeProductKind === "candle" ||
+							activeProductKind === "tote" ||
+							activeProductKind === "magnet"
+								? "direct-wrap"
+								: "projected",
+					}
+				);
+				const bareCanvas = bareCaptureAsset?.uploadCanvas;
 				const bareDataURL = await compressCanvas(bareCanvas, {
 					mimeType: "image/png",
 					quality: 1,
@@ -3036,7 +5722,7 @@ export default function CustomizeSelectedProduct() {
 				).url;
 			} catch (errDom) {
 				console.error("All screenshot attempts failed.", errDom);
-				message.error(
+				messageApi.error(
 					"Screenshot attempts failed. Please refresh the page or try another device."
 				);
 				setSelectedElementId(previouslySelected);
@@ -3047,7 +5733,7 @@ export default function CustomizeSelectedProduct() {
 
 		/* â”€â”€ guard: both URLs must exist â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 		if (!bareUrl || !finalUrl) {
-			message.error(
+			messageApi.error(
 				"Screenshot attempts failed. Please refresh the page or try another device."
 			);
 			setSelectedElementId(previouslySelected);
@@ -3056,7 +5742,6 @@ export default function CustomizeSelectedProduct() {
 		}
 
 		/* â”€â”€ StepÂ 3: rebuild variantâ€‘price info, assemble customDesign payload â”€â”€ */
-		const variantContext = buildSelectedVariantContext(product);
 		const {
 			colorValue,
 			sizeValue,
@@ -3069,7 +5754,11 @@ export default function CustomizeSelectedProduct() {
 			sizeLabel,
 			scentLabel,
 		} = variantContext;
-		const previewResult = await generateCartMockupPreview(bareUrl, variantContext);
+		const previewResult = await generateCartMockupPreview(
+			bareUrl,
+			variantContext,
+			bareCaptureAsset
+		);
 
 		const customDesign = {
 			bareScreenshotUrl: bareUrl,
@@ -3083,13 +5772,16 @@ export default function CustomizeSelectedProduct() {
 			size: sizeLabel,
 			color: colorLabel,
 			scent: scentLabel,
-			printArea: "front",
-			placementParams: {
-				x: 0.5,
-				y: 0.5,
-				scale: 1,
-				angle: 0,
-			},
+			printArea: activePrintAreaPosition,
+			isFullPrintAreaCapture:
+				bareCaptureAsset?.isFullPrintAreaCapture !== false,
+			placementParams:
+				bareCaptureAsset?.placementParams || {
+					x: 0.5,
+					y: 0.5,
+					scale: 1,
+					angle: 0,
+				},
 			PrintifyProductId: product.printifyProductDetails?.id || null,
 			variantId: matchingVariant?.id || order.variant_id || null,
 			variantSku: matchingVariant?.sku || "",
@@ -3099,7 +5791,7 @@ export default function CustomizeSelectedProduct() {
 			customizations: JSON.parse(
 				JSON.stringify(order.customizations || { texts: [], images: [] })
 			),
-			elements: elements.map((element) => ({
+			elements: captureElements.map((element) => ({
 				id: element.id,
 				type: element.type,
 				text: element.text || "",
@@ -3200,7 +5892,7 @@ export default function CustomizeSelectedProduct() {
 		} catch {}
 
 		openSidebar2();
-		message.success("Added to cart with custom design!");
+		messageApi.success("Added to cart with custom design!");
 		if (previewResult.previewProductId) {
 			setIsPreviewLinkedToCart(true);
 		}
@@ -3213,8 +5905,11 @@ export default function CustomizeSelectedProduct() {
 
 	async function handlePreviewDesign() {
 		if (isPreviewButtonDisabled || isPreviewLoading) return;
-		if (!order.variant_id) {
-			message.warning("Please select required options before previewing.");
+		const variantContext = buildSelectedVariantContext(product);
+		const resolvedVariantId =
+			variantContext?.matchingVariant?.id || order.variant_id || null;
+		if (!resolvedVariantId) {
+			messageApi.warning("Please select required options before previewing.");
 			return;
 		}
 
@@ -3248,13 +5943,15 @@ export default function CustomizeSelectedProduct() {
 				setPreviewProgress((prev) => (prev < 92 ? prev + 1 : prev));
 			}, 180);
 
+			const captureElements = await normalizeDesignElementsForCapture();
 			setSelectedElementId(null);
 			await new Promise((res) => setTimeout(res, 50));
 
 			let bareUrl;
+			let bareCaptureAsset = null;
 			try {
 				const screenshotOptions = {
-					scale: isMobile ? 1.5 : 2,
+					scale: isMobile ? 2 : 3,
 					useCORS: true,
 					allowTaint: false,
 					ignoreElements: (el) => el.classList?.contains("noScreenshot"),
@@ -3269,7 +5966,28 @@ export default function CustomizeSelectedProduct() {
 				bumpProgress(20);
 
 				await prepareCaptureNode(previewNode);
-				const bareCanvas = await html2canvas(previewNode, screenshotOptions);
+				const previewNodeRect = previewNode.getBoundingClientRect();
+				const contentBoundsNormalized = getNormalizedContentBounds(
+					captureElements,
+					previewNodeRect.width,
+					previewNodeRect.height
+				);
+				bareCaptureAsset = buildPodBareCaptureAsset(
+					await html2canvas(previewNode, screenshotOptions),
+					{
+						targetAspectRatio: activeCaptureAspectRatio,
+						projection: activeCaptureProjection,
+						contentBoundsNormalized,
+						placementMode:
+							activeProductKind === "mug" ||
+							activeProductKind === "candle" ||
+							activeProductKind === "tote" ||
+							activeProductKind === "magnet"
+								? "direct-wrap"
+								: "projected",
+					}
+				);
+				const bareCanvas = bareCaptureAsset?.uploadCanvas;
 				const bareDataURL = await compressCanvas(bareCanvas, {
 					mimeType: "image/png",
 					quality: 1,
@@ -3287,17 +6005,38 @@ export default function CustomizeSelectedProduct() {
 				const domOptions = {
 					quality: 1,
 					bgcolor: null,
-					style: { transform: "scale(1.5)", transformOrigin: "top left" },
+					style: { transform: "scale(2)", transformOrigin: "top left" },
 					filter: (node) => !node.classList?.contains("noScreenshot"),
 				};
 				const previewNode = getBareDesignCaptureNode();
-			if (!previewNode) {
-				throw new Error("Preview capture area is not ready yet.");
-			}
-			const domtoimage = await getDomToImage();
-			await prepareCaptureNode(previewNode);
-			const bareBlob = await domtoimage.toBlob(previewNode, domOptions);
-				const bareCanvas = await blobToCanvas(bareBlob);
+				if (!previewNode) {
+					throw new Error("Preview capture area is not ready yet.");
+				}
+				const domtoimage = await getDomToImage();
+				await prepareCaptureNode(previewNode);
+				const previewNodeRect = previewNode.getBoundingClientRect();
+				const contentBoundsNormalized = getNormalizedContentBounds(
+					captureElements,
+					previewNodeRect.width,
+					previewNodeRect.height
+				);
+				const bareBlob = await domtoimage.toBlob(previewNode, domOptions);
+				bareCaptureAsset = buildPodBareCaptureAsset(
+					await blobToCanvas(bareBlob),
+					{
+						targetAspectRatio: activeCaptureAspectRatio,
+						projection: activeCaptureProjection,
+						contentBoundsNormalized,
+						placementMode:
+							activeProductKind === "mug" ||
+							activeProductKind === "candle" ||
+							activeProductKind === "tote" ||
+							activeProductKind === "magnet"
+								? "direct-wrap"
+								: "projected",
+					}
+				);
+				const bareCanvas = bareCaptureAsset?.uploadCanvas;
 				const bareDataURL = await compressCanvas(bareCanvas, {
 					mimeType: "image/png",
 					quality: 1,
@@ -3320,13 +6059,24 @@ export default function CustomizeSelectedProduct() {
 			const previewPayload = {
 				blueprint_id: product.printifyProductDetails?.blueprint_id,
 				print_provider_id: product.printifyProductDetails?.print_provider_id,
-				variant_id: variantContext.matchingVariant?.id || order.variant_id,
+				variant_id: resolvedVariantId,
 				design_image_url: bareUrl,
 				bare_design_image_url: bareUrl,
-				design_covers_print_area: true,
-				design_is_full_print_area_capture: true,
+				design_covers_print_area:
+					bareCaptureAsset?.designCoversPrintArea !== false,
+				design_is_full_print_area_capture:
+					bareCaptureAsset?.isFullPrintAreaCapture !== false,
+				force_source_placement: Boolean(bareCaptureAsset?.forceSourcePlacement),
+				preferred_position: activePrintAreaPosition,
 				title: product.title || product.productName,
-				print_areas: product.printifyProductDetails?.print_areas || [],
+				print_areas:
+					bareCaptureAsset?.designCoversPrintArea === false
+						? buildPodPlacementPrintAreas({
+								variantId: resolvedVariantId,
+								position: activePrintAreaPosition,
+								placementParams: bareCaptureAsset?.placementParams,
+							})
+						: product.printifyProductDetails?.print_areas || [],
 			};
 
 			setIsPreviewModalVisible(true);
@@ -3365,7 +6115,7 @@ export default function CustomizeSelectedProduct() {
 			console.error("Preview generation failed:", previewError);
 			setPreviewStatusText("Preview failed. Please try again.");
 			setPreviewProgress(0);
-			message.error(
+			messageApi.error(
 				previewError?.response?.data?.error ||
 					previewError?.message ||
 					"Preview request failed. Please try again."
@@ -3482,11 +6232,25 @@ export default function CustomizeSelectedProduct() {
 	}
 
 	function getBareDesignCaptureNode() {
-		return printAreaRef.current || barePrintAreaRef.current || bareDesignRef.current;
+		return barePrintAreaRef.current || printAreaRef.current || bareDesignRef.current;
+	}
+
+	function syncBareDesignOverlaySize() {
+		const liveOverlay = designOverlayRef.current;
+		const bareOverlay = bareDesignRef.current;
+		if (!liveOverlay || !bareOverlay) return;
+		const rect = liveOverlay.getBoundingClientRect();
+		const width = Math.round(rect.width || 0);
+		const height = Math.round(rect.height || 0);
+		if (!(width > 0) || !(height > 0)) return;
+		bareOverlay.style.width = `${width}px`;
+		bareOverlay.style.height = `${height}px`;
 	}
 
 	async function prepareCaptureNode(node) {
 		if (!node) return;
+		syncBareDesignOverlaySize();
+		await waitForNextPaint(2);
 		await waitForFontsReady();
 		await waitForImagesReady(node);
 		await waitForNextPaint(2);
@@ -3996,12 +6760,30 @@ export default function CustomizeSelectedProduct() {
 											onContextMenu={handlePrintAreaContextMenu}
 										>
 											{showCenterGuides.vertical && <CenterIndicator />}
-											<DottedOverlay className='noScreenshot' />
-											<PrintifyGridOverlay className='noScreenshot'>
-												<PrintifySafeZone
-													style={{ inset: `${printifySafeInsetPercent}%` }}
+											{elementAlignmentGuides.vertical != null && (
+												<ElementVerticalAlignmentIndicator
+													style={{
+														left: `${elementAlignmentGuides.vertical}px`,
+													}}
 												/>
-											</PrintifyGridOverlay>
+											)}
+											{elementAlignmentGuides.horizontal != null && (
+												<ElementHorizontalAlignmentIndicator
+													style={{
+														top: `${elementAlignmentGuides.horizontal}px`,
+													}}
+												/>
+											)}
+											{elementAlignmentGuides.vertical != null &&
+												elementAlignmentGuides.horizontal != null && (
+													<ElementAlignmentGuideDot
+														style={{
+															left: `${elementAlignmentGuides.vertical}px`,
+															top: `${elementAlignmentGuides.horizontal}px`,
+														}}
+													/>
+												)}
+											<DottedOverlay className='noScreenshot' />
 											{renderDesignElements()}
 										</PrintArea>
 										{frameContextMenu.visible && (
@@ -4073,6 +6855,91 @@ export default function CustomizeSelectedProduct() {
 							{displayedPrice}
 						</span>
 					</div>
+
+					{(availablePrintAreaPositions.length > 1 || printAreaHelperText) && (
+						<PrintSurfacePanel className='noScreenshot'>
+							<PrintSurfaceLabel>
+								{availablePrintAreaPositions.length > 1
+									? "Print Area"
+									: "Placement Guidance"}
+							</PrintSurfaceLabel>
+							{availablePrintAreaPositions.length > 1 && (
+								<PrintSurfaceButtons>
+									{availablePrintAreaPositions.map((position) => (
+										<PrintSurfaceButton
+											key={position}
+											type='button'
+											$active={activePrintAreaPosition === position}
+											onClick={() => setActivePrintAreaPosition(position)}
+										>
+											{formatPrintAreaLabel(position)}
+										</PrintSurfaceButton>
+									))}
+								</PrintSurfaceButtons>
+							)}
+							{printAreaHelperText && (
+								<PrintSurfaceHint>{printAreaHelperText}</PrintSurfaceHint>
+							)}
+							{shouldShowMugQuickPlacements && (
+								<>
+									<PrintSurfaceLabel>Quick Placement</PrintSurfaceLabel>
+									<PrintSurfaceButtons>
+										<PrintSurfaceButton
+											type='button'
+											$active={mugQuickPlacementPreset === "left"}
+											onClick={() => handleMugQuickPlacement("left")}
+										>
+											Left Side
+										</PrintSurfaceButton>
+										<PrintSurfaceButton
+											type='button'
+											$active={mugQuickPlacementPreset === "front"}
+											onClick={() => handleMugQuickPlacement("front")}
+										>
+											Front
+										</PrintSurfaceButton>
+										<PrintSurfaceButton
+											type='button'
+											$active={mugQuickPlacementPreset === "right"}
+											onClick={() => handleMugQuickPlacement("right")}
+										>
+											Right Side
+										</PrintSurfaceButton>
+									</PrintSurfaceButtons>
+								</>
+							)}
+						</PrintSurfacePanel>
+					)}
+
+					{isMobile && (
+						<MobileQuickPersonalizationPanel className='noScreenshot'>
+							<MobileQuickPersonalizationGrid>
+								<Select
+									style={{ width: "100%" }}
+									value={selectedOccasion}
+									onChange={(value) =>
+										syncPersonalization(value, selectedGiftName)
+									}
+								>
+									{POD_OCCASION_OPTIONS.map((item) => (
+										<Option key={item.value} value={item.value}>
+											<span>
+												{item.icon} {item.value}
+											</span>
+										</Option>
+									))}
+								</Select>
+								<Input
+									value={selectedGiftName}
+									onChange={(e) =>
+										syncPersonalization(selectedOccasion, e.target.value)
+									}
+									placeholder='Name (optional)'
+									maxLength={40}
+								/>
+							</MobileQuickPersonalizationGrid>
+						</MobileQuickPersonalizationPanel>
+					)}
 
 					{!isMobile && (
 						<DesktopActionBar>
@@ -4374,35 +7241,6 @@ export default function CustomizeSelectedProduct() {
 						>
 							Gift Personalization
 						</Title>
-						<Row gutter={8}>
-							<Col span={12}>
-								<Select
-									style={{ width: "100%" }}
-									value={selectedOccasion}
-									onChange={(value) =>
-										syncPersonalization(value, selectedGiftName)
-									}
-								>
-									{POD_OCCASION_OPTIONS.map((item) => (
-										<Option key={item.value} value={item.value}>
-											<span>
-												{item.icon} {item.value}
-											</span>
-										</Option>
-									))}
-								</Select>
-							</Col>
-							<Col span={12}>
-								<Input
-									value={selectedGiftName}
-									onChange={(e) =>
-										syncPersonalization(selectedOccasion, e.target.value)
-									}
-									placeholder='Name (optional)'
-									maxLength={40}
-								/>
-							</Col>
-						</Row>
 						<PresetPreviewBox>
 						<PresetPreviewText
 								style={{
@@ -5424,6 +8262,91 @@ const MobileBottomPanel = styled.div`
 	margin-top: 2rem;
 `;
 
+const MobileQuickPersonalizationPanel = styled.div`
+	margin: 0 0 16px;
+	padding: 10px;
+	background: #fff;
+	border: 1px solid #ece0d6;
+	border-radius: 12px;
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.06);
+`;
+
+const MobileQuickPersonalizationGrid = styled.div`
+	display: grid;
+	grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+	gap: 8px;
+
+	@media (max-width: 360px) {
+		grid-template-columns: 1fr;
+	}
+`;
+
+const PrintSurfacePanel = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	margin: 0 0 16px;
+	padding: 14px 16px;
+	background: linear-gradient(180deg, #fffaf6 0%, #ffffff 100%);
+	border: 1px solid #ece0d6;
+	border-radius: 14px;
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+`;
+
+const PrintSurfaceLabel = styled.div`
+	font-size: 0.95rem;
+	font-weight: 700;
+	letter-spacing: 0.01em;
+	color: var(--text-color-dark);
+`;
+
+const PrintSurfaceHint = styled.p`
+	margin: 0;
+	font-size: 0.88rem;
+	line-height: 1.5;
+	color: rgba(66, 52, 39, 0.82);
+`;
+
+const PrintSurfaceButtons = styled.div`
+	display: flex;
+	flex-wrap: wrap;
+	gap: 10px;
+`;
+
+const PrintSurfaceButton = styled.button`
+	border: 1px solid ${({ $active }) => ($active ? "#9c8466" : "#e6d7ca")};
+	background: ${({ $active }) =>
+		$active
+			? "linear-gradient(135deg, #b79d7b 0%, #9c8466 100%)"
+			: "linear-gradient(180deg, #ffffff 0%, #fff8f1 100%)"};
+	color: ${({ $active }) => ($active ? "#ffffff" : "var(--text-color-dark)")};
+	font-size: 0.92rem;
+	font-weight: 700;
+	line-height: 1;
+	padding: 10px 14px;
+	border-radius: 999px;
+	cursor: pointer;
+	transition:
+		transform 0.18s ease,
+		box-shadow 0.18s ease,
+		border-color 0.18s ease,
+		background 0.18s ease;
+	box-shadow: ${({ $active }) =>
+		$active
+			? "0 10px 20px rgba(156, 132, 102, 0.24)"
+			: "0 4px 12px rgba(0, 0, 0, 0.05)"};
+
+	&:hover {
+		transform: translateY(-1px);
+		border-color: #b79d7b;
+	}
+
+	&:focus-visible {
+		outline: 2px solid rgba(183, 157, 123, 0.35);
+		outline-offset: 2px;
+	}
+`;
+
 const DesktopActionBar = styled.div`
 	display: flex;
 	gap: 10px;
@@ -5651,8 +8574,7 @@ const BareDesignOverlay = styled.div`
 	position: absolute;
 	top: -9999px;
 	left: -9999px;
-	width: 90%;
-	max-width: 800px;
+	width: 800px;
 	height: 700px;
 	background: transparent;
 	overflow: visible;
@@ -5795,6 +8717,40 @@ const CenterGuideDot = styled.div`
 	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.9);
 	pointer-events: none;
 	z-index: 10000;
+`;
+
+const ElementVerticalAlignmentIndicator = styled.div`
+	position: absolute;
+	top: 0;
+	bottom: 0;
+	width: 0;
+	transform: translateX(-50%);
+	pointer-events: none;
+	z-index: 9998;
+	border-left: 1px dashed rgba(53, 117, 222, 0.68);
+`;
+
+const ElementHorizontalAlignmentIndicator = styled.div`
+	position: absolute;
+	left: 0;
+	right: 0;
+	height: 0;
+	transform: translateY(-50%);
+	pointer-events: none;
+	z-index: 9998;
+	border-top: 1px dashed rgba(53, 117, 222, 0.68);
+`;
+
+const ElementAlignmentGuideDot = styled.div`
+	position: absolute;
+	width: 7px;
+	height: 7px;
+	transform: translate(-50%, -50%);
+	border-radius: 50%;
+	background: rgba(53, 117, 222, 0.82);
+	box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.92);
+	pointer-events: none;
+	z-index: 9999;
 `;
 
 const FrameContextMenu = styled.div`

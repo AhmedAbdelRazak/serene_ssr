@@ -14,6 +14,7 @@ import { AiOutlineShoppingCart } from "react-icons/ai";
 import { Link, useHistory } from "react-router-dom";
 import { isAuthenticated, signout } from "../auth";
 import { useCartContext } from "../cart_context";
+import { useLegacyRouteBootstrap } from "../bootstrap/LegacyRouteBootstrapContext";
 
 const Sidebar = lazy(() => import("./Sidebar"));
 const SidebarCart = lazy(() => import("./SidebarCart"));
@@ -42,8 +43,12 @@ const NavbarTop = memo(() => {
 
 	const { openSidebar2, isSidebarOpen2, total_items, websiteSetup } =
 		useCartContext();
+	const routeBootstrap = useLegacyRouteBootstrap();
 	const navigate = useHistory();
 	const user = authState?.user || null;
+	const bootstrapLogoUrl =
+		routeBootstrap?.websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const [resolvedLogoUrl, setResolvedLogoUrl] = useState(bootstrapLogoUrl);
 
 	// Memoize the first name
 	const firstName = useMemo(() => {
@@ -67,7 +72,7 @@ const NavbarTop = memo(() => {
 	}, [navigate]);
 
 	// If we have a Cloudinary logo URL, generate an optimized version + WebP version
-	const originalLogoUrl = websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const originalLogoUrl = resolvedLogoUrl || "/logo192.png";
 	const optimizedLogoUrl = getCloudinaryOptimizedUrl(originalLogoUrl, {
 		width: 300,
 	});
@@ -78,6 +83,12 @@ const NavbarTop = memo(() => {
 	useEffect(() => {
 		setAuthState(isAuthenticated() || null);
 	}, []);
+
+	useEffect(() => {
+		setResolvedLogoUrl(
+			websiteSetup?.sereneJannatLogo?.url || bootstrapLogoUrl || "/logo192.png"
+		);
+	}, [bootstrapLogoUrl, websiteSetup?.sereneJannatLogo?.url]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;

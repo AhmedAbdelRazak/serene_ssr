@@ -1,6 +1,6 @@
 import PodProductRouteClient from "@/components/public/routes/PodProductRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
-import { getProductById } from "@/lib/api";
+import { getProductById, getWebsiteSetupData } from "@/lib/api";
 import {
 	getPrimaryProductImage,
 	getProductDescription,
@@ -131,10 +131,14 @@ export default async function PodProductPage({ params, searchParams }) {
 		notFound();
 	}
 
-	let product = null;
-	try {
-		product = await getProductById(parsed.productId, { revalidate: 90 });
-	} catch {}
+	const [productResult, websiteSetupResult] = await Promise.allSettled([
+		getProductById(parsed.productId, { revalidate: 90 }),
+		getWebsiteSetupData({ revalidate: 1800 }),
+	]);
+	const product =
+		productResult.status === "fulfilled" ? productResult.value : null;
+	const websiteSetup =
+		websiteSetupResult.status === "fulfilled" ? websiteSetupResult.value : null;
 
 	if (!product) {
 		notFound();
@@ -222,6 +226,7 @@ export default async function PodProductPage({ params, searchParams }) {
 
 	const initialRouteData = {
 		type: "pod-product",
+		websiteSetup,
 		productId: parsed.productId,
 		productSlug: slug,
 		title,

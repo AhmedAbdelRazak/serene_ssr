@@ -358,6 +358,16 @@ const PRESETS = {
 	},
 };
 
+const GEOMETRY_KEYS = [
+	"messageWidthRatio",
+	"messageHeightRatio",
+	"messageCenterYRatio",
+	"iconSizeRatio",
+	"iconOverlapPx",
+	"maxMessageHeight",
+	"maxIconSize",
+];
+
 function normalizeOccasion(value) {
 	if (!value || typeof value !== "string") return POD_DEFAULT_OCCASION;
 	const match = POD_OCCASIONS.find(
@@ -368,8 +378,16 @@ function normalizeOccasion(value) {
 
 export function getOccasionDesignPreset(occasion) {
 	const safeOccasion = normalizeOccasion(occasion);
+	const override = PRESETS[safeOccasion] || {};
+	const geometryOverrides = GEOMETRY_KEYS.reduce((accumulator, key) => {
+		if (Object.prototype.hasOwnProperty.call(override, key)) {
+			accumulator[key] = override[key];
+		}
+		return accumulator;
+	}, {});
 	return {
 		...BASE_PRESET,
-		...(PRESETS[safeOccasion] || {}),
+		...override,
+		geometryOverrides,
 	};
 }
