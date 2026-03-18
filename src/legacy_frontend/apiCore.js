@@ -756,28 +756,59 @@ export const getUnseenMessagesByCustomer = (clientId) => {
 
 // 6. Get unseen messages count for the current support case from the customer's view
 export const getUnseenMessagesCountByCustomer = (caseId) => {
-  return fetch(
-    `${process.env.REACT_APP_API_URL}/support-cases/${caseId}/unseen/client/count`,
-    {
-      method: "GET",
-      headers: {
-        Accept: "application/json",
-        "Content-Type": "application/json",
-      },
+  if (!caseId) {
+    return Promise.resolve({ count: 0, exists: false });
+  }
+
+  const requestOptions = {
+    method: "GET",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
     },
-  )
-    .then((response) => {
-      if (!response.ok) {
-        return response.text().then((text) => {
-          throw new Error(text);
-        });
+  };
+  const requestUrls = [
+    `${process.env.REACT_APP_API_URL}/support-cases/${caseId}/unseen/client/count`,
+    `${process.env.REACT_APP_API_URL}/support-cases-customer/${caseId}/unseen-count`,
+  ];
+
+  const run = async () => {
+    let sawRouteNotFound = false;
+
+    for (const url of requestUrls) {
+      const response = await fetch(url, requestOptions);
+
+      if (response.ok) {
+        return response.json();
       }
-      return response.json();
-    })
-    .catch((err) => {
-      console.error("Error fetching unseen messages count by customer:", err);
-      throw err;
-    });
+
+      const text = await response.text();
+      if (response.status === 404) {
+        sawRouteNotFound = true;
+        continue;
+      }
+
+      if (
+        response.status === 400 &&
+        /invalid support case id/i.test(text || "")
+      ) {
+        return { count: 0, exists: false, invalidId: true };
+      }
+
+      throw new Error(text || `Request failed with status ${response.status}`);
+    }
+
+    return {
+      count: 0,
+      exists: false,
+      unavailable: sawRouteNotFound,
+    };
+  };
+
+  return run().catch((err) => {
+    console.error("Error fetching unseen messages count by customer:", err);
+    throw err;
+  });
 };
 
 export const autoCompleteProducts = async (search) => {

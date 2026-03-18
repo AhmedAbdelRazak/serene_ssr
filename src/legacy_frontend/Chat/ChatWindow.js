@@ -1300,13 +1300,14 @@ const ChatWindowWrapper = styled.div`
   }
 
   @media (max-width: 768px) {
-    left: 8px;
-    right: 8px;
-    bottom: 76px;
+    left: 10px;
+    right: 10px;
+    bottom: calc(10px + env(safe-area-inset-bottom));
     width: auto;
-    height: calc(100dvh - 92px);
+    height: calc(100dvh - 68px - env(safe-area-inset-bottom));
     max-height: none;
-    border-radius: 16px;
+    border-radius: 14px;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.16);
   }
 `;
 
@@ -1319,7 +1320,7 @@ const ScrollablePanel = styled.div`
   -webkit-overflow-scrolling: touch;
 
   @media (max-width: 768px) {
-    padding: 0 14px 14px;
+    padding: 0 12px 12px;
   }
 `;
 
@@ -1355,10 +1356,16 @@ const Header = styled.div`
   }
 
   @media (max-width: 768px) {
-    padding: 14px 14px 10px;
+    padding: 12px 12px 9px;
 
     h3 {
-      font-size: 1rem;
+      font-size: 0.95rem;
+    }
+
+    .ant-btn {
+      min-width: 34px;
+      height: 34px;
+      font-size: 0.9rem;
     }
   }
 `;
@@ -1373,7 +1380,7 @@ const MessagesSection = styled.div`
   -webkit-overflow-scrolling: touch;
 
   @media (max-width: 768px) {
-    padding: 12px 14px 8px;
+    padding: 10px 12px 6px;
   }
 `;
 
@@ -1383,9 +1390,22 @@ const ComposerSection = styled.div`
   border-top: 1px solid #f1f5f9;
   background: #fff;
 
+  > .ant-btn {
+    height: 42px;
+    border-radius: 12px;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
   @media (max-width: 768px) {
-    padding: 10px 14px 14px;
-    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+    padding: 8px 12px 10px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom));
+
+    > .ant-btn {
+      height: 38px;
+      border-radius: 10px;
+      font-size: 0.88rem;
+    }
   }
 `;
 
@@ -1416,6 +1436,34 @@ const InitialForm = styled(Form)`
     margin-top: 4px;
     font-weight: 600;
   }
+
+  @media (max-width: 768px) {
+    padding-top: 12px;
+
+    .ant-form-item {
+      margin-bottom: 12px;
+    }
+
+    .ant-form-item-label > label {
+      font-size: 0.88rem;
+    }
+
+    .ant-select-selector,
+    .ant-input,
+    textarea.ant-input {
+      min-height: 42px;
+      font-size: 15px;
+    }
+
+    textarea.ant-input {
+      min-height: 84px;
+    }
+
+    .ant-btn {
+      height: 42px;
+      font-size: 0.92rem;
+    }
+  }
 `;
 
 const CaseStatusNotice = styled.div`
@@ -1426,6 +1474,12 @@ const CaseStatusNotice = styled.div`
   color: #1f3b67;
   font-size: 0.92rem;
   line-height: 1.5;
+
+  @media (max-width: 768px) {
+    margin-bottom: 10px;
+    padding: 10px 12px;
+    font-size: 0.84rem;
+  }
 `;
 
 const SubmissionSummaryCard = styled.div`
@@ -1467,6 +1521,27 @@ const SubmissionSummaryCard = styled.div`
     font-size: 0.75rem;
     color: #667892;
   }
+
+  @media (max-width: 768px) {
+    margin-bottom: 10px;
+    padding: 11px 12px;
+    border-radius: 12px;
+    font-size: 0.86rem;
+
+    .eyebrow {
+      margin-bottom: 4px;
+      font-size: 0.66rem;
+    }
+
+    .title {
+      font-size: 0.88rem;
+    }
+
+    small {
+      margin-top: 6px;
+      font-size: 0.68rem;
+    }
+  }
 `;
 
 const typingBounce = keyframes`
@@ -1498,6 +1573,21 @@ const TypingIndicator = styled.div`
   .dot:nth-child(3) {
     animation-delay: 0.4s;
   }
+
+  @media (max-width: 768px) {
+    margin-top: 3px;
+
+    .typing-text {
+      margin-right: 6px;
+      font-size: 0.82rem;
+    }
+
+    .dot {
+      width: 5px;
+      height: 5px;
+      margin: 0 1.5px;
+    }
+  }
 `;
 
 const MessageBubble = styled.div`
@@ -1524,6 +1614,24 @@ const MessageBubble = styled.div`
     margin-top: 6px;
     font-size: 0.75rem;
     color: #888;
+  }
+
+  @media (max-width: 768px) {
+    margin-bottom: 8px;
+    padding: 10px 12px;
+    border-radius: 12px;
+    font-size: 0.92rem;
+    line-height: 1.45;
+
+    strong {
+      margin-bottom: 3px;
+      font-size: 0.98rem;
+    }
+
+    small {
+      margin-top: 5px;
+      font-size: 0.68rem;
+    }
   }
 `;
 
@@ -1567,6 +1675,14 @@ const ChatInputContainer = styled.div`
 
   @media (max-width: 768px) {
     gap: 6px;
+
+    textarea {
+      min-height: 40px;
+      max-height: 132px;
+      padding-top: 8px;
+      padding-bottom: 8px;
+      font-size: 15px;
+    }
   }
 `;
 
@@ -1588,6 +1704,21 @@ const EndChatPrompt = styled.div`
     gap: 8px;
     margin-top: 4px;
   }
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    font-size: 0.86rem;
+
+    .actions {
+      gap: 6px;
+    }
+
+    .actions .ant-btn {
+      height: 36px;
+      font-size: 0.84rem;
+      border-radius: 10px;
+    }
+  }
 `;
 
 const ClosedCaseNotice = styled.div`
@@ -1604,6 +1735,17 @@ const ClosedCaseNotice = styled.div`
 
   @media (max-width: 768px) {
     margin: 12px 14px 14px;
+    padding: 12px;
+    font-size: 0.88rem;
+  }
+
+  .ant-btn {
+    align-self: flex-start;
+    min-width: 140px;
+    height: 40px;
+    border-radius: 10px;
+    font-size: 0.9rem;
+    font-weight: 600;
   }
 `;
 
@@ -1630,6 +1772,21 @@ const IconActionButton = styled(Button)`
   .anticon {
     font-size: 1rem;
   }
+
+  @media (max-width: 768px) {
+    min-width: 36px;
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+
+    &[data-emoji-trigger="true"]::before {
+      font-size: 0.92rem;
+    }
+
+    .anticon {
+      font-size: 0.92rem;
+    }
+  }
 `;
 
 const EmojiPickerWrapper = styled.div`
@@ -1643,8 +1800,9 @@ const EmojiPickerWrapper = styled.div`
   overflow: hidden;
 
   @media (max-width: 768px) {
+    bottom: 46px;
     right: 0;
-    width: min(320px, calc(100vw - 44px));
+    width: min(300px, calc(100vw - 36px));
   }
 `;
 
@@ -1691,5 +1849,6 @@ const OfflineNotice = styled.div`
 
   @media (max-width: 768px) {
     margin: 14px 14px 0;
+    font-size: 0.78rem;
   }
 `;

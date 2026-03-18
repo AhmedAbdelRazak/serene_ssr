@@ -1,6 +1,6 @@
 /** @format */
 // ChatIcon.js
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import styled, { keyframes } from "styled-components";
 import { MessageOutlined } from "@ant-design/icons";
 import ChatWindow from "./ChatWindow";
@@ -10,6 +10,14 @@ import ReactGA from "react-ga4";
 import { useCartContext } from "../cart_context";
 
 const notificationSound = "/Notification.wav";
+const UNSEEN_COUNT_POLL_INTERVAL_MS = 10000;
+const UNSEEN_COUNT_RETRY_BACKOFF_MS = 60000;
+const UNSEEN_COUNT_REQUEST_DEDUPE_MS = 3000;
+
+let lastUnseenCountRequest = {
+  caseId: "",
+  at: 0,
+};
 
 /* --------------------------------- Animations --------------------------------- */
 
@@ -31,7 +39,8 @@ const ChatIconWrapper = styled.div`
   align-items: center;
 
   @media (max-width: 750px) {
-    bottom: 30px;
+    right: 12px;
+    bottom: 12px;
   }
 `;
 
@@ -44,11 +53,19 @@ const ChatButtonBox = styled.div`
   box-shadow: 2px 2px 8px rgba(0, 0, 0, 0.25);
   transition:
     transform 0.2s ease,
-    background-color 0.2s ease;
+    background-color 0.2s ease,
+    opacity 0.2s ease,
+    visibility 0.2s ease;
   cursor: pointer;
+  opacity: ${(props) => (props.$isOpen ? 0 : 1)};
+  visibility: ${(props) => (props.$isOpen ? "hidden" : "visible")};
+  pointer-events: ${(props) => (props.$isOpen ? "none" : "auto")};
+  transform: ${(props) =>
+    props.$isOpen ? "translateY(10px)" : "translateY(0)"};
 
   &:hover {
-    transform: scale(1.05);
+    transform: ${(props) =>
+      props.$isOpen ? "translateY(10px)" : "scale(1.05)"};
     background-color: #0b69d6; /* Slightly lighter or darker variant */
   }
 
@@ -110,19 +127,34 @@ const ChatButtonBox = styled.div`
 
   /* Responsive tweaks */
   @media (max-width: 750px) {
-    padding: 8px 10px;
+    padding: 7px 10px;
+    border-radius: 18px;
 
     .icon-holder {
-      font-size: 18px;
-      margin-right: 6px;
+      font-size: 15px;
+      margin-right: 5px;
     }
 
     .chat-text {
       .chat-name {
-        font-size: 13px;
+        font-size: 11px;
+        margin-bottom: 1px;
       }
       .chat-status {
-        font-size: 10px;
+        font-size: 9px;
+
+        .status-dot {
+          width: 6px;
+          height: 6px;
+          margin-right: 4px;
+        }
+
+        .unseen-count {
+          width: 16px;
+          height: 16px;
+          font-size: 9px;
+          margin-left: 6px;
+        }
       }
     }
   }
@@ -135,6 +167,19 @@ const ChatIcon = () => {
   const [unseenCount, setUnseenCount] = useState(0);
   const [hasInteracted, setHasInteracted] = useState(false);
   const { websiteSetup } = useCartContext();
+  const unseenCountBackoffRef = useRef({
+    caseId: "",
+    retryAfter: 0,
+  });
+
+  const getStoredChat = useCallback(() => {
+    try {
+      return JSON.parse(localStorage.getItem("currentChat") || "null");
+    } catch (error) {
+      console.warn("Ignoring invalid stored chat snapshot:", error);
+      return null;
+    }
+  }, []);
 
   const toggleChatWindow = () => {
     ReactGA.event({
@@ -149,17 +194,89 @@ const ChatIcon = () => {
     }
   };
 
-  const fetchUnseenMessagesCount = useCallback(async () => {
-    try {
-      const caseId = JSON.parse(localStorage.getItem("currentChat"))?.caseId;
-      if (caseId) {
+  const fetchUnseenMessagesCount = useCallback(
+    async (options = {}) => {
+      const { force = false } = options;
+
+      try {
+        const storedChat = getStoredChat();
+        const caseId = storedChat?.caseId;
+
+        if (!caseId) {
+          setUnseenCount(0);
+          return;
+        }
+
+        if (storedChat?.caseStatus && storedChat.caseStatus !== "open") {
+          setUnseenCount(0);
+          return;
+        }
+
+        if (
+          !force &&
+          typeof document !== "undefined" &&
+          document.visibilityState === "hidden"
+        ) {
+          return;
+        }
+
+        const now = Date.now();
+        const backoffState = unseenCountBackoffRef.current;
+        if (
+          !force &&
+          backoffState.caseId === caseId &&
+          backoffState.retryAfter > now
+        ) {
+          return;
+        }
+
+        if (
+          !force &&
+          lastUnseenCountRequest.caseId === caseId &&
+          now - lastUnseenCountRequest.at < UNSEEN_COUNT_REQUEST_DEDUPE_MS
+        ) {
+          return;
+        }
+
+        lastUnseenCountRequest = {
+          caseId,
+          at: now,
+        };
+
         const response = await getUnseenMessagesCountByCustomer(caseId);
-        setUnseenCount(response.count);
+        setUnseenCount(Number(response?.count) || 0);
+
+        if (response?.caseStatus && response.caseStatus !== "open") {
+          unseenCountBackoffRef.current = {
+            caseId,
+            retryAfter: now + UNSEEN_COUNT_RETRY_BACKOFF_MS,
+          };
+          return;
+        }
+
+        if (response?.exists === false || response?.unavailable) {
+          unseenCountBackoffRef.current = {
+            caseId,
+            retryAfter: now + UNSEEN_COUNT_RETRY_BACKOFF_MS,
+          };
+          return;
+        }
+
+        unseenCountBackoffRef.current = {
+          caseId: "",
+          retryAfter: 0,
+        };
+      } catch (error) {
+        const storedChat = getStoredChat();
+        unseenCountBackoffRef.current = {
+          caseId: storedChat?.caseId || "",
+          retryAfter: Date.now() + UNSEEN_COUNT_RETRY_BACKOFF_MS,
+        };
+        console.warn("Customer unseen-count check skipped after error:", error);
       }
-    } catch (error) {
-      console.error("Error fetching unseen messages count:", error);
-    }
-  }, []);
+    },
+    [getStoredChat],
+  );
 
   const playNotificationSound = useCallback(() => {
     if (hasInteracted) {
@@ -179,7 +296,7 @@ const ChatIcon = () => {
       fetchUnseenMessagesCount();
       const interval = setInterval(() => {
         fetchUnseenMessagesCount();
-      }, 10000); // 10 seconds
+      }, UNSEEN_COUNT_POLL_INTERVAL_MS);
       return () => clearInterval(interval);
     }
   }, [isOpen, fetchUnseenMessagesCount]);
@@ -193,7 +310,7 @@ const ChatIcon = () => {
     const handleReceiveMessage = () => {
       if (!isOpen) {
         playNotificationSound();
-        fetchUnseenMessagesCount();
+        fetchUnseenMessagesCount({ force: true });
       }
     };
 
@@ -214,7 +331,7 @@ const ChatIcon = () => {
   return (
     <ChatIconWrapper>
       {/* Only the button toggles the chat window, so clicks in ChatWindow won't close it */}
-      <ChatButtonBox onClick={toggleChatWindow}>
+      <ChatButtonBox $isOpen={isOpen} onClick={toggleChatWindow}>
         <div className="icon-holder">
           <MessageOutlined />
         </div>
