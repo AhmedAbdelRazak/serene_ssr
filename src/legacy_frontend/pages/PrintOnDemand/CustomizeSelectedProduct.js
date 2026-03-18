@@ -691,9 +691,13 @@ function fitFrameToPlaceholderAspectRatio(frame = {}, placeholder = null) {
 function shouldKeepBaseEditorFrame(product = {}, positionInput = "") {
 	const kind = getPodProductKindForDefaultDesign(product);
 	const position = normalizePrintAreaPosition(positionInput || "front");
-	const blueprintId = Number(product?.printifyProductDetails?.blueprint_id || 0);
 	return (
-		(kind === "bag" && position === "front" && blueprintId === 326) ||
+		((kind === "apparel" ||
+			kind === "hoodie" ||
+			kind === "tote" ||
+			kind === "bag" ||
+			kind === "default") &&
+			position === "front") ||
 		(kind === "mug" && position === "front") ||
 		(kind === "pillow" && position === "front") ||
 		(kind === "magnet" && position === "front") ||
@@ -938,22 +942,22 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			normalizedName.includes("cotton canvas tote"));
 	const defaultsByKind = {
 		apparel: {
-			messageWidthRatio: 0.5,
-			messageHeightRatio: 0.2,
-			messageCenterYRatio: 0.4,
-			iconSizeRatio: 0.078,
+			messageWidthRatio: 0.64,
+			messageHeightRatio: 0.225,
+			messageCenterYRatio: 0.34,
+			iconSizeRatio: 0.088,
 			iconOverlapPx: 8,
-			maxMessageHeight: 92,
-			maxIconSize: 48,
+			maxMessageHeight: 108,
+			maxIconSize: 54,
 		},
 		hoodie: {
-			messageWidthRatio: 0.5,
-			messageHeightRatio: 0.198,
-			messageCenterYRatio: 0.395,
-			iconSizeRatio: 0.078,
+			messageWidthRatio: 0.66,
+			messageHeightRatio: 0.225,
+			messageCenterYRatio: 0.35,
+			iconSizeRatio: 0.09,
 			iconOverlapPx: 8,
-			maxMessageHeight: 92,
-			maxIconSize: 48,
+			maxMessageHeight: 112,
+			maxIconSize: 56,
 		},
 		tote: {
 			messageWidthRatio: 0.74,
@@ -1010,27 +1014,27 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			maxIconSize: 58,
 		},
 		default: {
-			messageWidthRatio: 0.52,
-			messageHeightRatio: 0.2,
-			messageCenterYRatio: 0.43,
-			iconSizeRatio: 0.076,
+			messageWidthRatio: 0.62,
+			messageHeightRatio: 0.22,
+			messageCenterYRatio: 0.37,
+			iconSizeRatio: 0.086,
 			iconOverlapPx: 6,
-			maxMessageHeight: 92,
-			maxIconSize: 48,
+			maxMessageHeight: 104,
+			maxIconSize: 52,
 		},
 	};
 	const visualTuneByKind = {
 		apparel: {
-			messageWidthFactor: 1,
-			messageHeightFactor: 1,
-			iconSizeFactor: 1,
-			centerYOffset: 0,
+			messageWidthFactor: 1.04,
+			messageHeightFactor: 1.04,
+			iconSizeFactor: 1.08,
+			centerYOffset: 0.005,
 		},
 		hoodie: {
-			messageWidthFactor: 1,
-			messageHeightFactor: 1,
-			iconSizeFactor: 1,
-			centerYOffset: 0,
+			messageWidthFactor: 1.05,
+			messageHeightFactor: 1.05,
+			iconSizeFactor: 1.08,
+			centerYOffset: 0.005,
 		},
 		tote: {
 			messageWidthFactor: 1,
@@ -1063,9 +1067,9 @@ function resolveAutoDesignGeometry(product = {}, preset = {}) {
 			centerYOffset: 0.02,
 		},
 		default: {
-			messageWidthFactor: 1,
-			messageHeightFactor: 1,
-			iconSizeFactor: 1,
+			messageWidthFactor: 1.04,
+			messageHeightFactor: 1.04,
+			iconSizeFactor: 1.06,
 			centerYOffset: 0,
 		},
 	};
@@ -1170,6 +1174,8 @@ function buildTextElementStyle(el = {}) {
 	const safeBorderRadius = clampNumber(Number(el.borderRadius) || 0, 0, 999);
 	return {
 		whiteSpace: "pre-wrap",
+		overflowWrap: "break-word",
+		wordBreak: "break-word",
 		boxSizing: "border-box",
 		color: el.color,
 		backgroundColor: safeBackgroundColor,
@@ -1653,6 +1659,67 @@ function buildPodBareCaptureAsset(rawCanvas, options = {}) {
 		isFullPrintAreaCapture: true,
 		forceSourcePlacement: false,
 	};
+}
+
+let autoDesignMeasureCanvas = null;
+
+function estimateWrappedTextLineCount(
+	text = "",
+	{
+		fontSize = 16,
+		fontFamily = "sans-serif",
+		fontWeight = "400",
+		fontStyle = "normal",
+		maxWidth = 120,
+	} = {}
+) {
+	const normalized = `${text || ""}`.replace(/\s+/g, " ").trim();
+	if (!normalized) return 1;
+	const safeWidth = Math.max(24, Number(maxWidth) || 0);
+	const words = normalized.split(" ").filter(Boolean);
+	if (!words.length) return 1;
+
+	if (typeof document !== "undefined") {
+		autoDesignMeasureCanvas =
+			autoDesignMeasureCanvas || document.createElement("canvas");
+		const context = autoDesignMeasureCanvas.getContext("2d");
+		if (context) {
+			context.font = `${fontStyle || "normal"} ${fontWeight || "400"} ${
+				Math.max(8, Number(fontSize) || 16)
+			}px ${fontFamily || "sans-serif"}`;
+			const spaceWidth = context.measureText(" ").width;
+			let lineCount = 1;
+			let currentWidth = 0;
+			words.forEach((word) => {
+				const wordWidth = context.measureText(word).width;
+				if (currentWidth > 0 && currentWidth + spaceWidth + wordWidth > safeWidth) {
+					lineCount += 1;
+					currentWidth = wordWidth;
+					return;
+				}
+				currentWidth += (currentWidth > 0 ? spaceWidth : 0) + wordWidth;
+			});
+			return clampNumber(lineCount, 1, 6);
+		}
+	}
+
+	const averageCharacterWidth = Math.max(6, (Number(fontSize) || 16) * 0.56);
+	const approximateCharsPerLine = Math.max(
+		4,
+		Math.floor(safeWidth / averageCharacterWidth)
+	);
+	return clampNumber(
+		Math.ceil(normalized.length / approximateCharsPerLine),
+		1,
+		6
+	);
+}
+
+function shouldUseDirectWrapCapturePlacement(product = {}, positionInput = "") {
+	const kind = getPodProductKindForDefaultDesign(product);
+	const position = normalizePrintAreaPosition(positionInput || "front");
+	if (!position) return false;
+	return kind !== "bag" && kind !== "pillow";
 }
 
 function getNormalizedContentBounds(
@@ -2756,6 +2823,12 @@ export default function CustomizeSelectedProduct() {
 		const isPillowDesign = geometry.kind === "pillow";
 		const isMagnetDesign = geometry.kind === "magnet";
 		const isCandleDesign = geometry.kind === "candle";
+		const isStandardAutoDesign =
+			!isBagDesign &&
+			!isToteDesign &&
+			!isPillowDesign &&
+			!isMagnetDesign &&
+			!isCandleDesign;
 		const toteMessageFontFactor = isToteDesign
 			? isMobile
 				? 0.335
@@ -2807,6 +2880,12 @@ export default function CustomizeSelectedProduct() {
 		const candleIconFontFactor = isCandleDesign ? (isMobile ? 0.64 : 0.7) : 0.54;
 		const candleIconFontMin = isCandleDesign ? (isMobile ? 15 : 18) : 18;
 		const candleIconFontMax = isCandleDesign ? (isMobile ? 28 : 34) : 30;
+		const standardMessageFontFactor = isMobile ? 0.35 : 0.37;
+		const standardMessageFontMin = isMobile ? 18 : 20;
+		const standardMessageFontMax = isMobile ? 40 : 48;
+		const standardIconFontFactor = isMobile ? 0.72 : 0.78;
+		const standardIconFontMin = isMobile ? 20 : 22;
+		const standardIconFontMax = isMobile ? 34 : 42;
 		const widthCapRatio = isBagDesign
 			? isMobile
 				? 0.88
@@ -2827,7 +2906,11 @@ export default function CustomizeSelectedProduct() {
 				? isMobile
 					? 0.88
 					: 0.98
-				: 0.8;
+				: isStandardAutoDesign
+				? isMobile
+					? 0.88
+					: 0.9
+					: 0.8;
 		const minMessageWidth = isBagDesign
 			? 150
 			: isToteDesign
@@ -2846,7 +2929,11 @@ export default function CustomizeSelectedProduct() {
 				? isMobile
 					? 154
 					: 304
-				: 124;
+				: isStandardAutoDesign
+					? isMobile
+						? 148
+						: 176
+					: 124;
 		const minMessageHeight = isBagDesign
 			? 56
 			: isToteDesign
@@ -2865,7 +2952,11 @@ export default function CustomizeSelectedProduct() {
 				? isMobile
 					? 154
 					: 282
-				: 48;
+				: isStandardAutoDesign
+					? isMobile
+						? 58
+						: 72
+					: 48;
 		const minIconSize = isBagDesign
 			? 28
 			: isToteDesign
@@ -2884,7 +2975,11 @@ export default function CustomizeSelectedProduct() {
 				? isMobile
 					? 20
 					: 28
-				: 24;
+				: isStandardAutoDesign
+					? isMobile
+						? 28
+						: 32
+					: 24;
 		let messageWidth = Math.min(
 			Math.round(safeWidth * widthCapRatio),
 			Math.max(
@@ -2899,34 +2994,13 @@ export default function CustomizeSelectedProduct() {
 				Math.round(safeHeight * geometry.messageHeightRatio * bagHeightBoost)
 			)
 		);
+		const baseMessageHeight = messageHeight;
 		let iconSize = Math.min(
 			geometry.maxIconSize || 44,
 			Math.max(
 				minIconSize,
 				Math.round(safeWidth * geometry.iconSizeRatio * bagIconBoost)
 			)
-		);
-		const messageX = safeStartX + Math.round((safeWidth - messageWidth) / 2);
-		const iconX = safeStartX + Math.round((safeWidth - iconSize) / 2);
-		const minMessageY = isPillowDesign
-			? safeStartY
-			: safeStartY + Math.max(0, iconSize - geometry.iconOverlapPx);
-		const maxMessageY = safeStartY + safeHeight - messageHeight;
-		const messageY = clampNumber(
-			Math.round(safeStartY + (safeHeight - messageHeight) / 2),
-			minMessageY,
-			Math.max(minMessageY, maxMessageY)
-		);
-		const iconY = clampNumber(
-			isCandleDesign
-				? messageY + Math.round(messageHeight * (isMobile ? 0.14 : 0.145))
-				: isPillowDesign
-					? messageY + Math.round(messageHeight * (isMobile ? 0.16 : 0.155))
-				: isMagnetDesign
-					? messageY + Math.round(messageHeight * (isMobile ? 0.205 : 0.195))
-				: messageY - iconSize + geometry.iconOverlapPx,
-			safeStartY,
-			safeStartY + safeHeight - iconSize
 		);
 		const messageFontSize = clampNumber(
 			Math.round(
@@ -2943,7 +3017,7 @@ export default function CustomizeSelectedProduct() {
 							? magnetMessageFontFactor
 						: isCandleDesign
 							? candleMessageFontFactor
-							: 0.36)
+							: standardMessageFontFactor)
 			),
 			isBagDesign
 				? 18
@@ -2953,7 +3027,9 @@ export default function CustomizeSelectedProduct() {
 						? pillowMessageFontMin
 					: isMagnetDesign
 						? magnetMessageFontMin
-						: candleMessageFontMin,
+						: isCandleDesign
+							? candleMessageFontMin
+							: standardMessageFontMin,
 			isBagDesign
 				? isMobile
 					? 32
@@ -2964,18 +3040,22 @@ export default function CustomizeSelectedProduct() {
 						? pillowMessageFontMax
 					: isMagnetDesign
 						? magnetMessageFontMax
-					: candleMessageFontMax
+					: isCandleDesign
+						? candleMessageFontMax
+						: standardMessageFontMax
 		);
 		const iconFontSize = clampNumber(
 			Math.round(
 				iconSize *
 					(isToteDesign
 						? toteIconFontFactor
-						: isPillowDesign
-							? pillowIconFontFactor
-						: isMagnetDesign
-							? magnetIconFontFactor
-							: candleIconFontFactor)
+					: isPillowDesign
+						? pillowIconFontFactor
+					: isMagnetDesign
+						? magnetIconFontFactor
+						: isCandleDesign
+							? candleIconFontFactor
+							: standardIconFontFactor)
 			),
 			isToteDesign
 				? toteIconFontMin
@@ -2983,14 +3063,189 @@ export default function CustomizeSelectedProduct() {
 					? pillowIconFontMin
 				: isMagnetDesign
 					? magnetIconFontMin
-					: candleIconFontMin,
+					: isCandleDesign
+						? candleIconFontMin
+						: standardIconFontMin,
 			isToteDesign
 				? toteIconFontMax
 				: isPillowDesign
 					? pillowIconFontMax
 				: isMagnetDesign
 					? magnetIconFontMax
-					: candleIconFontMax
+					: isCandleDesign
+						? candleIconFontMax
+						: standardIconFontMax
+		);
+		const messageLineHeight = isCandleDesign
+			? 0.96
+			: isPillowDesign
+				? 1.01
+				: isMagnetDesign
+					? 1.01
+					: 1.08;
+		const estimatedPaddingX = clampNumber(
+			isBagDesign
+				? Math.round(messageWidth * (isMobile ? 0.042 : 0.045))
+				: isToteDesign
+					? Math.round(messageWidth * (isMobile ? 0.042 : 0.046))
+				: isPillowDesign
+					? Math.round(messageWidth * (isMobile ? 0.026 : 0.03))
+				: isMagnetDesign
+					? Math.round(messageWidth * (isMobile ? 0.024 : 0.028))
+				: isCandleDesign
+					? Math.round(messageWidth * (isMobile ? 0.026 : 0.034))
+					: Number(effectiveOccasionStylePreset.paddingX) ||
+						Math.round(messageWidth * 0.055),
+			isBagDesign
+				? 9
+				: isToteDesign
+					? isMobile
+						? 8
+						: 10
+					: isPillowDesign
+						? isMobile
+							? 8
+							: 10
+						: isMagnetDesign
+							? isMobile
+								? 6
+								: 8
+							: isCandleDesign
+								? isMobile
+									? 6
+									: 10
+								: 8,
+			isBagDesign
+				? 16
+				: isToteDesign
+					? isMobile
+						? 16
+						: 20
+					: isPillowDesign
+						? isMobile
+							? 12
+							: 16
+						: isMagnetDesign
+							? isMobile
+								? 12
+								: 14
+							: isCandleDesign
+								? isMobile
+									? 12
+									: 18
+								: 20
+		);
+		const estimatedPaddingY = clampNumber(
+			isBagDesign
+				? Math.round(messageHeight * 0.08)
+				: isToteDesign
+					? Math.round(messageHeight * (isMobile ? 0.085 : 0.09))
+					: isPillowDesign
+						? Math.round(messageHeight * (isMobile ? 0.044 : 0.05))
+						: isMagnetDesign
+							? Math.round(messageHeight * (isMobile ? 0.038 : 0.044))
+							: isCandleDesign
+								? Math.round(messageHeight * (isMobile ? 0.036 : 0.05))
+								: Number(effectiveOccasionStylePreset.paddingY) ||
+									Math.round(messageHeight * 0.09),
+			isBagDesign
+				? 4
+				: isToteDesign
+					? isMobile
+						? 6
+						: 8
+					: isPillowDesign
+						? isMobile
+							? 6
+							: 8
+						: isMagnetDesign
+							? isMobile
+								? 4
+								: 6
+							: isCandleDesign
+								? isMobile
+									? 5
+									: 8
+								: 4,
+			isBagDesign
+				? 8
+				: isToteDesign
+					? isMobile
+						? 12
+						: 16
+					: isPillowDesign
+						? isMobile
+							? 9
+							: 12
+						: isMagnetDesign
+							? isMobile
+								? 10
+								: 12
+							: isCandleDesign
+								? isMobile
+									? 10
+									: 14
+								: 10
+		);
+		const ornamentReserve = (
+			String(effectiveOccasionStylePreset.ornamentLeft || "").trim() ? 1 : 0
+		) + (
+			String(effectiveOccasionStylePreset.ornamentRight || "").trim() ? 1 : 0
+		);
+		const estimatedLineCount = estimateWrappedTextLineCount(
+			buildGiftMessage(selectedOccasion, selectedGiftName),
+			{
+				fontSize: messageFontSize,
+				fontFamily: effectiveOccasionStylePreset.fontFamily,
+				fontWeight: effectiveOccasionStylePreset.fontWeight,
+				fontStyle: effectiveOccasionStylePreset.fontStyle,
+				maxWidth:
+					messageWidth -
+					estimatedPaddingX * 2 -
+					Math.max(0, ornamentReserve * messageFontSize * 0.85),
+			}
+		);
+		const requiredMessageHeight = Math.round(
+			messageFontSize * messageLineHeight * estimatedLineCount +
+				estimatedPaddingY * 2 +
+				Math.max(6, messageFontSize * 0.24)
+		);
+		if (requiredMessageHeight > messageHeight) {
+			messageHeight = Math.min(
+				geometry.maxMessageHeight || requiredMessageHeight,
+				Math.max(messageHeight, requiredMessageHeight)
+			);
+		}
+		const messageX = safeStartX + Math.round((safeWidth - messageWidth) / 2);
+		const iconX = safeStartX + Math.round((safeWidth - iconSize) / 2);
+		const minMessageY = isPillowDesign
+			? safeStartY
+			: safeStartY + Math.max(0, iconSize - geometry.iconOverlapPx);
+		const baseMaxMessageY = safeStartY + safeHeight - baseMessageHeight;
+		const preferredMessageCenterY = isStandardAutoDesign
+			? safeStartY + safeHeight * geometry.messageCenterYRatio
+			: safeStartY + safeHeight / 2;
+		const anchoredMessageY = clampNumber(
+			Math.round(preferredMessageCenterY - baseMessageHeight / 2),
+			minMessageY,
+			Math.max(minMessageY, baseMaxMessageY)
+		);
+		const maxMessageY = safeStartY + safeHeight - messageHeight;
+		const messageY = clampNumber(
+			anchoredMessageY,
+			minMessageY,
+			Math.max(minMessageY, maxMessageY)
+		);
+		const iconY = clampNumber(
+			isCandleDesign
+				? messageY + Math.round(messageHeight * (isMobile ? 0.14 : 0.145))
+				: isPillowDesign
+					? messageY + Math.round(messageHeight * (isMobile ? 0.16 : 0.155))
+				: isMagnetDesign
+					? messageY + Math.round(messageHeight * (isMobile ? 0.205 : 0.195))
+				: messageY - iconSize + geometry.iconOverlapPx,
+			safeStartY,
+			safeStartY + safeHeight - iconSize
 		);
 		const messageGradientStart =
 			effectiveOccasionStylePreset.messageGradientStart ||
@@ -3561,6 +3816,12 @@ export default function CustomizeSelectedProduct() {
 		const isPillowAutoDesign = productKind === "pillow";
 		const isMagnetAutoDesign = productKind === "magnet";
 		const isCandleAutoDesign = productKind === "candle";
+		const isStandardAutoDesign =
+			!isBagAutoDesign &&
+			!isToteAutoDesign &&
+			!isPillowAutoDesign &&
+			!isMagnetAutoDesign &&
+			!isCandleAutoDesign;
 		const toteMessageFontFactor = isToteAutoDesign
 			? isMobile
 				? 0.335
@@ -3617,6 +3878,12 @@ export default function CustomizeSelectedProduct() {
 			: 0.54;
 		const candleIconFontMin = isCandleAutoDesign ? (isMobile ? 15 : 18) : 18;
 		const candleIconFontMax = isCandleAutoDesign ? (isMobile ? 28 : 34) : 30;
+		const standardMessageFontFactor = isMobile ? 0.35 : 0.37;
+		const standardMessageFontMin = isMobile ? 18 : 20;
+		const standardMessageFontMax = isMobile ? 40 : 48;
+		const standardIconFontFactor = isMobile ? 0.72 : 0.78;
+		const standardIconFontMin = isMobile ? 20 : 22;
+		const standardIconFontMax = isMobile ? 34 : 42;
 		setElements((prev) => {
 			if (!prev.length || !prev.every((item) => item.isAutoGenerated)) {
 				return prev;
@@ -3626,7 +3893,27 @@ export default function CustomizeSelectedProduct() {
 			if (lastAutoSnapshot && currentComparable !== lastAutoSnapshot) {
 				return prev;
 			}
-			const next = prev.map((item) => {
+			const currentIds = prev.reduce(
+				(accumulator, item) => {
+					if (item.autoKind === "message") accumulator.messageId = item.id;
+					if (item.autoKind === "icon") accumulator.iconId = item.id;
+					return accumulator;
+				},
+				{}
+			);
+			const printAreaRect = printAreaRef.current?.getBoundingClientRect();
+			const rebuiltDrafts =
+				printAreaRect?.width > 0 && printAreaRect?.height > 0
+					? buildAutoGeneratedDesignDrafts({
+							messageId: currentIds.messageId || Date.now(),
+							iconId: currentIds.iconId || Date.now() + 1,
+							boundsWidth: printAreaRect.width,
+							boundsHeight: printAreaRect.height,
+						})
+					: null;
+			const next = rebuiltDrafts
+				? [rebuiltDrafts.message, rebuiltDrafts.icon]
+				: prev.map((item) => {
 				if (item.type !== "text" || !item.isAutoGenerated) return item;
 				if (item.autoKind === "icon") {
 					return {
@@ -3645,7 +3932,9 @@ export default function CustomizeSelectedProduct() {
 											? pillowIconFontFactor
 										: isMagnetAutoDesign
 											? magnetIconFontFactor
-										: candleIconFontFactor)
+										: isCandleAutoDesign
+											? candleIconFontFactor
+											: standardIconFontFactor)
 							),
 							isToteAutoDesign
 								? toteIconFontMin
@@ -3653,14 +3942,18 @@ export default function CustomizeSelectedProduct() {
 									? pillowIconFontMin
 								: isMagnetAutoDesign
 									? magnetIconFontMin
-									: candleIconFontMin,
+									: isCandleAutoDesign
+										? candleIconFontMin
+										: standardIconFontMin,
 							isToteAutoDesign
 								? toteIconFontMax
 								: isPillowAutoDesign
 									? pillowIconFontMax
 								: isMagnetAutoDesign
 									? magnetIconFontMax
-									: candleIconFontMax
+									: isCandleAutoDesign
+										? candleIconFontMax
+										: standardIconFontMax
 						),
 						fontWeight: "600",
 						fontStyle: "normal",
@@ -3693,20 +3986,20 @@ export default function CustomizeSelectedProduct() {
 					fontFamily: effectiveOccasionStylePreset.fontFamily,
 					fontSize: clampNumber(
 						Math.round(
-							(item.height || 56) *
-								(isBagAutoDesign
-									? isMobile
-										? 0.44
-										: 0.4
-									: isToteAutoDesign
-										? toteMessageFontFactor
-									: isPillowAutoDesign
-										? pillowMessageFontFactor
-									: isMagnetAutoDesign
-										? magnetMessageFontFactor
-									: isCandleAutoDesign
-										? candleMessageFontFactor
-										: 0.36)
+								(item.height || 56) *
+									(isBagAutoDesign
+										? isMobile
+											? 0.44
+											: 0.4
+										: isToteAutoDesign
+											? toteMessageFontFactor
+										: isPillowAutoDesign
+											? pillowMessageFontFactor
+										: isMagnetAutoDesign
+											? magnetMessageFontFactor
+										: isCandleAutoDesign
+											? candleMessageFontFactor
+											: standardMessageFontFactor)
 						),
 						isBagAutoDesign
 							? 18
@@ -3716,7 +4009,9 @@ export default function CustomizeSelectedProduct() {
 									? pillowMessageFontMin
 								: isMagnetAutoDesign
 									? magnetMessageFontMin
-								: candleMessageFontMin,
+								: isCandleAutoDesign
+									? candleMessageFontMin
+									: standardMessageFontMin,
 						isBagAutoDesign
 							? isMobile
 								? 32
@@ -3727,7 +4022,9 @@ export default function CustomizeSelectedProduct() {
 									? pillowMessageFontMax
 								: isMagnetAutoDesign
 									? magnetMessageFontMax
-								: candleMessageFontMax
+								: isCandleAutoDesign
+									? candleMessageFontMax
+									: standardMessageFontMax
 					),
 					fontWeight: effectiveOccasionStylePreset.fontWeight,
 					fontStyle: effectiveOccasionStylePreset.fontStyle,
@@ -3864,7 +4161,6 @@ export default function CustomizeSelectedProduct() {
 
 	useEffect(() => {
 		if (
-			activeProductKind !== "magnet" ||
 			!catalogLayoutResolved ||
 			!product ||
 			!defaultTextAdded ||
@@ -3877,13 +4173,19 @@ export default function CustomizeSelectedProduct() {
 
 		let frameId = null;
 
-		const syncMagnetAutoLayout = () => {
+		const syncAutoGeneratedLayout = () => {
 			const currentElements = Array.isArray(elementsRef.current)
 				? elementsRef.current
 				: [];
 			if (
 				!currentElements.length ||
 				!currentElements.every((item) => item.isAutoGenerated)
+			) {
+				return;
+			}
+			if (
+				shouldInferActiveVisualFrame &&
+				!["ready", "failed"].includes(activeVisualFrameStatus)
 			) {
 				return;
 			}
@@ -3906,6 +4208,8 @@ export default function CustomizeSelectedProduct() {
 				Math.round(rect.width),
 				Math.round(rect.height),
 				isMobile ? "mobile" : "desktop",
+				activeVisualFrameStatus,
+				String(activeVariantId || "default"),
 				selectedOccasion || "",
 				selectedGiftName || "",
 			].join(":");
@@ -3947,7 +4251,7 @@ export default function CustomizeSelectedProduct() {
 				window.cancelAnimationFrame(frameId);
 			}
 			frameId = window.requestAnimationFrame(() => {
-				syncMagnetAutoLayout();
+				syncAutoGeneratedLayout();
 			});
 		};
 
@@ -3965,13 +4269,15 @@ export default function CustomizeSelectedProduct() {
 		};
 	}, [
 		activePrintAreaPosition,
-		activeProductKind,
+		activeVariantId,
+		activeVisualFrameStatus,
 		catalogLayoutResolved,
 		defaultTextAdded,
 		isMobile,
 		product,
 		selectedGiftName,
 		selectedOccasion,
+		shouldInferActiveVisualFrame,
 	]);
 
 	/**
@@ -5612,13 +5918,12 @@ export default function CustomizeSelectedProduct() {
 						targetAspectRatio: activeCaptureAspectRatio,
 						projection: activeCaptureProjection,
 						contentBoundsNormalized,
-						placementMode:
-							activeProductKind === "mug" ||
-							activeProductKind === "candle" ||
-							activeProductKind === "tote" ||
-							activeProductKind === "magnet"
-								? "direct-wrap"
-								: "projected",
+						placementMode: shouldUseDirectWrapCapturePlacement(
+							product || {},
+							activePrintAreaPosition
+						)
+							? "direct-wrap"
+							: "projected",
 					}
 				);
 			const bareCanvas = bareCaptureAsset?.uploadCanvas;
@@ -5685,13 +5990,12 @@ export default function CustomizeSelectedProduct() {
 						targetAspectRatio: activeCaptureAspectRatio,
 						projection: activeCaptureProjection,
 						contentBoundsNormalized,
-						placementMode:
-							activeProductKind === "mug" ||
-							activeProductKind === "candle" ||
-							activeProductKind === "tote" ||
-							activeProductKind === "magnet"
-								? "direct-wrap"
-								: "projected",
+						placementMode: shouldUseDirectWrapCapturePlacement(
+							product || {},
+							activePrintAreaPosition
+						)
+							? "direct-wrap"
+							: "projected",
 					}
 				);
 				const bareCanvas = bareCaptureAsset?.uploadCanvas;
@@ -5978,13 +6282,12 @@ export default function CustomizeSelectedProduct() {
 						targetAspectRatio: activeCaptureAspectRatio,
 						projection: activeCaptureProjection,
 						contentBoundsNormalized,
-						placementMode:
-							activeProductKind === "mug" ||
-							activeProductKind === "candle" ||
-							activeProductKind === "tote" ||
-							activeProductKind === "magnet"
-								? "direct-wrap"
-								: "projected",
+						placementMode: shouldUseDirectWrapCapturePlacement(
+							product || {},
+							activePrintAreaPosition
+						)
+							? "direct-wrap"
+							: "projected",
 					}
 				);
 				const bareCanvas = bareCaptureAsset?.uploadCanvas;
@@ -6027,13 +6330,12 @@ export default function CustomizeSelectedProduct() {
 						targetAspectRatio: activeCaptureAspectRatio,
 						projection: activeCaptureProjection,
 						contentBoundsNormalized,
-						placementMode:
-							activeProductKind === "mug" ||
-							activeProductKind === "candle" ||
-							activeProductKind === "tote" ||
-							activeProductKind === "magnet"
-								? "direct-wrap"
-								: "projected",
+						placementMode: shouldUseDirectWrapCapturePlacement(
+							product || {},
+							activePrintAreaPosition
+						)
+							? "direct-wrap"
+							: "projected",
 					}
 				);
 				const bareCanvas = bareCaptureAsset?.uploadCanvas;
