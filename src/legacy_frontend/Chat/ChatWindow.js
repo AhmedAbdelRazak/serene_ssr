@@ -60,6 +60,8 @@ const genLocalId = () =>
 const TS_EPSILON = 10_000;
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 const END_CHAT_SUGGESTION_DELAY_MS = 5000;
+const ACTIVE_TYPING_GRACE_MS = 4500;
+const TYPING_HEARTBEAT_INTERVAL_MS = 1200;
 const CHAT_LINK_STYLE = {
   color: "#1d4ed8",
   textDecoration: "underline",
@@ -178,6 +180,8 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   const endChatSuggestionTimerRef = useRef(null);
   const customerTypingIdleTimerRef = useRef(null);
   const isCustomerTypingRef = useRef(false);
+  const draftMessageRef = useRef("");
+  const lastCustomerKeystrokeAtRef = useRef(0);
   const hasPendingEndChatSuggestionRef = useRef(false);
   const submittedRef = useRef(false);
   const caseStatusRef = useRef("open");
@@ -285,6 +289,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   ); //  ← empty dependency array keeps the reference stable
 
   const resetChatState = useCallback(() => {
+    stopCustomerTypingSession({ force: true });
     if (endChatSuggestionTimerRef.current) {
       clearTimeout(endChatSuggestionTimerRef.current);
       endChatSuggestionTimerRef.current = null;
@@ -321,7 +326,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     setProductSuggestions([]);
     setShowSuggestions(false);
     setHasSelectedProduct(false);
-  }, []);
+  }, [stopCustomerTypingSession]);
 
   const clearEndChatSuggestionTimer = useCallback(() => {
     if (endChatSuggestionTimerRef.current) {
@@ -336,6 +341,56 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
       customerTypingIdleTimerRef.current = null;
     }
   }, []);
+
+  const stopCustomerTypingSession = useCallback(
+    ({ force = false } = {}) => {
+      clearCustomerTypingTimer();
+      const wasTyping = isCustomerTypingRef.current;
+      isCustomerTypingRef.current = false;
+      lastCustomerKeystrokeAtRef.current = 0;
+
+      if (caseId && (wasTyping || force)) {
+        socket.emit("stopTyping", { caseId, user: customerName });
+      }
+    },
+    [caseId, clearCustomerTypingTimer, customerName, socket],
+  );
+
+  const startCustomerTypingSession = useCallback(() => {
+    if (!caseId) return;
+
+    setTypingStatus("");
+    resetEndChatSuggestion();
+    isCustomerTypingRef.current = true;
+    socket.emit("typing", { caseId, user: customerName });
+
+    if (customerTypingIdleTimerRef.current) {
+      return;
+    }
+
+    customerTypingIdleTimerRef.current = setInterval(() => {
+      if (!draftMessageRef.current.trim()) {
+        stopCustomerTypingSession();
+        return;
+      }
+
+      if (
+        !lastCustomerKeystrokeAtRef.current ||
+        Date.now() - lastCustomerKeystrokeAtRef.current > ACTIVE_TYPING_GRACE_MS
+      ) {
+        stopCustomerTypingSession();
+        return;
+      }
+
+      socket.emit("typing", { caseId, user: customerName });
+    }, TYPING_HEARTBEAT_INTERVAL_MS);
+  }, [
+    caseId,
+    customerName,
+    resetEndChatSuggestion,
+    socket,
+    stopCustomerTypingSession,
+  ]);
 
   const resetEndChatSuggestion = useCallback(() => {
     clearEndChatSuggestionTimer();
@@ -377,9 +432,9 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   useEffect(() => {
     return () => {
       clearEndChatSuggestionTimer();
-      clearCustomerTypingTimer();
+      stopCustomerTypingSession({ force: true });
     };
-  }, [clearCustomerTypingTimer, clearEndChatSuggestionTimer]);
+  }, [clearEndChatSuggestionTimer, stopCustomerTypingSession]);
 
   useEffect(() => {
     submittedRef.current = submitted;
@@ -392,6 +447,10 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   useEffect(() => {
     isRatingVisibleRef.current = isRatingVisible;
   }, [isRatingVisible]);
+
+  useEffect(() => {
+    draftMessageRef.current = newMessage;
+  }, [newMessage]);
 
   useEffect(() => {
     if (caseStatus !== "open" || isRatingVisible) {
@@ -742,6 +801,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   async function handleSendMessage() {
     if (!newMessage.trim()) return;
     const normalizedContact = normalizeContactValue(customerEmail);
+    const outgoingMessage = newMessage;
 
     const localId = genLocalId();
     const nowISO = new Date().toISOString();
@@ -752,25 +812,22 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
       local: true,
       senderType: "client",
       messageBy: { customerName, customerEmail: normalizedContact },
-      message: newMessage,
+      message: outgoingMessage,
       date: nowISO,
     };
 
     setMessages((prev) => sortByDate([...prev, optimistic]));
     pendingLocalIds.current.add(localId);
     resetEndChatSuggestion();
-    clearCustomerTypingTimer();
-    isCustomerTypingRef.current = false;
-
+    stopCustomerTypingSession({ force: true });
     setNewMessage("");
-    if (caseId) socket.emit("stopTyping", { caseId, user: customerName });
 
     try {
       await updateSupportCase(caseId, {
         conversation: {
           senderType: "client",
           messageBy: { customerName, customerEmail: normalizedContact },
-          message: newMessage,
+          message: outgoingMessage,
           date: nowISO,
         },
       });
@@ -819,28 +876,21 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
 	   12) TYPING HANDLERS
 	   ════════════════════════════════════════════════════════ */
   const handleInputChange = (e) => {
-    setNewMessage(e.target.value);
-    setTypingStatus("");
-    resetEndChatSuggestion();
-    isCustomerTypingRef.current = true;
-    clearCustomerTypingTimer();
+    const nextValue = e.target.value;
+    setNewMessage(nextValue);
 
-    if (caseId) {
-      socket.emit("typing", { caseId, user: customerName });
-      customerTypingIdleTimerRef.current = setTimeout(() => {
-        customerTypingIdleTimerRef.current = null;
-        isCustomerTypingRef.current = false;
-        socket.emit("stopTyping", { caseId, user: customerName });
-      }, 1200);
+    if (nextValue.trim()) {
+      lastCustomerKeystrokeAtRef.current = Date.now();
+      startCustomerTypingSession();
+    } else {
+      stopCustomerTypingSession();
     }
   };
   const handleContactChange = (e) => {
     setCustomerEmail(normalizeContactValue(e.target.value));
   };
   const handleStopTypingLocal = () => {
-    clearCustomerTypingTimer();
-    isCustomerTypingRef.current = false;
-    if (caseId) socket.emit("stopTyping", { caseId, user: customerName });
+    stopCustomerTypingSession({ force: true });
   };
   const handlePressEnter = (e) => {
     if (!e.shiftKey) {
@@ -854,6 +904,9 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
 	   ════════════════════════════════════════════════════════ */
   const handleEmojiClick = (emojiObj) => {
     setNewMessage((prev) => prev + emojiObj.emoji);
+    draftMessageRef.current = `${draftMessageRef.current || ""}${emojiObj.emoji}`;
+    lastCustomerKeystrokeAtRef.current = Date.now();
+    startCustomerTypingSession();
     setShowEmojiPicker(false);
   };
   const handleFileChange = ({ fileList: list }) => setFileList(list);
@@ -1352,7 +1405,8 @@ const Header = styled.div`
     min-width: 40px;
     height: 40px;
     padding: 0;
-    color: #4b5563;
+    color: #b42318;
+    font-weight: 700;
   }
 
   @media (max-width: 768px) {
@@ -1365,7 +1419,11 @@ const Header = styled.div`
     .ant-btn {
       min-width: 34px;
       height: 34px;
-      font-size: 0.9rem;
+      font-size: 0.95rem;
+      color: #c81e1e;
+      border-color: #fecaca;
+      background: #fff5f5;
+      transform: translateY(2px);
     }
   }
 `;
@@ -1405,6 +1463,20 @@ const ComposerSection = styled.div`
       height: 38px;
       border-radius: 10px;
       font-size: 0.88rem;
+      padding-inline: 10px;
+    }
+
+    > .ant-btn.ant-btn-block {
+      display: inline-flex !important;
+      align-items: center;
+      justify-content: center;
+      width: calc(50% - 4px) !important;
+      margin-top: 6px !important;
+      vertical-align: top;
+    }
+
+    > .ant-btn.ant-btn-block + .ant-btn.ant-btn-block {
+      margin-left: 8px;
     }
   }
 `;
