@@ -60,8 +60,8 @@ const genLocalId = () =>
 const TS_EPSILON = 10_000;
 const URL_REGEX = /(https?:\/\/[^\s]+)/g;
 const END_CHAT_SUGGESTION_DELAY_MS = 5000;
-const ACTIVE_TYPING_GRACE_MS = 4500;
-const TYPING_HEARTBEAT_INTERVAL_MS = 1200;
+const ACTIVE_TYPING_GRACE_MS = 9000;
+const TYPING_HEARTBEAT_INTERVAL_MS = 1000;
 const CHAT_LINK_STYLE = {
   color: "#1d4ed8",
   textDecoration: "underline",
@@ -1457,29 +1457,30 @@ const ComposerSection = styled.div`
     padding-bottom: calc(10px + env(safe-area-inset-bottom));
 
     > .ant-btn {
-      height: 38px;
+      height: 34px;
       border-radius: 10px;
-      font-size: 0.88rem;
-      padding-inline: 10px;
+      font-size: 0.8rem;
+      padding-inline: 8px;
     }
 
     > .ant-btn.ant-btn-block {
       display: inline-flex !important;
       align-items: center;
       justify-content: center;
-      width: calc(100% - 116px) !important;
+      width: calc(100% - 98px) !important;
       margin-top: 6px !important;
       vertical-align: top;
     }
 
     > .ant-btn.ant-btn-block + .ant-btn.ant-btn-block {
-      width: 108px !important;
+      width: 90px !important;
       margin-left: 8px;
-      padding-inline: 8px;
-      font-size: 0.8rem;
-      background: #fff1f2;
-      color: #e11d48;
-      border-color: #fecdd3;
+      padding-inline: 6px;
+      font-size: 0.74rem;
+      font-weight: 700;
+      background: #fff7f7;
+      color: #dc2626;
+      border-color: #fecaca;
     }
   }
 `;
