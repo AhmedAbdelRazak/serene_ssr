@@ -4,33 +4,70 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import { getUnseenMessagesDetails, updateSeenByAdmin } from "../apiAdmin";
 import { isAuthenticated } from "../../auth";
+import socket from "../../Chat/socket";
 
-const NotificationDropdown = ({ onClose }) => {
+const ADMIN_NOTIFICATIONS_REFRESH_EVENT = "admin-support-notifications-refresh";
+
+const NotificationDropdown = ({ onClose, onNotificationsChanged }) => {
 	const [unseenMessages, setUnseenMessages] = useState([]);
 	const [loading, setLoading] = useState(true);
 	const { token } = isAuthenticated() || {};
 
 	useEffect(() => {
+		if (!token) return;
+
+		let isMounted = true;
+
 		const fetchUnseenMessages = async () => {
 			try {
 				const data = await getUnseenMessagesDetails(token);
-				if (Array.isArray(data)) {
+				if (isMounted && Array.isArray(data)) {
 					setUnseenMessages(data);
 				}
 			} catch (err) {
 				console.error("Error fetching unseen messages details:", err);
 			} finally {
-				setLoading(false);
+				if (isMounted) {
+					setLoading(false);
+				}
 			}
 		};
+
+		const handleRefresh = () => {
+			fetchUnseenMessages();
+			onNotificationsChanged?.();
+		};
+
+		setLoading(true);
 		fetchUnseenMessages();
-	}, [token]);
+
+		socket.on("newChat", handleRefresh);
+		socket.on("closeCase", handleRefresh);
+		socket.on("receiveMessage", handleRefresh);
+		socket.on("supportCaseUpdated", handleRefresh);
+		window.addEventListener(ADMIN_NOTIFICATIONS_REFRESH_EVENT, handleRefresh);
+
+		return () => {
+			isMounted = false;
+			socket.off("newChat", handleRefresh);
+			socket.off("closeCase", handleRefresh);
+			socket.off("receiveMessage", handleRefresh);
+			socket.off("supportCaseUpdated", handleRefresh);
+			window.removeEventListener(
+				ADMIN_NOTIFICATIONS_REFRESH_EVENT,
+				handleRefresh,
+			);
+		};
+	}, [token, onNotificationsChanged]);
 
 	const handleClick = async (caseId) => {
 		try {
 			await updateSeenByAdmin(caseId, token);
+			setUnseenMessages((prev) => prev.filter((oneCase) => oneCase._id !== caseId));
+			onNotificationsChanged?.();
+			window.dispatchEvent(new Event(ADMIN_NOTIFICATIONS_REFRESH_EVENT));
 			onClose(); // close dropdown
-			window.location.href = `/admin/customer-service?caseId=${caseId}`;
+			window.location.href = `/admin/customer-service?tab=b2cActive&caseId=${caseId}`;
 		} catch (err) {
 			console.error("Error updating seen by admin:", err);
 		}
