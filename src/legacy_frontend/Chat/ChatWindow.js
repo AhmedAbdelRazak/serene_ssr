@@ -72,6 +72,29 @@ const normalizeContactValue = (value = "") => {
   return nextValue.includes("@") ? nextValue.toLowerCase() : nextValue;
 };
 
+const normalizeSeedText = (value = "") =>
+  `${value || ""}`.replace(/\s+/g, " ").trim().toLowerCase();
+
+const getInquiryTypeDisplayLabel = (value = "", isArabic = false) => {
+  if (isArabic) {
+    switch (value) {
+      case "order":
+        return "استفسار عن طلب";
+      case "product":
+        return "استفسار عن منتج";
+      case "other":
+        return "استفسار عام";
+      default:
+        return "طلب دعم";
+    }
+  }
+
+  return (
+    INQUIRY_TYPES.find((option) => option.value === value)?.label ||
+    "Support Request"
+  );
+};
+
 const getLinkLabel = (url, shorten = false) => {
   if (!shorten) return url;
 
@@ -183,6 +206,42 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
   const hasSupportReply = useMemo(
     () => messages.some((msg) => !isMine(msg)),
     [messages, isMine],
+  );
+  const submittedRequestSummary = useMemo(() => {
+    if (!submitted || !messages.length) return null;
+
+    const firstMessage = messages[0];
+    const firstMessageText = normalizeSeedText(firstMessage?.message || "");
+    const inquiryDetails = normalizeSeedText(
+      firstMessage?.inquiryDetails || firstMessage?.message || "",
+    );
+    const firstSenderContact = normalizeContactValue(
+      firstMessage?.messageBy?.customerEmail || "",
+    );
+    const currentContact = normalizeContactValue(customerEmail || "");
+    const belongsToCustomer =
+      !firstSenderContact ||
+      !currentContact ||
+      firstSenderContact === currentContact;
+
+    if (
+      !belongsToCustomer ||
+      !firstMessageText ||
+      firstMessageText !== inquiryDetails
+    ) {
+      return null;
+    }
+
+    return {
+      inquiryAbout: firstMessage?.inquiryAbout || inquiryAbout || "other",
+      inquiryDetails:
+        `${firstMessage?.inquiryDetails || firstMessage?.message || ""}`.trim(),
+      submittedAt: firstMessage?.date || null,
+    };
+  }, [submitted, messages, customerEmail, inquiryAbout]);
+  const visibleMessages = useMemo(
+    () => (submittedRequestSummary ? messages.slice(1) : messages),
+    [messages, submittedRequestSummary],
   );
   const isAwaitingFirstSupportReply =
     submitted &&
@@ -899,7 +958,30 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
                   : "Thanks, your message was sent. Support is reviewing it now."}
               </CaseStatusNotice>
             )}
-            {messages.map((msg, index) => {
+            {submittedRequestSummary && (
+              <SubmissionSummaryCard>
+                <span className="eyebrow">
+                  {chosenLanguage === "Arabic"
+                    ? "تم إرسال طلب الدعم"
+                    : "Support request submitted"}
+                </span>
+                <strong className="title">
+                  {getInquiryTypeDisplayLabel(
+                    submittedRequestSummary.inquiryAbout,
+                    isArabic,
+                  )}
+                </strong>
+                <p>{submittedRequestSummary.inquiryDetails}</p>
+                {submittedRequestSummary.submittedAt && (
+                  <small>
+                    {new Date(
+                      submittedRequestSummary.submittedAt,
+                    ).toLocaleString()}
+                  </small>
+                )}
+              </SubmissionSummaryCard>
+            )}
+            {visibleMessages.map((msg, index) => {
               const mine = isMine(msg);
               return (
                 <MessageBubble
@@ -1342,6 +1424,47 @@ const CaseStatusNotice = styled.div`
   color: #1f3b67;
   font-size: 0.92rem;
   line-height: 1.5;
+`;
+
+const SubmissionSummaryCard = styled.div`
+  margin-bottom: 12px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid #dbe7f7;
+  background: linear-gradient(180deg, #f8fbff 0%, #f2f7ff 100%);
+  color: #1f3b67;
+  line-height: 1.5;
+
+  .eyebrow {
+    display: inline-block;
+    margin-bottom: 6px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #4f6b95;
+  }
+
+  .title {
+    display: block;
+    margin-bottom: 4px;
+    font-size: 0.95rem;
+    color: #16355e;
+  }
+
+  p {
+    margin: 0;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  small {
+    display: block;
+    margin-top: 8px;
+    font-size: 0.75rem;
+    color: #667892;
+  }
 `;
 
 const typingBounce = keyframes`
