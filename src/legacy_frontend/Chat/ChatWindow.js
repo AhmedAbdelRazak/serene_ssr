@@ -189,6 +189,14 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     caseStatus === "open" &&
     messages.length > 0 &&
     !hasSupportReply;
+  const contactLooksLikePhone = useMemo(() => {
+    const normalizedContact = normalizeContactValue(customerEmail);
+    return Boolean(
+      normalizedContact &&
+      !normalizedContact.includes("@") &&
+      /^[+\d().\s-]+$/.test(normalizedContact),
+    );
+  }, [customerEmail]);
   const socket = useMemo(() => getSocket(), []);
 
   const syncSupportCaseState = useCallback((supportCase) => {
@@ -809,11 +817,13 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     resetEndChatSuggestion();
   };
 
+  const isArabic = chosenLanguage === "Arabic";
+
   /* ════════════════════════════════════════════════════════
 	   15) RENDER
 	   ════════════════════════════════════════════════════════ */
   return (
-    <ChatWindowWrapper>
+    <ChatWindowWrapper dir={isArabic ? "rtl" : "ltr"}>
       {websiteSetup?.deactivateChatResponse && (
         <OfflineNotice>
           <span className="mr-1">
@@ -837,45 +847,50 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
           type="text"
           icon={<CloseOutlined />}
           onClick={closeChatWindow}
+          aria-label={isArabic ? "إغلاق نافذة الدعم" : "Close support window"}
         />
       </Header>
 
       {/* ─────────────── Rating Pane ─────────────── */}
       {isRatingVisible ? (
-        <RatingContainer>
-          <h4>
-            {chosenLanguage === "Arabic" ? "قيم خدمتنا" : "Rate Our Service"}
-          </h4>
-          <StarRatings
-            rating={rating}
-            starRatedColor="#faad14"
-            changeRating={setRating}
-            numberOfStars={5}
-            name="rating"
-            starDimension="24px"
-          />
-          <p>
-            {chosenLanguage === "Arabic"
-              ? "إذا كنت منتهيًا، يمكنك تقييم المحادثة وإنهاؤها الآن أو إبقاؤها مفتوحة."
-              : "If you're done, you can rate this chat and end it now, or keep it open."}
-          </p>
-          <div className="rating-buttons">
-            <Button type="primary" onClick={() => handleRateService(rating)}>
-              {chosenLanguage === "Arabic" ? "إرسال التقييم" : "Submit Rating"}
-            </Button>
-            <Button onClick={handleSkipRating}>
-              {chosenLanguage === "Arabic" ? "تخطي" : "Skip"}
-            </Button>
-            <Button onClick={handleKeepChatOpen}>
+        <ScrollablePanel>
+          <RatingContainer>
+            <h4>
+              {chosenLanguage === "Arabic" ? "قيم خدمتنا" : "Rate Our Service"}
+            </h4>
+            <StarRatings
+              rating={rating}
+              starRatedColor="#faad14"
+              changeRating={setRating}
+              numberOfStars={5}
+              name="rating"
+              starDimension="24px"
+            />
+            <p>
               {chosenLanguage === "Arabic"
-                ? "إبقاء المحادثة مفتوحة"
-                : "Keep Chat Open"}
-            </Button>
-          </div>
-        </RatingContainer>
+                ? "إذا كنت منتهيًا، يمكنك تقييم المحادثة وإنهاؤها الآن أو إبقاؤها مفتوحة."
+                : "If you're done, you can rate this chat and end it now, or keep it open."}
+            </p>
+            <div className="rating-buttons">
+              <Button type="primary" onClick={() => handleRateService(rating)}>
+                {chosenLanguage === "Arabic"
+                  ? "إرسال التقييم"
+                  : "Submit Rating"}
+              </Button>
+              <Button onClick={handleSkipRating}>
+                {chosenLanguage === "Arabic" ? "تخطي" : "Skip"}
+              </Button>
+              <Button onClick={handleKeepChatOpen}>
+                {chosenLanguage === "Arabic"
+                  ? "إبقاء المحادثة مفتوحة"
+                  : "Keep Chat Open"}
+              </Button>
+            </div>
+          </RatingContainer>
+        </ScrollablePanel>
       ) : submitted ? (
         /* ─────────────── Chat Area ─────────────── */
-        <>
+        <SubmittedChatLayout>
           <MessagesSection>
             {isAwaitingFirstSupportReply && (
               <CaseStatusNotice>
@@ -909,7 +924,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
           </MessagesSection>
 
           {caseStatus === "open" ? (
-            <Form.Item>
+            <ComposerSection>
               {showEndChatPrompt ? (
                 <EndChatPrompt>
                   <strong>
@@ -951,12 +966,23 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
                       value={newMessage}
                       onChange={handleInputChange}
                       onBlur={handleStopTypingLocal}
+                      autoCapitalize="sentences"
+                      autoCorrect="on"
+                      spellCheck
+                      enterKeyHint="send"
                       autoSize={{ minRows: 1, maxRows: 6 }}
                       onPressEnter={handlePressEnter}
                     />
-                    <Button onClick={() => setShowEmojiPicker((p) => !p)}>
+                    <IconActionButton
+                      data-emoji-trigger="true"
+                      type="default"
+                      onClick={() => setShowEmojiPicker((p) => !p)}
+                      aria-label={
+                        isArabic ? "فتح قائمة الإيموجي" : "Open emoji picker"
+                      }
+                    >
                       😀
-                    </Button>
+                    </IconActionButton>
                     {showEmojiPicker && (
                       <EmojiPickerWrapper>
                         <EmojiPicker onEmojiClick={handleEmojiClick} />
@@ -967,7 +993,11 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
                       onChange={handleFileChange}
                       beforeUpload={() => false}
                     >
-                      <Button icon={<UploadOutlined />} />
+                      <IconActionButton
+                        type="default"
+                        icon={<UploadOutlined />}
+                        aria-label={isArabic ? "رفع ملف" : "Upload file"}
+                      />
                     </Upload>
                   </ChatInputContainer>
 
@@ -996,7 +1026,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
                   </Button>
                 </>
               )}
-            </Form.Item>
+            </ComposerSection>
           ) : (
             <ClosedCaseNotice>
               <strong>
@@ -1020,101 +1050,123 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
               </Button>
             </ClosedCaseNotice>
           )}
-        </>
+        </SubmittedChatLayout>
       ) : (
         /* ─────────────── Initial Form ─────────────── */
-        <Form layout="vertical" onFinish={handleSubmit}>
-          <Form.Item label="Full Name" required>
-            <Input
-              value={customerName}
-              onChange={(e) => setCustomerName(e.target.value)}
-              placeholder="FirstName LastName"
-              disabled={isAuthenticated() && !!customerName}
-              style={
-                isAuthenticated() && customerName
-                  ? { background: "#f5f5f5", color: "#666" }
-                  : undefined
-              }
-            />
-          </Form.Item>
-
-          <Form.Item label="Email or Phone" required>
-            <Input
-              value={customerEmail}
-              onChange={handleContactChange}
-              placeholder="client@example.com or 1234567890"
-              disabled={isAuthenticated() && !!customerEmail}
-              style={
-                isAuthenticated() && customerEmail
-                  ? { background: "#f5f5f5", color: "#666" }
-                  : undefined
-              }
-            />
-          </Form.Item>
-
-          <Form.Item label="Inquiry About" required>
-            <Select
-              placeholder="Select an option"
-              value={inquiryAbout || undefined}
-              onChange={setInquiryAbout}
-            >
-              {INQUIRY_TYPES.map((opt) => (
-                <Option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </Option>
-              ))}
-            </Select>
-          </Form.Item>
-
-          {inquiryAbout === "order" && (
-            <Form.Item label="Order/Invoice Number" required>
+        <ScrollablePanel>
+          <InitialForm layout="vertical" onFinish={handleSubmit}>
+            <Form.Item label="Full Name" required>
               <Input
-                value={orderNumber}
-                onChange={(e) => setOrderNumber(e.target.value)}
-                placeholder="E.g. INV12345"
+                value={customerName}
+                onChange={(e) => setCustomerName(e.target.value)}
+                placeholder="Your full name"
+                autoCapitalize="words"
+                autoComplete="name"
+                disabled={isAuthenticated() && !!customerName}
+                style={
+                  isAuthenticated() && customerName
+                    ? { background: "#f5f5f5", color: "#666" }
+                    : undefined
+                }
               />
             </Form.Item>
-          )}
 
-          {inquiryAbout === "product" && (
-            <Form.Item label="Product Name" required>
-              <ProductInputWrapper>
+            <Form.Item label="Email or Mobile Number" required>
+              <Input
+                value={customerEmail}
+                onChange={handleContactChange}
+                placeholder="name@example.com or 5551234567"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                inputMode={contactLooksLikePhone ? "tel" : "email"}
+                autoComplete={contactLooksLikePhone ? "tel" : "email"}
+                dir="ltr"
+                disabled={isAuthenticated() && !!customerEmail}
+                style={
+                  isAuthenticated() && customerEmail
+                    ? { background: "#f5f5f5", color: "#666" }
+                    : undefined
+                }
+              />
+            </Form.Item>
+
+            <Form.Item label="Inquiry About" required>
+              <Select
+                placeholder="Choose one"
+                value={inquiryAbout || undefined}
+                onChange={setInquiryAbout}
+              >
+                {INQUIRY_TYPES.map((opt) => (
+                  <Option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </Option>
+                ))}
+              </Select>
+            </Form.Item>
+
+            {inquiryAbout === "order" && (
+              <Form.Item label="Order or Invoice Number" required>
                 <Input
-                  value={productName}
-                  onChange={(e) => setProductName(e.target.value)}
-                  placeholder="Type at least 4 letters..."
+                  value={orderNumber}
+                  onChange={(e) => setOrderNumber(e.target.value)}
+                  placeholder="For example: 8100273802"
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  inputMode="text"
+                  dir="ltr"
                 />
-                {showSuggestions && productSuggestions.length > 0 && (
-                  <SuggestionsList>
-                    {productSuggestions.map((prod) => (
-                      <SuggestionItem
-                        key={prod._id}
-                        onClick={() => handleSelectProduct(prod)}
-                      >
-                        <strong>{prod.productName}</strong>
-                        {prod.productSKU ? ` (SKU: ${prod.productSKU})` : ""}
-                      </SuggestionItem>
-                    ))}
-                  </SuggestionsList>
-                )}
-              </ProductInputWrapper>
-            </Form.Item>
-          )}
+              </Form.Item>
+            )}
 
-          {inquiryAbout === "other" && (
-            <Form.Item label="Brief Description" required>
-              <Input
-                value={otherInquiry}
-                onChange={(e) => setOtherInquiry(e.target.value)}
-                placeholder="Describe your inquiry"
-              />
-            </Form.Item>
-          )}
+            {inquiryAbout === "product" && (
+              <Form.Item label="Product Name" required>
+                <ProductInputWrapper>
+                  <Input
+                    value={productName}
+                    onChange={(e) => setProductName(e.target.value)}
+                    placeholder="Start typing the product name"
+                    autoCapitalize="words"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  {showSuggestions && productSuggestions.length > 0 && (
+                    <SuggestionsList>
+                      {productSuggestions.map((prod) => (
+                        <SuggestionItem
+                          key={prod._id}
+                          onClick={() => handleSelectProduct(prod)}
+                        >
+                          <strong>{prod.productName}</strong>
+                          {prod.productSKU ? ` (SKU: ${prod.productSKU})` : ""}
+                        </SuggestionItem>
+                      ))}
+                    </SuggestionsList>
+                  )}
+                </ProductInputWrapper>
+              </Form.Item>
+            )}
 
-          <Button type="primary" htmlType="submit" block>
-            {chosenLanguage === "Arabic" ? "بدء المحادثة" : "Start Chat"}
-          </Button>
-        </Form>
+            {inquiryAbout === "other" && (
+              <Form.Item label="Brief Description" required>
+                <Input.TextArea
+                  value={otherInquiry}
+                  onChange={(e) => setOtherInquiry(e.target.value)}
+                  placeholder="Tell us briefly what you need"
+                  autoCapitalize="sentences"
+                  autoCorrect="on"
+                  spellCheck
+                  autoSize={{ minRows: 3, maxRows: 5 }}
+                />
+              </Form.Item>
+            )}
+
+            <Button type="primary" htmlType="submit" block>
+              {chosenLanguage === "Arabic" ? "بدء المحادثة" : "Start Chat"}
+            </Button>
+          </InitialForm>
+        </ScrollablePanel>
       )}
     </ChatWindowWrapper>
   );
@@ -1128,58 +1180,164 @@ export default ChatWindow;
 
 const ChatWindowWrapper = styled.div`
   position: fixed;
-  bottom: 70px;
-  right: 20px;
-  width: 350px;
-  max-width: 90%;
-  height: 70vh;
-  max-height: 80vh;
+  right: 18px;
+  bottom: 78px;
+  width: min(420px, calc(100vw - 24px));
+  height: min(720px, calc(100dvh - 110px));
+  display: flex;
+  flex-direction: column;
   background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 8px;
+  border: 1px solid rgba(29, 41, 57, 0.12);
+  border-radius: 18px;
   z-index: 1001;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
-  padding: 20px;
+  box-shadow: 0 18px 50px rgba(15, 23, 42, 0.18);
   overflow: hidden;
+  overscroll-behavior: contain;
 
-  select,
-  option,
   input,
-  strong {
-    text-transform: capitalize !important;
+  textarea,
+  strong,
+  .ant-select-selection-item,
+  .ant-select-selection-placeholder {
+    text-transform: none !important;
+  }
+
+  .ant-input,
+  .ant-input-affix-wrapper,
+  .ant-select-selector,
+  .ant-btn {
+    border-radius: 12px;
+  }
+
+  .ant-input,
+  .ant-select-selector,
+  textarea.ant-input {
+    font-size: 16px;
   }
 
   @media (max-width: 768px) {
-    bottom: 85px;
-    right: 5%;
-    width: 90%;
-    height: 80vh;
+    left: 8px;
+    right: 8px;
+    bottom: 76px;
+    width: auto;
+    height: calc(100dvh - 92px);
+    max-height: none;
+    border-radius: 16px;
   }
+`;
+
+const ScrollablePanel = styled.div`
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 0 16px 16px;
+  -webkit-overflow-scrolling: touch;
+
+  @media (max-width: 768px) {
+    padding: 0 14px 14px;
+  }
+`;
+
+const SubmittedChatLayout = styled.div`
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 `;
 
 const Header = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 10px;
+  gap: 12px;
+  padding: 16px 16px 12px;
+  border-bottom: 1px solid #f0f0f0;
+  background: #fff;
+
   h3 {
-    font-weight: bold;
-    font-size: 1.5rem;
+    margin: 0;
+    font-weight: 800;
+    font-size: 1.1rem;
+    line-height: 1.2;
+    color: #1f2937;
+  }
+
+  .ant-btn {
+    min-width: 40px;
+    height: 40px;
+    padding: 0;
+    color: #4b5563;
+  }
+
+  @media (max-width: 768px) {
+    padding: 14px 14px 10px;
+
+    h3 {
+      font-size: 1rem;
+    }
   }
 `;
 
 const MessagesSection = styled.div`
-  max-height: 55vh;
-  margin-bottom: 10px;
+  flex: 1;
+  min-height: 0;
+  padding: 14px 16px 10px;
   overflow-y: auto;
   overflow-x: hidden;
   scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+
+  @media (max-width: 768px) {
+    padding: 12px 14px 8px;
+  }
+`;
+
+const ComposerSection = styled.div`
+  position: relative;
+  padding: 12px 16px 16px;
+  border-top: 1px solid #f1f5f9;
+  background: #fff;
+
+  @media (max-width: 768px) {
+    padding: 10px 14px 14px;
+    padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+`;
+
+const InitialForm = styled(Form)`
+  padding-top: 14px;
+
+  .ant-form-item {
+    margin-bottom: 14px;
+  }
+
+  .ant-form-item-label > label {
+    font-weight: 600;
+    color: #374151;
+  }
+
+  .ant-select-selector,
+  .ant-input,
+  textarea.ant-input {
+    min-height: 46px;
+  }
+
+  textarea.ant-input {
+    min-height: 92px;
+  }
+
+  .ant-btn {
+    height: 46px;
+    margin-top: 4px;
+    font-weight: 600;
+  }
 `;
 
 const CaseStatusNotice = styled.div`
-  margin-bottom: 10px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
   background: #eef6ff;
   color: #1f3b67;
   font-size: 0.92rem;
@@ -1218,9 +1376,9 @@ const TypingIndicator = styled.div`
 `;
 
 const MessageBubble = styled.div`
-  margin-bottom: 8px;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin-bottom: 10px;
+  padding: 12px 14px;
+  border-radius: 14px;
   line-height: 1.55;
   background: ${(props) => (props.isMine ? "#d2f8d2" : "#f5f5f5")};
   white-space: pre-wrap;
@@ -1238,7 +1396,7 @@ const MessageBubble = styled.div`
 
   small {
     display: block;
-    margin-top: 4px;
+    margin-top: 6px;
     font-size: 0.75rem;
     color: #888;
   }
@@ -1246,6 +1404,7 @@ const MessageBubble = styled.div`
 
 const RatingContainer = styled.div`
   text-align: center;
+  padding-top: 18px;
 
   p {
     margin: 12px 0 0;
@@ -1257,17 +1416,32 @@ const RatingContainer = styled.div`
     margin-top: 16px;
     display: flex;
     justify-content: center;
+    flex-wrap: wrap;
     gap: 10px;
   }
 `;
 
 const ChatInputContainer = styled.div`
-  display: flex;
-  gap: 4px;
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 8px;
+  align-items: end;
 
   textarea {
-    flex: 1;
     resize: none;
+    min-height: 44px;
+    max-height: 152px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .ant-upload {
+    display: block;
+  }
+
+  @media (max-width: 768px) {
+    gap: 6px;
   }
 `;
 
@@ -1277,7 +1451,7 @@ const EndChatPrompt = styled.div`
   gap: 8px;
   margin-top: 4px;
   padding: 12px;
-  border-radius: 10px;
+  border-radius: 12px;
   background: #fff7e6;
   border: 1px solid #ffd591;
   color: #614700;
@@ -1285,6 +1459,7 @@ const EndChatPrompt = styled.div`
 
   .actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 8px;
     margin-top: 4px;
   }
@@ -1294,22 +1469,58 @@ const ClosedCaseNotice = styled.div`
   display: flex;
   flex-direction: column;
   gap: 6px;
-  margin-top: 4px;
-  padding: 12px;
-  border-radius: 10px;
+  margin: 14px 16px 16px;
+  padding: 14px;
+  border-radius: 12px;
   background: #faf7f2;
   border: 1px solid #eadfce;
   color: #5d4a36;
   line-height: 1.5;
+
+  @media (max-width: 768px) {
+    margin: 12px 14px 14px;
+  }
+`;
+
+const IconActionButton = styled(Button)`
+  min-width: 42px;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+
+  &[data-emoji-trigger="true"] {
+    font-size: 0;
+  }
+
+  &[data-emoji-trigger="true"]::before {
+    content: "\\1F600";
+    font-size: 1rem;
+    line-height: 1;
+  }
+
+  .anticon {
+    font-size: 1rem;
+  }
 `;
 
 const EmojiPickerWrapper = styled.div`
   position: absolute;
-  bottom: 60px;
-  right: 20px;
+  bottom: 56px;
+  right: 0;
   z-index: 9999;
   background: #fff;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  border-radius: 14px;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
+  overflow: hidden;
+
+  @media (max-width: 768px) {
+    right: 0;
+    width: min(320px, calc(100vw - 44px));
+  }
 `;
 
 const ProductInputWrapper = styled.div`
@@ -1318,33 +1529,42 @@ const ProductInputWrapper = styled.div`
 
 const SuggestionsList = styled.ul`
   position: absolute;
-  top: 38px;
+  top: calc(100% + 6px);
   left: 0;
   right: 0;
   max-height: 180px;
   overflow-y: auto;
   background: #fff;
-  border: 1px solid #ccc;
+  border: 1px solid #d9d9d9;
+  border-radius: 12px;
   list-style: none;
   margin: 0;
   padding: 0;
   z-index: 9999;
+  box-shadow: 0 10px 30px rgba(15, 23, 42, 0.14);
 `;
 
 const SuggestionItem = styled.li`
-  padding: 8px 12px;
+  padding: 10px 12px;
   cursor: pointer;
+  line-height: 1.45;
+
   &:hover {
     background-color: #eee;
   }
 `;
 
 const OfflineNotice = styled.div`
-  background: #fafafa;
-  border: 1px solid #eee;
-  padding: 2px 5px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  font-size: 0.78rem;
-  font-weight: bold;
+  margin: 16px 16px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: #fff8e1;
+  border: 1px solid #ffe08a;
+  font-size: 0.82rem;
+  font-weight: 600;
+  line-height: 1.45;
+
+  @media (max-width: 768px) {
+    margin: 14px 14px 0;
+  }
 `;
