@@ -1413,13 +1413,14 @@ const Header = styled.div`
     }
 
     .ant-btn {
-      min-width: 34px;
-      height: 34px;
-      font-size: 0.95rem;
-      color: #c81e1e;
-      border-color: #fecaca;
-      background: #fff5f5;
-      transform: translateY(2px);
+      min-width: 36px;
+      height: 36px;
+      font-size: 1rem;
+      color: #be123c;
+      border-color: #fbcfe8;
+      background: #fff1f2;
+      box-shadow: 0 2px 8px rgba(190, 24, 93, 0.12);
+      transform: translateY(4px);
     }
   }
 `;
@@ -1466,13 +1467,19 @@ const ComposerSection = styled.div`
       display: inline-flex !important;
       align-items: center;
       justify-content: center;
-      width: calc(50% - 4px) !important;
+      width: calc(100% - 116px) !important;
       margin-top: 6px !important;
       vertical-align: top;
     }
 
     > .ant-btn.ant-btn-block + .ant-btn.ant-btn-block {
+      width: 108px !important;
       margin-left: 8px;
+      padding-inline: 8px;
+      font-size: 0.8rem;
+      background: #fff1f2;
+      color: #e11d48;
+      border-color: #fecdd3;
     }
   }
 `;
