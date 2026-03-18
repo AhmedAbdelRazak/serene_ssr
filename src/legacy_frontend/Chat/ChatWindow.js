@@ -288,46 +288,6 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     [syncSupportCaseState],
   ); //  ← empty dependency array keeps the reference stable
 
-  const resetChatState = useCallback(() => {
-    stopCustomerTypingSession({ force: true });
-    if (endChatSuggestionTimerRef.current) {
-      clearTimeout(endChatSuggestionTimerRef.current);
-      endChatSuggestionTimerRef.current = null;
-    }
-    if (customerTypingIdleTimerRef.current) {
-      clearTimeout(customerTypingIdleTimerRef.current);
-      customerTypingIdleTimerRef.current = null;
-    }
-    localStorage.removeItem("currentChat");
-    pendingLocalIds.current.clear();
-    selectedProductNameRef.current = "";
-    isCustomerTypingRef.current = false;
-    hasPendingEndChatSuggestionRef.current = false;
-    submittedRef.current = false;
-    caseStatusRef.current = "open";
-    isRatingVisibleRef.current = false;
-    setCaseId("");
-    setSubmitted(false);
-    setCaseStatus("open");
-    setClosedBy(null);
-    setMessages([]);
-    setNewMessage("");
-    setShowEmojiPicker(false);
-    setFileList([]);
-    setTypingStatus("");
-    setShowEndChatPrompt(false);
-    setIsRatingVisible(false);
-    setRating(0);
-    setInquiryAbout("");
-    setOrderNumber("");
-    setProductName("");
-    setOtherInquiry("");
-    setStoreId(null);
-    setProductSuggestions([]);
-    setShowSuggestions(false);
-    setHasSelectedProduct(false);
-  }, [stopCustomerTypingSession]);
-
   const clearEndChatSuggestionTimer = useCallback(() => {
     if (endChatSuggestionTimerRef.current) {
       clearTimeout(endChatSuggestionTimerRef.current);
@@ -337,10 +297,16 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
 
   const clearCustomerTypingTimer = useCallback(() => {
     if (customerTypingIdleTimerRef.current) {
-      clearTimeout(customerTypingIdleTimerRef.current);
+      clearInterval(customerTypingIdleTimerRef.current);
       customerTypingIdleTimerRef.current = null;
     }
   }, []);
+
+  const resetEndChatSuggestion = useCallback(() => {
+    clearEndChatSuggestionTimer();
+    hasPendingEndChatSuggestionRef.current = false;
+    setShowEndChatPrompt(false);
+  }, [clearEndChatSuggestionTimer]);
 
   const stopCustomerTypingSession = useCallback(
     ({ force = false } = {}) => {
@@ -392,11 +358,41 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     stopCustomerTypingSession,
   ]);
 
-  const resetEndChatSuggestion = useCallback(() => {
-    clearEndChatSuggestionTimer();
+  const resetChatState = useCallback(() => {
+    stopCustomerTypingSession({ force: true });
+    if (endChatSuggestionTimerRef.current) {
+      clearTimeout(endChatSuggestionTimerRef.current);
+      endChatSuggestionTimerRef.current = null;
+    }
+    localStorage.removeItem("currentChat");
+    pendingLocalIds.current.clear();
+    selectedProductNameRef.current = "";
+    isCustomerTypingRef.current = false;
     hasPendingEndChatSuggestionRef.current = false;
+    submittedRef.current = false;
+    caseStatusRef.current = "open";
+    isRatingVisibleRef.current = false;
+    setCaseId("");
+    setSubmitted(false);
+    setCaseStatus("open");
+    setClosedBy(null);
+    setMessages([]);
+    setNewMessage("");
+    setShowEmojiPicker(false);
+    setFileList([]);
+    setTypingStatus("");
     setShowEndChatPrompt(false);
-  }, [clearEndChatSuggestionTimer]);
+    setIsRatingVisible(false);
+    setRating(0);
+    setInquiryAbout("");
+    setOrderNumber("");
+    setProductName("");
+    setOtherInquiry("");
+    setStoreId(null);
+    setProductSuggestions([]);
+    setShowSuggestions(false);
+    setHasSelectedProduct(false);
+  }, [stopCustomerTypingSession]);
 
   const scheduleEndChatPrompt = useCallback(() => {
     clearEndChatSuggestionTimer();
