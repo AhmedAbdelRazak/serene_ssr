@@ -185,6 +185,7 @@ const ChatDetailProperty = ({
 
     const messageData = {
       caseId: chat._id,
+      senderType: "staff",
       messageBy: {
         customerName: displayName,
         customerEmail: user?.email,

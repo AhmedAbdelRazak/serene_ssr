@@ -551,11 +551,15 @@ export function getProductSlug(product = {}) {
     product?.isPrintifyProduct && product?.printifyProductDetails?.POD,
   );
   if (isPod) return getPodProductSlug(product);
-  return product?.slug || toSlug(getProductDisplayName(product));
+  const candidate =
+    product?.slug || getProductDisplayName(product) || "product";
+  return toSlug(candidate) || "product";
 }
 
 export function getCategorySlug(product = {}) {
-  return product?.category?.categorySlug || product?.categorySlug || "all";
+  const candidate =
+    product?.category?.categorySlug || product?.categorySlug || "all";
+  return toSlug(candidate) || "all";
 }
 
 export function buildProductPath(product = {}) {
@@ -844,6 +848,20 @@ export function buildPodQueryCombinations(product = {}) {
       );
     }
   }
+
+  return uniqueStrings(combinations);
+}
+
+export function buildStandardQueryCombinations(product = {}) {
+  if (isPodProduct(product)) return [];
+
+  const combinations = getProductAttributes(product).map((attr) =>
+    buildPodSelectionQuery({
+      color: `${attr?.color || ""}`.trim(),
+      size: `${attr?.size || ""}`.trim(),
+      scent: `${attr?.scent || ""}`.trim(),
+    }),
+  );
 
   return uniqueStrings(combinations);
 }

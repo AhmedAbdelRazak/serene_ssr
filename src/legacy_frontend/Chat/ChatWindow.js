@@ -750,6 +750,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
       _id: localId,
       caseId,
       local: true,
+      senderType: "client",
       messageBy: { customerName, customerEmail: normalizedContact },
       message: newMessage,
       date: nowISO,
@@ -767,6 +768,7 @@ const ChatWindow = ({ closeChatWindow, chosenLanguage, websiteSetup }) => {
     try {
       await updateSupportCase(caseId, {
         conversation: {
+          senderType: "client",
           messageBy: { customerName, customerEmail: normalizedContact },
           message: newMessage,
           date: nowISO,

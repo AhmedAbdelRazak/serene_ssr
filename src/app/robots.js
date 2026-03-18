@@ -1,25 +1,25 @@
-import { absoluteUrl } from "@/lib/config";
+import { SITE_URL, absoluteUrl } from "@/lib/config";
 
 export default function robots() {
-	return {
-		rules: [
-			{
-				userAgent: "*",
-				allow: "/",
-				disallow: [
-					"/admin",
-					"/seller",
-					"/dashboard",
-					"/signin",
-					"/signup",
-					"/sellingagent",
-					"/cart",
-					"/payment-link",
-					"/api/track",
-				],
-			},
-		],
-		sitemap: absoluteUrl("/sitemap.xml"),
-		host: absoluteUrl("/"),
-	};
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: [
+          "/admin",
+          "/seller",
+          "/dashboard",
+          "/signin",
+          "/signup",
+          "/sellingagent",
+          "/cart",
+          "/payment-link",
+          "/api/track",
+        ],
+      },
+    ],
+    sitemap: absoluteUrl("/sitemap.xml"),
+    host: SITE_URL,
+  };
 }
