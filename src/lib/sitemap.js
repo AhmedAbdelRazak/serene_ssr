@@ -5,9 +5,7 @@ import {
   getFilteredProducts,
 } from "@/lib/api";
 import {
-  buildPodQueryCombinations,
   buildProductPath,
-  buildStandardQueryCombinations,
   getPodGalleryImages,
   getPodOccasions,
   getPrimaryProductImage,
@@ -175,29 +173,11 @@ function getVariantSitemapImages(product = {}, selection = {}) {
   );
 }
 
-function buildProductQueryCombinations(product = {}) {
-  return isPodProduct(product)
-    ? buildPodQueryCombinations(product)
-    : buildStandardQueryCombinations(product);
-}
-
-function parseSelectionQuery(query = "") {
-  const params = new URLSearchParams(query);
-  return {
-    occasion: `${params.get("occasion") || ""}`.trim(),
-    color: `${params.get("color") || ""}`.trim(),
-    size: `${params.get("size") || ""}`.trim(),
-    scent: `${params.get("scent") || ""}`.trim(),
-    name: `${params.get("name") || ""}`.trim(),
-  };
-}
-
 function buildProductSitemapEntriesForProduct(product = {}, request) {
   const basePath = buildProductPath(product);
   if (!basePath || basePath === "/") return [];
 
   const lastmod = product?.updatedAt || product?.createdAt || "";
-  const queries = buildProductQueryCombinations(product);
   const entries = [
     {
       loc: absoluteUrl(basePath, request),
@@ -206,15 +186,18 @@ function buildProductSitemapEntriesForProduct(product = {}, request) {
     },
   ];
 
-  for (const query of queries) {
-    const safeQuery = `${query || ""}`.trim();
-    if (!safeQuery) continue;
-
-    entries.push({
-      loc: absoluteUrl(`${basePath}?${safeQuery}`, request),
-      lastmod,
-      images: getVariantSitemapImages(product, parseSelectionQuery(safeQuery)),
-    });
+  if (isPodProduct(product)) {
+    for (const occasion of getPodOccasions(product)) {
+      const safeOccasion = `${occasion || ""}`.trim();
+      if (!safeOccasion) continue;
+      const params = new URLSearchParams();
+      params.set("occasion", safeOccasion);
+      entries.push({
+        loc: absoluteUrl(`${basePath}?${params.toString()}`, request),
+        lastmod,
+        images: getVariantSitemapImages(product, { occasion: safeOccasion }),
+      });
+    }
   }
 
   return entries;
