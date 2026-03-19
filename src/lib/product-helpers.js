@@ -1,4 +1,8 @@
 import { POD_OCCASIONS } from "./pod-occasions";
+import {
+  normalizePodProduct,
+  resolveInitialPodVariantSelection,
+} from "./pod-product";
 import { stripHtml, toSlug, uniqueStrings } from "./utils";
 
 const CLOUDINARY_BASE_URL =
@@ -470,6 +474,48 @@ export function resolveImageUrl(imageLike) {
   return normalizeUrl(direct || "");
 }
 
+export function extractImageUrls(source) {
+  if (!source) return [];
+  if (Array.isArray(source)) {
+    return source.flatMap((item) => extractImageUrls(item));
+  }
+  if (typeof source === "string") {
+    const normalized = resolveImageUrl(source);
+    return normalized ? [normalized] : [];
+  }
+  if (typeof source === "object") {
+    const direct = resolveImageUrl(source);
+    const nested = extractImageUrls(source?.images);
+    return [direct, ...nested].filter(Boolean);
+  }
+  return [];
+}
+
+export function uniqueImageUrls(urls = []) {
+  const seen = new Set();
+  const deduped = [];
+  for (const entry of urls) {
+    const url = `${entry || ""}`.trim();
+    if (!url || seen.has(url)) continue;
+    seen.add(url);
+    deduped.push(url);
+  }
+  return deduped;
+}
+
+function isCloudinaryImageUrl(url = "") {
+  return /^(https?:)?\/\/res\.cloudinary\.com\//i.test(`${url || ""}`.trim());
+}
+
+function toCloudinaryImageUrl(source) {
+  const urls = extractImageUrls(source);
+  return urls.find((url) => isCloudinaryImageUrl(url)) || "";
+}
+
+function cloudinaryOnlyImageUrls(urls = []) {
+  return uniqueImageUrls(urls).filter((url) => isCloudinaryImageUrl(url));
+}
+
 export function getPrimaryProductImage(
   product = {},
   {
@@ -511,6 +557,97 @@ export function getPrimaryProductImage(
     if (url) return url;
   }
   return "";
+}
+
+export function getRepresentativePodSelection(product = {}, selection = {}) {
+  if (!isPodProduct(product)) {
+    return {
+      occasion: `${selection?.occasion || ""}`.trim(),
+      name: `${selection?.name || ""}`.trim(),
+      color: `${selection?.color || ""}`.trim(),
+      size: `${selection?.size || ""}`.trim(),
+      scent: `${selection?.scent || ""}`.trim(),
+    };
+  }
+
+  const normalizedProduct = normalizePodProduct(product);
+  const initialSelection = resolveInitialPodVariantSelection(
+    normalizedProduct,
+    selection,
+  );
+
+  return {
+    occasion: `${selection?.occasion || ""}`.trim(),
+    name: `${selection?.name || ""}`.trim(),
+    color: `${initialSelection?.color || selection?.color || ""}`.trim(),
+    size: `${initialSelection?.size || selection?.size || ""}`.trim(),
+    scent: `${initialSelection?.scent || selection?.scent || ""}`.trim(),
+  };
+}
+
+export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
+  const safeLimit = Math.max(1, Number(limit) || 1);
+
+  if (isPodProduct(product)) {
+    const representativeSelection = getRepresentativePodSelection(
+      product,
+      selection,
+    );
+    const matchedAttr = findBestProductAttribute(
+      product,
+      representativeSelection,
+    );
+    const cloudinaryImages = cloudinaryOnlyImageUrls([
+      ...getPodDefaultDesignImages(product, {
+        ...representativeSelection,
+        limit: safeLimit,
+      }),
+      toCloudinaryImageUrl(
+        getPrimaryProductImage(product, representativeSelection),
+      ),
+      ...extractImageUrls(matchedAttr?.exampleDesignImage),
+      ...extractImageUrls(matchedAttr?.productImages),
+      ...extractImageUrls(product?.thumbnailImage),
+      ...extractImageUrls(product?.productImages),
+      ...extractImageUrls(product?.images),
+    ]).slice(0, safeLimit);
+
+    if (cloudinaryImages.length) {
+      return cloudinaryImages;
+    }
+
+    return uniqueImageUrls([
+      getPrimaryProductImage(product, representativeSelection),
+      ...getPodGalleryImages(product, representativeSelection, safeLimit),
+      ...extractImageUrls(product?.images),
+    ]).slice(0, safeLimit);
+  }
+
+  const normalizedSelection = {
+    color: `${selection?.color || ""}`.trim(),
+    size: `${selection?.size || ""}`.trim(),
+    scent: `${selection?.scent || ""}`.trim(),
+  };
+  const matchedAttr = findBestProductAttribute(product, normalizedSelection);
+  const cloudinaryImages = cloudinaryOnlyImageUrls([
+    toCloudinaryImageUrl(getPrimaryProductImage(product, normalizedSelection)),
+    ...extractImageUrls(matchedAttr?.exampleDesignImage),
+    ...extractImageUrls(matchedAttr?.productImages),
+    ...extractImageUrls(product?.thumbnailImage),
+    ...extractImageUrls(product?.productImages),
+    ...extractImageUrls(product?.images),
+  ]).slice(0, safeLimit);
+
+  if (cloudinaryImages.length) {
+    return cloudinaryImages;
+  }
+
+  return uniqueImageUrls([
+    getPrimaryProductImage(product, normalizedSelection),
+    ...extractImageUrls(matchedAttr?.productImages),
+    ...extractImageUrls(product?.productImages),
+    ...extractImageUrls(product?.images),
+  ]).slice(0, safeLimit);
 }
 
 export function getProductDisplayName(product = {}) {

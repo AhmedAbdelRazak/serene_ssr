@@ -3,11 +3,10 @@ import {
   buildPodSelectionQuery,
   buildProductPath,
   findBestProductAttribute,
-  getPodDefaultDesignImages,
-  getPodGalleryImages,
+  getPrimaryProductImage,
+  getProductSeoImages,
   getPodOccasions,
   getPodVariantSelections,
-  getPrimaryProductImage,
   getProductDescription,
   getProductDisplayName,
   getProductPrice,
@@ -345,54 +344,12 @@ function buildFeedImageSet(
   product = {},
   { attr = null, occasion = "", color = "", size = "", scent = "" } = {},
 ) {
-  const defaultDesignImageSet = getPodDefaultDesignImages(product, {
-    occasion,
-    color,
-    size,
-    scent,
-    limit: MAX_FEED_IMAGE_COUNT,
-  });
-  const primary = getPrimaryProductImage(product, {
-    occasion,
-    color,
-    size,
-    scent,
-  });
-
-  const images = cloudinaryOnlyImageUrls([
-    ...defaultDesignImageSet,
-    toCloudinaryImageUrl(primary),
-    ...extractImageUrls(attr?.exampleDesignImage),
-    ...extractImageUrls(attr?.productImages),
-    ...extractImageUrls(product?.thumbnailImage),
-    ...extractImageUrls(product?.productImages),
-  ]);
-
-  if (images.length) {
-    return images.slice(0, MAX_FEED_IMAGE_COUNT);
-  }
-
-  const fallbackImageSet = cloudinaryOnlyImageUrls([
-    ...defaultDesignImageSet,
-    toCloudinaryImageUrl(
-      getPrimaryProductImage(product, {
-        occasion,
-        color,
-        size,
-        scent,
-      }),
-    ),
-    ...extractImageUrls(
-      findBestProductAttribute(product, { color, size, scent })?.productImages,
-    ),
-    ...extractImageUrls(product?.thumbnailImage),
-  ]);
-
-  if (fallbackImageSet.length) {
-    return fallbackImageSet.slice(0, MAX_FEED_IMAGE_COUNT);
-  }
-
-  return [DEFAULT_CLOUDINARY_FEED_IMAGE];
+  const images = getProductSeoImages(
+    product,
+    { occasion, color, size, scent },
+    MAX_FEED_IMAGE_COUNT,
+  );
+  return images.length ? images : [DEFAULT_CLOUDINARY_FEED_IMAGE];
 }
 
 function buildAdditionalImageXml(imageSet = []) {

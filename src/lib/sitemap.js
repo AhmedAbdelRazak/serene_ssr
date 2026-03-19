@@ -6,12 +6,10 @@ import {
 } from "@/lib/api";
 import {
   buildProductPath,
-  getPodGalleryImages,
   getPodOccasions,
-  getPrimaryProductImage,
+  getProductSeoImages,
   getProductSlug,
   isPodProduct,
-  resolveImageUrl,
 } from "@/lib/product-helpers";
 import { absoluteXmlUrl, escapeXml } from "@/lib/xml";
 
@@ -123,54 +121,17 @@ export function buildSitemapIndexXml(entries = []) {
     .join("\n")}\n</sitemapindex>`;
 }
 
-function extractStandardProductImages(product = {}) {
-  const urls = [];
-  const topLevelImages = Array.isArray(product?.images) ? product.images : [];
-  for (const image of topLevelImages) {
-    const url = resolveImageUrl(image);
-    if (url) urls.push(url);
-  }
-  const attributeImages = Array.isArray(product?.productAttributes)
-    ? product.productAttributes.flatMap((attribute) =>
-        Array.isArray(attribute?.images) ? attribute.images : [],
-      )
-    : [];
-  for (const image of attributeImages) {
-    const url = resolveImageUrl(image);
-    if (url) urls.push(url);
-  }
-  return uniqueUrls(urls);
-}
-
 export function getProductSitemapImages(product = {}) {
-  if (isPodProduct(product)) {
-    return uniqueUrls([
-      getPrimaryProductImage(product),
-      ...getPodGalleryImages(product, {}, MAX_PRODUCT_IMAGES),
-    ]).slice(0, MAX_PRODUCT_IMAGES);
-  }
-  return uniqueUrls([
-    getPrimaryProductImage(product),
-    ...extractStandardProductImages(product),
-  ]).slice(0, MAX_PRODUCT_IMAGES);
-}
-
-function getVariantSitemapImages(product = {}, selection = {}) {
-  const primaryImage = getPrimaryProductImage(product, selection);
-  const fallbackImages = getProductSitemapImages(product);
-
-  if (isPodProduct(product)) {
-    return uniqueUrls([
-      primaryImage,
-      ...getPodGalleryImages(product, selection, MAX_PRODUCT_IMAGES),
-      ...fallbackImages,
-    ]).slice(0, MAX_PRODUCT_IMAGES);
-  }
-
-  return uniqueUrls([primaryImage, ...fallbackImages]).slice(
+  return uniqueUrls(getProductSeoImages(product, {}, MAX_PRODUCT_IMAGES)).slice(
     0,
     MAX_PRODUCT_IMAGES,
   );
+}
+
+function getVariantSitemapImages(product = {}, selection = {}) {
+  return uniqueUrls(
+    getProductSeoImages(product, selection, MAX_PRODUCT_IMAGES),
+  ).slice(0, MAX_PRODUCT_IMAGES);
 }
 
 function buildProductSitemapEntriesForProduct(product = {}, request) {
