@@ -968,7 +968,7 @@ const PrintifyAvailableProducts = () => {
 																}`}
 																loading='lazy'
 																decoding='async'
-																referrerPolicy='no-referrer'
+																referrerPolicy='strict-origin-when-cross-origin'
 																onError={(event) =>
 																	handleDirectPreviewImageError(
 																		event,
@@ -990,7 +990,7 @@ const PrintifyAvailableProducts = () => {
 															alt={`${product.productName} preview`}
 															loading='lazy'
 															decoding='async'
-															referrerPolicy='no-referrer'
+															referrerPolicy='strict-origin-when-cross-origin'
 															onError={(event) =>
 																handleDirectPreviewImageError(
 																	event,
@@ -1035,7 +1035,7 @@ const PrintifyAvailableProducts = () => {
 													alt={product.productName}
 													loading='lazy'
 													decoding='async'
-													referrerPolicy='no-referrer'
+													referrerPolicy='strict-origin-when-cross-origin'
 													onError={(event) =>
 														handleDirectPreviewImageError(
 															event,
