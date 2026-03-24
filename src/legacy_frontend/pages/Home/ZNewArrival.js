@@ -8,7 +8,7 @@ import { useHistory } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
-import { resolveImageUrl } from "../../utils/image";
+import { resolveImageSources } from "../../utils/image";
 
 const emitGaEvent = (payload = {}) => {
 	if (typeof window === "undefined" || typeof window.gtag !== "function") return;
@@ -274,10 +274,8 @@ const ZNewArrival = ({ newArrivalProducts }) => {
 							product.thumbnailImage?.[0]?.images ||
 							[];
 						const firstImage = images[0];
-						const primarySrc = resolveImageUrl(firstImage);
-						const fallbackSrc = resolveImageUrl(firstImage, {
-							preferCloudinary: false,
-						});
+						const { primary: primarySrc, fallback: fallbackSrc } =
+							resolveImageSources(firstImage);
 
 						const originalPrice = product.price || 0;
 						const discountedPrice =

@@ -8,7 +8,7 @@ import { useHistory } from "react-router-dom";
 import { isAuthenticated } from "../../auth";
 import SlickBaseStyles from "../../components/SlickBaseStyles";
 import OptimizedImage from "../../components/OptimizedImage";
-import { resolveImageUrl } from "../../utils/image";
+import { resolveImageSources } from "../../utils/image";
 
 const MAX_PRODUCTS = 30;
 
@@ -295,10 +295,10 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 							chosenProductAttributes?.productImages ||
 							product.thumbnailImage?.[0]?.images ||
 							[];
-						const singlePrimarySrc = resolveImageUrl(images[0]);
-						const singleFallbackSrc = resolveImageUrl(images[0], {
-							preferCloudinary: false,
-						});
+						const {
+							primary: singlePrimarySrc,
+							fallback: singleFallbackSrc,
+						} = resolveImageSources(images[0]);
 
 						// Original & discounted prices
 						const originalPrice =
@@ -351,10 +351,8 @@ const ZFeaturedProducts = ({ featuredProducts }) => {
 											{images.length > 1 ? (
 												<Slider {...imageSettings}>
 													{images.map((img, index) => {
-														const primarySrc = resolveImageUrl(img);
-														const fallbackSrc = resolveImageUrl(img, {
-															preferCloudinary: false,
-														});
+														const { primary: primarySrc, fallback: fallbackSrc } =
+															resolveImageSources(img);
 														return (
 														<ImageWrapper key={index}>
 															<ProductImage

@@ -10,7 +10,11 @@ import PrintifyPageHelmet from "./PrintifyPageHelmet";
 import { isAuthenticated } from "../../auth";
 import { cleanupPodListPreviewSession, getPodListPreview } from "../../apiCore";
 import OptimizedImage from "../../components/OptimizedImage";
-import { getCloudinaryOptimizedUrl, resolveImageUrl } from "../../utils/image";
+import {
+	getCloudinaryOptimizedUrl,
+	resolveImageSources,
+	resolveImageUrl,
+} from "../../utils/image";
 import {
 	POD_OCCASION_OPTIONS,
 	resolvePodPersonalization,
@@ -85,11 +89,8 @@ function getStoredDefaultDesignImagesForOccasion(product, occasion) {
 				: [];
 			const resolvedImages = images
 				.map((image) => {
-					const src =
-						resolveImageUrl(image) ||
-						resolveImageUrl(image, {
-							preferCloudinary: false,
-						});
+					const { primary, fallback } = resolveImageSources(image);
+					const src = primary || fallback;
 					return src ? `${src}`.trim() : "";
 				})
 				.filter(Boolean);
@@ -367,10 +368,9 @@ const PrintifyAvailableProducts = () => {
 		const seen = new Set();
 		for (let index = 0; index < candidates.length; index += 1) {
 			const candidate = candidates[index];
-			const primarySrc = resolveImageUrl(candidate.raw);
-			const fallbackSrc = resolveImageUrl(candidate.raw, {
-				preferCloudinary: false,
-			});
+			const { primary: primarySrc, fallback: fallbackSrc } = resolveImageSources(
+				candidate.raw
+			);
 			const resolved = primarySrc || fallbackSrc;
 			if (!resolved || seen.has(resolved)) continue;
 			seen.add(resolved);
@@ -419,10 +419,10 @@ const PrintifyAvailableProducts = () => {
 			.sort((a, b) => b.score - a.score);
 
 		const preferredCandidate = scored[0] || null;
-		const examplePrimary = resolveImageUrl(exampleDesignImage);
-		const exampleFallback = resolveImageUrl(exampleDesignImage, {
-			preferCloudinary: false,
-		});
+		const {
+			primary: examplePrimary,
+			fallback: exampleFallback,
+		} = resolveImageSources(exampleDesignImage);
 		let primarySrc = preferredCandidate?.primarySrc || preferredCandidate?.fallbackSrc;
 		let fallbackSrc =
 			preferredCandidate?.fallbackSrc ||

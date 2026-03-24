@@ -16,11 +16,22 @@ const sanitizeUrlCandidate = (value = "") => {
 	const normalized = `${value || ""}`.trim();
 	if (!normalized) return "";
 	if (INVALID_URL_TOKENS.has(normalized.toLowerCase())) return "";
-	return normalized;
+	if (normalized.startsWith("//")) return `https:${normalized}`;
+	return normalized.replace(/^http:\/\//i, "https://");
 };
 
 const isCloudinaryUrl = (url) =>
 	typeof url === "string" && url.includes("res.cloudinary.com");
+
+const isSameSiteUrl = (url = "") => {
+	const safeUrl = sanitizeUrlCandidate(url);
+	if (!safeUrl) return false;
+	try {
+		return new URL(safeUrl, "https://serenejannat.com").origin === "https://serenejannat.com";
+	} catch {
+		return false;
+	}
+};
 
 const isCloudinaryTransformToken = (token = "") =>
 	/^[a-z]{1,3}_.+/i.test(`${token || ""}`.trim());
@@ -91,11 +102,38 @@ export const buildCloudinarySrcSet = (
 		.join(", ");
 };
 
-export const resolveImageUrl = (image, { preferCloudinary = true } = {}) => {
+const getImagePreferenceRank = (url = "", { preferCloudinary = false } = {}) => {
+	if (preferCloudinary && isCloudinaryUrl(url)) return 0;
+	if (!preferCloudinary && isSameSiteUrl(url)) return 0;
+	if (preferCloudinary && isSameSiteUrl(url)) return 1;
+	if (!preferCloudinary && isCloudinaryUrl(url)) return 1;
+	return 2;
+};
+
+const prioritizeImageUrls = (urls = [], { preferCloudinary = false } = {}) => {
+	return Array.from(new Set(urls.filter(Boolean))).sort((left, right) => {
+		return (
+			getImagePreferenceRank(left, { preferCloudinary }) -
+			getImagePreferenceRank(right, { preferCloudinary })
+		);
+	});
+};
+
+export const resolveImageUrl = (image, { preferCloudinary = false } = {}) => {
 	if (!image) return "";
 	if (typeof image === "string") return sanitizeUrlCandidate(image);
 	if (Array.isArray(image.images) && image.images.length > 0) {
-		return resolveImageUrl(image.images[0], { preferCloudinary });
+		return resolveImageUrl(image.images, { preferCloudinary });
+	}
+	if (Array.isArray(image)) {
+		return (
+			prioritizeImageUrls(
+				image
+					.map((entry) => resolveImageUrl(entry, { preferCloudinary }))
+					.filter(Boolean),
+				{ preferCloudinary }
+			)[0] || ""
+		);
 	}
 
 	const cloudinary =
@@ -108,21 +146,24 @@ export const resolveImageUrl = (image, { preferCloudinary = true } = {}) => {
 		image.cloudinaryPublicId ||
 		image.public_id ||
 		image.publicId;
-	const primary = image.url || image.src;
 	const derivedCloudinary = cloudinary || buildCloudinaryUrl(cloudinaryId);
-	const safeCloudinary = sanitizeUrlCandidate(derivedCloudinary);
-	const safePrimary = sanitizeUrlCandidate(primary);
-
-	if (preferCloudinary && safeCloudinary) {
-		return safeCloudinary;
-	}
-
-	return safePrimary || safeCloudinary || "";
+	return (
+		prioritizeImageUrls(
+			[
+				image.url,
+				image.src,
+				image.secure_url,
+				image.secureUrl,
+				derivedCloudinary,
+			].map((entry) => sanitizeUrlCandidate(entry)),
+			{ preferCloudinary }
+		)[0] || ""
+	);
 };
 
 export const resolveImageSources = (image) => {
-	const primary = resolveImageUrl(image, { preferCloudinary: true });
-	const fallback = resolveImageUrl(image, { preferCloudinary: false });
+	const primary = resolveImageUrl(image, { preferCloudinary: false });
+	const fallback = resolveImageUrl(image, { preferCloudinary: true });
 	if (primary && fallback && primary !== fallback) {
 		return { primary, fallback };
 	}

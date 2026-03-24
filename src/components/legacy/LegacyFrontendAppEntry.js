@@ -4,6 +4,7 @@ import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useMemo } from "react";
 import ProductCard from "@/components/ProductCard";
+import { getPrimaryProductImage } from "@/lib/product-helpers";
 
 const routeModulePreloaders = {
 	home: () => import("@/legacy_frontend/pages/Home/Home"),
@@ -52,42 +53,8 @@ function getRawProductTitle(product = {}) {
 	);
 }
 
-function resolveInlineImageUrl(value) {
-	if (!value) return "";
-	if (typeof value === "string") return value;
-	if (Array.isArray(value)) {
-		for (const entry of value) {
-			const resolved = resolveInlineImageUrl(entry);
-			if (resolved) return resolved;
-		}
-		return "";
-	}
-	if (Array.isArray(value?.images)) {
-		return resolveInlineImageUrl(value.images);
-	}
-	return (
-		value?.cloudinary_url ||
-		value?.cloudinaryUrl ||
-		value?.secure_url ||
-		value?.url ||
-		value?.src ||
-		""
-	);
-}
-
 function getRawProductImage(product = {}) {
-	const attribute = Array.isArray(product?.productAttributes)
-		? product.productAttributes[0]
-		: null;
-	return resolveInlineImageUrl(
-		attribute?.exampleDesignImage ||
-			attribute?.productImages?.[0] ||
-			product?.thumbnailImage?.[0]?.images?.[0] ||
-			product?.productImages?.[0] ||
-			product?.printifyProductDetails?.images?.[0] ||
-			product?.images?.[0] ||
-			""
-	);
+	return getPrimaryProductImage(product);
 }
 
 function getRawProductPrice(product = {}) {

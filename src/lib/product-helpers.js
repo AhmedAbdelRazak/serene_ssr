@@ -444,14 +444,14 @@ export function resolveImageUrl(imageLike) {
   if (!imageLike) return "";
   if (typeof imageLike === "string") return normalizeUrl(imageLike);
   if (Array.isArray(imageLike)) {
-    for (const image of imageLike) {
-      const url = resolveImageUrl(image);
-      if (url) return url;
-    }
-    return "";
+    return (
+      prioritizeImageUrls(
+        imageLike.map((image) => resolveImageUrl(image)).filter(Boolean),
+      )[0] || ""
+    );
   }
   if (Array.isArray(imageLike?.images) && imageLike.images.length) {
-    return resolveImageUrl(imageLike.images[0]);
+    return resolveImageUrl(imageLike.images);
   }
   const cloudinaryDirect =
     imageLike.cloudinary_url ||
@@ -466,13 +466,16 @@ export function resolveImageUrl(imageLike) {
     imageLike.public_id ||
     imageLike.publicId ||
     "";
-  const direct =
-    cloudinaryDirect ||
-    buildCloudinaryDeliveryUrl(cloudinaryPublicId) ||
-    imageLike.secure_url ||
-    imageLike.url ||
-    imageLike.src;
-  return normalizeUrl(direct || "");
+  return (
+    prioritizeImageUrls([
+      imageLike.url,
+      imageLike.src,
+      imageLike.secure_url,
+      imageLike.secureUrl,
+      cloudinaryDirect,
+      buildCloudinaryDeliveryUrl(cloudinaryPublicId),
+    ])[0] || ""
+  );
 }
 
 export function extractImageUrls(source) {
@@ -526,12 +529,30 @@ function isPreferredSeoImageUrl(url = "") {
 }
 
 function toPreferredSeoImageUrl(source) {
-  const urls = extractImageUrls(source);
-  return urls.find((url) => isPreferredSeoImageUrl(url)) || "";
+  return preferredSeoImageUrls(extractImageUrls(source))[0] || "";
 }
 
 function preferredSeoImageUrls(urls = []) {
-  return uniqueImageUrls(urls).filter((url) => isPreferredSeoImageUrl(url));
+  return prioritizeImageUrls(urls).filter((url) => isPreferredSeoImageUrl(url));
+}
+
+function getImageUrlPreferenceRank(url = "") {
+  if (isSameSiteImageUrl(url)) return 0;
+  if (isCloudinaryImageUrl(url)) return 1;
+  return 2;
+}
+
+function prioritizeImageUrls(urls = []) {
+  return uniqueImageUrls(
+    urls.map((entry) => normalizeUrl(entry)).filter(Boolean),
+  )
+    .map((url, index) => ({
+      url,
+      index,
+      rank: getImageUrlPreferenceRank(url),
+    }))
+    .sort((a, b) => a.rank - b.rank || a.index - b.index)
+    .map((entry) => entry.url);
 }
 
 export function getPrimaryProductImage(
@@ -553,15 +574,14 @@ export function getPrimaryProductImage(
     scent,
     viewIndex,
   });
-  if (defaultPodImage) return defaultPodImage;
-
   const matchedAttr = findBestProductAttribute(product, { color, size, scent });
   const rankedVariantImage = getPodGalleryImages(
     product,
     { color, size, scent },
     1,
   )[0];
-  const candidates = [
+  const candidateUrls = [
+    defaultPodImage,
     matchedAttr?.exampleDesignImage,
     rankedVariantImage,
     matchedAttr?.productImages?.[0],
@@ -569,12 +589,11 @@ export function getPrimaryProductImage(
     product?.productImages?.[0],
     product?.printifyProductDetails?.images?.[0],
     product?.images?.[0],
-  ];
-  for (const candidate of candidates) {
-    const url = resolveImageUrl(candidate);
-    if (url) return url;
-  }
-  return "";
+  ]
+    .map((candidate) => resolveImageUrl(candidate))
+    .filter(Boolean);
+
+  return prioritizeImageUrls(candidateUrls)[0] || "";
 }
 
 export function getRepresentativePodSelection(product = {}, selection = {}) {
