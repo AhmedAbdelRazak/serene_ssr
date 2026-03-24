@@ -1,4 +1,5 @@
 import { POD_OCCASIONS } from "./pod-occasions";
+import { SITE_URL } from "./config";
 import {
   normalizePodProduct,
   resolveInitialPodVariantSelection,
@@ -507,13 +508,30 @@ function isCloudinaryImageUrl(url = "") {
   return /^(https?:)?\/\/res\.cloudinary\.com\//i.test(`${url || ""}`.trim());
 }
 
-function toCloudinaryImageUrl(source) {
-  const urls = extractImageUrls(source);
-  return urls.find((url) => isCloudinaryImageUrl(url)) || "";
+function isSameSiteImageUrl(url = "") {
+  const normalized = normalizeUrl(url);
+  if (!normalized) return false;
+
+  try {
+    const candidateUrl = new URL(normalized, SITE_URL);
+    const siteUrl = new URL(SITE_URL);
+    return candidateUrl.origin === siteUrl.origin;
+  } catch {
+    return false;
+  }
 }
 
-function cloudinaryOnlyImageUrls(urls = []) {
-  return uniqueImageUrls(urls).filter((url) => isCloudinaryImageUrl(url));
+function isPreferredSeoImageUrl(url = "") {
+  return isCloudinaryImageUrl(url) || isSameSiteImageUrl(url);
+}
+
+function toPreferredSeoImageUrl(source) {
+  const urls = extractImageUrls(source);
+  return urls.find((url) => isPreferredSeoImageUrl(url)) || "";
+}
+
+function preferredSeoImageUrls(urls = []) {
+  return uniqueImageUrls(urls).filter((url) => isPreferredSeoImageUrl(url));
 }
 
 export function getPrimaryProductImage(
@@ -597,12 +615,12 @@ export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
       product,
       representativeSelection,
     );
-    const cloudinaryImages = cloudinaryOnlyImageUrls([
+    const preferredImages = preferredSeoImageUrls([
       ...getPodDefaultDesignImages(product, {
         ...representativeSelection,
         limit: safeLimit,
       }),
-      toCloudinaryImageUrl(
+      toPreferredSeoImageUrl(
         getPrimaryProductImage(product, representativeSelection),
       ),
       ...extractImageUrls(matchedAttr?.exampleDesignImage),
@@ -612,8 +630,8 @@ export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
       ...extractImageUrls(product?.images),
     ]).slice(0, safeLimit);
 
-    if (cloudinaryImages.length) {
-      return cloudinaryImages;
+    if (preferredImages.length) {
+      return preferredImages;
     }
 
     return uniqueImageUrls([
@@ -629,8 +647,8 @@ export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
     scent: `${selection?.scent || ""}`.trim(),
   };
   const matchedAttr = findBestProductAttribute(product, normalizedSelection);
-  const cloudinaryImages = cloudinaryOnlyImageUrls([
-    toCloudinaryImageUrl(getPrimaryProductImage(product, normalizedSelection)),
+  const preferredImages = preferredSeoImageUrls([
+    toPreferredSeoImageUrl(getPrimaryProductImage(product, normalizedSelection)),
     ...extractImageUrls(matchedAttr?.exampleDesignImage),
     ...extractImageUrls(matchedAttr?.productImages),
     ...extractImageUrls(product?.thumbnailImage),
@@ -638,8 +656,8 @@ export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
     ...extractImageUrls(product?.images),
   ]).slice(0, safeLimit);
 
-  if (cloudinaryImages.length) {
-    return cloudinaryImages;
+  if (preferredImages.length) {
+    return preferredImages;
   }
 
   return uniqueImageUrls([
