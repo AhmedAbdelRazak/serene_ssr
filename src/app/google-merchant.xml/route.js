@@ -475,6 +475,7 @@ function buildCustomLabelXml({
   size = "",
   scent = "",
   isPod = false,
+  performanceMaxLabel = "",
 } = {}) {
   return [
     categoryName
@@ -489,10 +490,21 @@ function buildCustomLabelXml({
     color || scent
       ? `<g:custom_label_3>${escapeXml(color || scent)}</g:custom_label_3>`
       : "",
-    size ? `<g:custom_label_4>${escapeXml(size)}</g:custom_label_4>` : "",
+    performanceMaxLabel
+      ? `<g:custom_label_4>${escapeXml(performanceMaxLabel)}</g:custom_label_4>`
+      : "",
   ]
     .filter(Boolean)
     .join("\n\t");
+}
+
+function buildPerformanceMaxPriceLabel({
+  effectivePrice = 0,
+  isPod = false,
+} = {}) {
+  const safePrice = Number(effectivePrice);
+  if (!Number.isFinite(safePrice) || safePrice > 20) return "";
+  return isPod ? "less_than_20_pod" : "less_than_20_nonpod";
 }
 
 function resolveVariantPricing(product = {}, attr = null, variantLike = null) {
@@ -589,6 +601,10 @@ function buildPodFeedItems({
         attr,
         selection,
       );
+      const performanceMaxLabel = buildPerformanceMaxPriceLabel({
+        effectivePrice,
+        isPod: true,
+      });
       const availability = resolveAvailability(product, attr);
       const description = buildFeedDescription(baseDescription, {
         isPod: true,
@@ -653,6 +669,7 @@ function buildPodFeedItems({
     size: selection.size,
     scent: selection.scent,
     isPod: true,
+    performanceMaxLabel,
   })}
 	${apparelAttributesXml}
 	${selection.size ? `<g:size>${escapeXml(selection.size)}</g:size>` : ""}
@@ -698,6 +715,10 @@ function buildStandardFeedItems({
     const description = buildFeedDescription(baseDescription, { isPod: false });
     const additionalImageLinks = buildAdditionalImageXml(imageSet);
     const shippingXml = buildShippingXml(product, null);
+    const performanceMaxLabel = buildPerformanceMaxPriceLabel({
+      effectivePrice,
+      isPod: false,
+    });
 
     return [
       `<item>
@@ -722,7 +743,7 @@ function buildStandardFeedItems({
 	<g:brand>${escapeXml(brand)}</g:brand>
 	<g:product_type>${escapeXml(categoryName)}</g:product_type>
 	<g:google_product_category>${escapeXml(googleCategory)}</g:google_product_category>
-	${buildCustomLabelXml({ categoryName })}
+	${buildCustomLabelXml({ categoryName, performanceMaxLabel })}
 	${apparelAttributesXml}
 	<g:identifier_exists>false</g:identifier_exists>
 </item>`,
@@ -754,6 +775,10 @@ function buildStandardFeedItems({
       attr,
       null,
     );
+    const performanceMaxLabel = buildPerformanceMaxPriceLabel({
+      effectivePrice,
+      isPod: false,
+    });
     const availability = resolveAvailability(product, attr);
     const title = buildMerchantVariantTitle(name, {
       color: resolvedColor,
@@ -798,6 +823,7 @@ function buildStandardFeedItems({
     color: resolvedColor,
     size: attr?.size,
     scent: attr?.scent,
+    performanceMaxLabel,
   })}
 	${apparelAttributesXml}
 	${attr?.size ? `<g:size>${escapeXml(attr.size)}</g:size>` : ""}
