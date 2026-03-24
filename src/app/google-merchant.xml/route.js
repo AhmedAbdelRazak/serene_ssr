@@ -501,9 +501,13 @@ function buildCustomLabelXml({
 function buildPerformanceMaxPriceLabel({
   effectivePrice = 0,
   isPod = false,
+  availability = "",
+  isCategoryActive = true,
 } = {}) {
   const safePrice = Number(effectivePrice);
   if (!Number.isFinite(safePrice) || safePrice > 20) return "";
+  if (!isPod && availability !== "in_stock") return "";
+  if (!isPod && !isCategoryActive) return "";
   return isPod ? "less_than_20_pod" : "less_than_20_nonpod";
 }
 
@@ -601,11 +605,13 @@ function buildPodFeedItems({
         attr,
         selection,
       );
+      const availability = resolveAvailability(product, attr);
       const performanceMaxLabel = buildPerformanceMaxPriceLabel({
         effectivePrice,
         isPod: true,
+        availability,
+        isCategoryActive: product?.category?.categoryStatus !== false,
       });
-      const availability = resolveAvailability(product, attr);
       const description = buildFeedDescription(baseDescription, {
         isPod: true,
         occasion,
@@ -718,6 +724,8 @@ function buildStandardFeedItems({
     const performanceMaxLabel = buildPerformanceMaxPriceLabel({
       effectivePrice,
       isPod: false,
+      availability,
+      isCategoryActive: product?.category?.categoryStatus === true,
     });
 
     return [
@@ -775,11 +783,13 @@ function buildStandardFeedItems({
       attr,
       null,
     );
+    const availability = resolveAvailability(product, attr);
     const performanceMaxLabel = buildPerformanceMaxPriceLabel({
       effectivePrice,
       isPod: false,
+      availability,
+      isCategoryActive: product?.category?.categoryStatus === true,
     });
-    const availability = resolveAvailability(product, attr);
     const title = buildMerchantVariantTitle(name, {
       color: resolvedColor,
       size: attr?.size,
