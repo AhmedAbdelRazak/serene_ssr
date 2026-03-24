@@ -4,6 +4,9 @@ import { toSlug } from "./utils";
 const OBJECT_ID_REGEX = /^[a-f0-9]{24}$/i;
 const INDEXABLE_SHOP_KEYS = new Set(["category", "categorySlug", "page"]);
 const INDEXABLE_POD_COLLECTION_KEYS = new Set(["occasion", "page"]);
+const POD_COLLECTION_PATH = "/custom-gifts";
+const POD_COLLECTION_CATEGORY_SLUG = "custom-design";
+const POD_COLLECTION_CATEGORY_IDS = new Set(["679bb2a7dba50a58933d01eb"]);
 
 function normalizeValue(value = "") {
 	if (typeof value === "symbol") return "";
@@ -99,6 +102,22 @@ function resolveCategoryContext(searchParams = {}, categories = []) {
 	};
 }
 
+function isPodCollectionCategoryRequest(searchParams = {}, category = {}) {
+	const categoryValues = getSafeSearchParamValues(searchParams, "category");
+	const categorySlugParam = getSafeSearchParamValue(searchParams, "categorySlug");
+	const rawCategoryValue = categoryValues.length === 1 ? categoryValues[0] : "";
+	const matchedSlug = normalizeValue(category?.categorySlug).toLowerCase();
+	const normalizedSlugParam = normalizeValue(categorySlugParam).toLowerCase();
+	const normalizedCategoryValue = normalizeValue(rawCategoryValue).toLowerCase();
+
+	return (
+		matchedSlug === POD_COLLECTION_CATEGORY_SLUG ||
+		normalizedSlugParam === POD_COLLECTION_CATEGORY_SLUG ||
+		normalizedCategoryValue === POD_COLLECTION_CATEGORY_SLUG ||
+		POD_COLLECTION_CATEGORY_IDS.has(rawCategoryValue)
+	);
+}
+
 export function buildShopCollectionSeo(searchParams = {}, categories = []) {
 	const page = parsePositivePage(getSafeSearchParamValue(searchParams, "page"));
 	const rawCategorySlug = getSafeSearchParamValue(searchParams, "categorySlug");
@@ -107,6 +126,44 @@ export function buildShopCollectionSeo(searchParams = {}, categories = []) {
 		.map(([key]) => key);
 	const unsupportedKeys = activeKeys.filter((key) => !INDEXABLE_SHOP_KEYS.has(key));
 	const category = resolveCategoryContext(searchParams, categories);
+	const isPodCategoryRequest = isPodCollectionCategoryRequest(
+		searchParams,
+		category,
+	);
+
+	if (isPodCategoryRequest) {
+		const redirectSearchParams = new URLSearchParams();
+		if (page > 1) {
+			redirectSearchParams.set("page", String(page));
+		}
+
+		return {
+			page,
+			indexable: false,
+			noindex: true,
+			activeKeys,
+			unsupportedKeys,
+			hasUnsupportedKeys: unsupportedKeys.length > 0,
+			categoryId: "",
+			categorySlug: "",
+			categoryName: "",
+			categoryMatched: false,
+			canonicalSearchParams: redirectSearchParams,
+			title: `Custom Gifts${page > 1 ? ` | Page ${page}` : ""} | Personalized Print On Demand Gifts | Serene Jannat`,
+			description:
+				"Shop personalized custom gifts from Serene Jannat, including print-on-demand mugs, decor, and keepsakes for birthdays, anniversaries, holidays, and more.",
+			keywords: [
+				"custom gifts",
+				"personalized gifts",
+				"print on demand gifts",
+				"gift ideas",
+				"Serene Jannat",
+			],
+			schemaName: "Serene Jannat Custom Gifts",
+			redirectPathname: POD_COLLECTION_PATH,
+			redirectSearchParams,
+		};
+	}
 	const hasCategorySlugInput = Boolean(rawCategorySlug);
 	const hasSingleCategory = category.categoryValues.length <= 1;
 	const hasIndexableCategory =
@@ -160,6 +217,8 @@ export function buildShopCollectionSeo(searchParams = {}, categories = []) {
 		schemaName: category.categoryName
 			? `${category.categoryName} Products`
 			: "Serene Jannat Our Products",
+		redirectPathname: "",
+		redirectSearchParams: null,
 	};
 }
 

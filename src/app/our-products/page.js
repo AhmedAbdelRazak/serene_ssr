@@ -76,8 +76,9 @@ export async function generateMetadata({ searchParams }) {
 	return createMetadata({
 		title: seoState.title,
 		description: seoState.description,
-		pathname: "/our-products",
-		searchParams: seoState.canonicalSearchParams,
+		pathname: seoState.redirectPathname || "/our-products",
+		searchParams:
+			seoState.redirectSearchParams || seoState.canonicalSearchParams,
 		keywords: seoState.keywords,
 		noindex: seoState.noindex,
 	});
@@ -92,6 +93,18 @@ export default async function OurProductsPage({ searchParams }) {
 		resolvedSearchParams,
 		Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []
 	);
+	if (seoState.redirectPathname) {
+		const redirectSearchParams = new URLSearchParams(
+			seoState.redirectSearchParams || undefined
+		);
+		appendTrackingQueryParams(redirectSearchParams, resolvedSearchParams);
+		const query = redirectSearchParams.toString();
+		permanentRedirect(
+			query
+				? `${seoState.redirectPathname}?${query}`
+				: seoState.redirectPathname
+		);
+	}
 	if (!seoState.hasUnsupportedKeys) {
 		const routeSearchParams = new URLSearchParams(seoState.canonicalSearchParams);
 		appendTrackingQueryParams(routeSearchParams, resolvedSearchParams);
