@@ -65,6 +65,36 @@ const initialState = {
 	customDesignProducts: [],
 };
 
+const normalizeWebsiteSetup = (websiteSetup) => {
+	const source =
+		websiteSetup && typeof websiteSetup === "object" ? websiteSetup : {};
+	return {
+		...source,
+		sereneJannatLogo: {
+			public_id: "",
+			url: "",
+			...(source.sereneJannatLogo || {}),
+		},
+		aboutUsBanner: {
+			...(source.aboutUsBanner || {}),
+		},
+		contactUsPage: {
+			...(source.contactUsPage || {}),
+		},
+		homeMainBanners: Array.isArray(source.homeMainBanners)
+			? source.homeMainBanners
+			: [],
+		returnsAndRefund:
+			typeof source.returnsAndRefund === "string" ? source.returnsAndRefund : "",
+		termsAndCondition:
+			typeof source.termsAndCondition === "string"
+				? source.termsAndCondition
+				: "",
+		aiAgentToRespond: Boolean(source.aiAgentToRespond),
+		deactivateChatResponse: Boolean(source.deactivateChatResponse),
+	};
+};
+
 const CartContext = React.createContext();
 
 export const CartProvider = ({ children }) => {
@@ -308,9 +338,15 @@ export const CartProvider = ({ children }) => {
 	// ------------------------------------
 	// 3) Provide the Context
 	// ------------------------------------
+	const safeWebsiteSetup = useMemo(
+		() => normalizeWebsiteSetup(state.websiteSetup),
+		[state.websiteSetup]
+	);
+
 	const cartContextValue = useMemo(
 		() => ({
 			...state,
+			websiteSetup: safeWebsiteSetup,
 			addToCart,
 			removeItem,
 			toggleAmount,
@@ -340,6 +376,7 @@ export const CartProvider = ({ children }) => {
 			openSidebar,
 			openSidebar2,
 			removeItem,
+			safeWebsiteSetup,
 			state,
 			toggleAmount,
 		]

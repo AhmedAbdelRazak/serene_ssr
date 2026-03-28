@@ -12,6 +12,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import axios from "axios";
 
 import { signup, authenticate, isAuthenticated, signin } from "../auth";
+import { shouldRenderGoogleAuth } from "../auth/googleAuthAvailability";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.min.css";
 import { Helmet } from "react-helmet-async";
@@ -35,6 +36,7 @@ const RegisterSeller = () => {
 	});
 
 	const { name, email, phone, password, password2, loading } = values;
+	const showGoogleLogin = shouldRenderGoogleAuth();
 
 	// ----------------------------------------------------------------
 	// Google Login Success
@@ -234,8 +236,7 @@ const RegisterSeller = () => {
 	// Google Analytics
 	useEffect(() => {
 		ReactGA.send(window.location.pathname + window.location.search);
-		// eslint-disable-next-line
-	}, [window.location.pathname]);
+	}, []);
 
 	/**
 	 * Render the actual form + Google login
@@ -248,17 +249,21 @@ const RegisterSeller = () => {
 						SELL WITH <span className='text-primary'>SERENE JANNAT!</span>
 					</Title>
 					{/* Google Login Button */}
-					<Form.Item style={{ textAlign: "center", marginBottom: "0" }}>
-						<div className='w-50 mx-auto text-center'>
-							<GoogleLogin
-								onSuccess={handleGoogleSuccess}
-								onError={() => {
-									toast.error("Google signup error. Try again.");
-								}}
-							/>
-						</div>
-					</Form.Item>
-					<br />
+					{showGoogleLogin ? (
+						<>
+							<Form.Item style={{ textAlign: "center", marginBottom: "0" }}>
+								<div className='w-50 mx-auto text-center'>
+									<GoogleLogin
+										onSuccess={handleGoogleSuccess}
+										onError={() => {
+											toast.error("Google signup error. Try again.");
+										}}
+									/>
+								</div>
+							</Form.Item>
+							<br />
+						</>
+					) : null}
 
 					{/* Normal Signup Form */}
 					<Form onFinish={clickSubmit} layout='vertical'>

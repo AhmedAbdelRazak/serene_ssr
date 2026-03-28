@@ -1,7 +1,7 @@
 "use client";
 
 import "@ant-design/v5-patch-for-react-19";
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { GoogleOAuthProvider } from "@react-oauth/google";
 import { HelmetProvider } from "react-helmet-async";
 import { CartProvider } from "@/legacy_frontend/cart_context";
@@ -13,15 +13,6 @@ export default function LegacyFrontendApp({ initialRouteData = null }) {
 		process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ||
 		process.env.REACT_APP_GOOGLE_CLIENT_ID ||
 		"";
-	const requiresGoogleProvider = useMemo(() => {
-		if (typeof window === "undefined") return true;
-		const path = `${window.location.pathname || ""}`.toLowerCase();
-		return (
-			path.startsWith("/signin") ||
-			path.startsWith("/signup") ||
-			path.startsWith("/sellingagent/signup")
-		);
-	}, []);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return;
@@ -80,13 +71,9 @@ export default function LegacyFrontendApp({ initialRouteData = null }) {
 		<HelmetProvider>
 			<LegacyRouteBootstrapProvider initialRouteData={initialRouteData}>
 				<CartProvider>
-					{requiresGoogleProvider ? (
-						<GoogleOAuthProvider clientId={clientId}>
-							<LegacyApp />
-						</GoogleOAuthProvider>
-					) : (
+					<GoogleOAuthProvider clientId={clientId}>
 						<LegacyApp />
-					)}
+					</GoogleOAuthProvider>
 				</CartProvider>
 			</LegacyRouteBootstrapProvider>
 		</HelmetProvider>

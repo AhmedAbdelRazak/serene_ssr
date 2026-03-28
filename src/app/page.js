@@ -75,6 +75,42 @@ function preloadHomeHero(heroAsset = null) {
 	});
 }
 
+async function sanitizeHomeCategories(categories = []) {
+	if (!Array.isArray(categories) || categories.length === 0) {
+		return [];
+	}
+
+	const settled = await Promise.allSettled(
+		categories.map(async (category) => {
+			const thumbnailUrl = `${category?.thumbnail?.[0]?.url || ""}`.trim();
+			if (!thumbnailUrl) return category;
+			if (!thumbnailUrl.includes("res.cloudinary.com")) return category;
+
+			try {
+				const response = await fetch(thumbnailUrl, {
+					method: "HEAD",
+					next: { revalidate: 1800 },
+					cache: "force-cache",
+				});
+				if (response.ok || (response.status !== 404 && response.status !== 410)) {
+					return category;
+				}
+			} catch {
+				return category;
+			}
+
+			return {
+				...category,
+				thumbnail: [],
+			};
+		})
+	);
+
+	return settled.map((entry, index) =>
+		entry.status === "fulfilled" ? entry.value : categories[index]
+	);
+}
+
 export default async function HomePage() {
 	const [
 		websiteSetupResult,
@@ -106,6 +142,9 @@ export default async function HomePage() {
 	preloadHomeHero(heroAsset);
 	const categoriesPayload =
 		categoriesResult.status === "fulfilled" ? categoriesResult.value : null;
+	const sanitizedCategories = await sanitizeHomeCategories(
+		Array.isArray(categoriesPayload?.categories) ? categoriesPayload.categories : []
+	);
 	const featuredProducts =
 		featuredProductsResult.status === "fulfilled" &&
 		Array.isArray(featuredProductsResult.value)
@@ -135,9 +174,7 @@ export default async function HomePage() {
 		? {
 				type: "home",
 				websiteSetup,
-				categories: Array.isArray(categoriesPayload?.categories)
-					? categoriesPayload.categories
-					: [],
+				categories: sanitizedCategories,
 				subcategories: Array.isArray(categoriesPayload?.subcategories)
 					? categoriesPayload.subcategories
 					: [],

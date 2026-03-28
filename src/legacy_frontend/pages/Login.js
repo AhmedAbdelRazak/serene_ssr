@@ -15,6 +15,7 @@ import ReactGA from "react-ga4";
 import { GoogleLogin } from "@react-oauth/google";
 import axios from "axios";
 import { useCartContext } from "../cart_context";
+import { shouldRenderGoogleAuth } from "../auth/googleAuthAvailability";
 
 const { Title } = Typography;
 
@@ -28,6 +29,10 @@ const Login = ({ history }) => {
 	const { emailOrPhone, password, loading, redirectToReferrer } = values;
 	const { user } = isAuthenticated();
 	const { websiteSetup } = useCartContext();
+	const logoUrl = websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const ogImageUrl =
+		websiteSetup?.sereneJannatLogo?.url || "https://serenejannat.com/logo192.png";
+	const showGoogleLogin = shouldRenderGoogleAuth();
 
 	// ----------------------------------------------
 	//  Google Login success
@@ -168,8 +173,7 @@ const Login = ({ history }) => {
 	// Google Analytics
 	useEffect(() => {
 		ReactGA.send(window.location.pathname + window.location.search);
-		// eslint-disable-next-line
-	}, [window.location.pathname]);
+	}, []);
 
 	// ----------------------------------------------
 	//  Render form with GoogleLogin button
@@ -180,7 +184,7 @@ const Login = ({ history }) => {
 				<Card>
 					<div className='text-center mb-4'>
 						<img
-							src={websiteSetup.sereneJannatLogo.url}
+							src={logoUrl}
 							alt='Store Logo'
 							style={{ maxWidth: "150px" }}
 						/>
@@ -241,18 +245,20 @@ const Login = ({ history }) => {
 						</Form.Item>
 					</Form>
 
-					{/* OPTIONAL: "OR" divider */}
-					<p style={{ textAlign: "center", margin: "1rem 0 0.5rem" }}>OR</p>
+					{showGoogleLogin ? (
+						<>
+							<p style={{ textAlign: "center", margin: "1rem 0 0.5rem" }}>OR</p>
 
-					<div style={{ textAlign: "center" }}>
-						{/* 2) Google login button */}
-						<GoogleLogin
-							onSuccess={handleGoogleSuccess}
-							onError={() => {
-								toast.error("Google login error. Try again.");
-							}}
-						/>
-					</div>
+							<div style={{ textAlign: "center" }}>
+								<GoogleLogin
+									onSuccess={handleGoogleSuccess}
+									onError={() => {
+										toast.error("Google login error. Try again.");
+									}}
+								/>
+							</div>
+						</>
+					) : null}
 
 					<hr />
 					<p style={{ textAlign: "center" }}>
@@ -284,7 +290,7 @@ const Login = ({ history }) => {
 					property='og:description'
 					content='Login to your Serene Jannat account to access exclusive offers...'
 				/>
-				<meta property='og:image' content={websiteSetup.sereneJannatLogo.url} />
+				<meta property='og:image' content={ogImageUrl} />
 				<meta property='og:url' content='https://serenejannat.com/signin' />
 				<meta property='og:type' content='website' />
 				<meta property='og:locale' content='en_US' />

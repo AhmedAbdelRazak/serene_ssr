@@ -87,6 +87,42 @@ const DeferredSection = ({
 	return <div ref={triggerRef}>{shouldRender ? children : fallback}</div>;
 };
 
+const sanitizeClientCategories = async (categories = []) => {
+	if (!Array.isArray(categories) || categories.length === 0) {
+		return [];
+	}
+
+	const settled = await Promise.allSettled(
+		categories.map(async (category) => {
+			const thumbnailUrl = `${category?.thumbnail?.[0]?.url || ""}`.trim();
+			if (!thumbnailUrl || !thumbnailUrl.includes("res.cloudinary.com")) {
+				return category;
+			}
+
+			try {
+				const response = await fetch(thumbnailUrl, {
+					method: "HEAD",
+					cache: "force-cache",
+				});
+				if (response.ok || (response.status !== 404 && response.status !== 410)) {
+					return category;
+				}
+			} catch {
+				return category;
+			}
+
+			return {
+				...category,
+				thumbnail: [],
+			};
+		})
+	);
+
+	return settled.map((entry, index) =>
+		entry.status === "fulfilled" ? entry.value : categories[index]
+	);
+};
+
 const Home = () => {
 	const routeBootstrap = useLegacyRouteBootstrap();
 	const initialHomeBootstrap =
@@ -194,7 +230,10 @@ const Home = () => {
 				if (categoriesData?.error) {
 					console.log(categoriesData.error);
 				} else {
-					setCategories(categoriesData.categories || []);
+					const safeCategories = await sanitizeClientCategories(
+						categoriesData.categories || []
+					);
+					setCategories(safeCategories);
 					setSubcategories(categoriesData.subcategories || []);
 				}
 

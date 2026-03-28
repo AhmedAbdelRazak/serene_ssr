@@ -20,6 +20,17 @@ const sanitizeUrlCandidate = (value = "") => {
 	return normalized.replace(/^http:\/\//i, "https://");
 };
 
+const getDirectImageUrl = (value) => {
+	if (!value) return "";
+	if (typeof value === "string") return sanitizeUrlCandidate(value);
+	if (typeof value === "object") {
+		return sanitizeUrlCandidate(
+			value.url || value.src || value.secure_url || value.secureUrl || ""
+		);
+	}
+	return "";
+};
+
 const isCloudinaryUrl = (url) =>
 	typeof url === "string" && url.includes("res.cloudinary.com");
 
@@ -48,10 +59,11 @@ export const getCloudinaryOptimizedUrl = (
 	url,
 	{ width, format = "auto", quality = "auto" } = {}
 ) => {
-	if (!url || !isCloudinaryUrl(url)) return url || "";
+	const rawUrl = getDirectImageUrl(url);
+	if (!rawUrl || !isCloudinaryUrl(rawUrl)) return rawUrl || "";
 
-	const [prefix, rest] = url.split("/upload/");
-	if (!rest) return url;
+	const [prefix, rest] = rawUrl.split("/upload/");
+	if (!rest) return rawUrl;
 
 	const parts = rest.split("/");
 	const first = parts[0];

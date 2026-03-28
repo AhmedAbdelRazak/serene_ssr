@@ -14,6 +14,7 @@ import { GoogleLogin } from "@react-oauth/google";
 import axios from "axios";
 
 import { signup, authenticate, isAuthenticated, signin } from "../auth";
+import { shouldRenderGoogleAuth } from "../auth/googleAuthAvailability";
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.min.css";
 import { Helmet } from "react-helmet-async";
@@ -35,6 +36,7 @@ const Register = () => {
 	});
 
 	const { name, email, phone, password, password2, loading } = values;
+	const showGoogleLogin = shouldRenderGoogleAuth();
 
 	// ---------------------------
 	//  Google Login Success
@@ -211,8 +213,7 @@ const Register = () => {
 
 	useEffect(() => {
 		ReactGA.send(window.location.pathname + window.location.search);
-		// eslint-disable-next-line
-	}, [window.location.pathname]);
+	}, []);
 
 	const signUpForm = () => (
 		<Row justify='center' style={{ marginTop: "50px" }}>
@@ -302,14 +303,16 @@ const Register = () => {
             ADD THE GOOGLE LOGIN BUTTON 
             ------------------------------------------------------
           */}
-					<Form.Item style={{ textAlign: "center", marginBottom: "0" }}>
-						<GoogleLogin
-							onSuccess={handleGoogleSuccess}
-							onError={() => {
-								toast.error("Google signup error. Try again.");
-							}}
-						/>
-					</Form.Item>
+					{showGoogleLogin ? (
+						<Form.Item style={{ textAlign: "center", marginBottom: "0" }}>
+							<GoogleLogin
+								onSuccess={handleGoogleSuccess}
+								onError={() => {
+									toast.error("Google signup error. Try again.");
+								}}
+							/>
+						</Form.Item>
+					) : null}
 
 					<hr />
 					<p style={{ textAlign: "center" }}>
