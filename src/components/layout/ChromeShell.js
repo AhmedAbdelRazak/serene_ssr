@@ -30,6 +30,7 @@ export default function ChromeShell({ children }) {
 		}
 		if (path.startsWith("/admin/")) return true;
 		if (path.startsWith("/seller/")) return true;
+		if (path.startsWith("/sellingagent/")) return true;
 		if (path.startsWith("/payment-link/")) return true;
 		if (path.startsWith("/our-products")) return true;
 		if (path.startsWith("/custom-gifts")) return true;
