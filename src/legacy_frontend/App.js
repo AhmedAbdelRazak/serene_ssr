@@ -156,6 +156,8 @@ const WebsiteMain = lazy(() => import("./Admin/EditingWebsite/WebsiteMain"));
 const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const RegisterSeller = lazy(() => import("./pages/RegisterSeller"));
+const Forgot = lazy(() => import("./auth/Forgot"));
+const Reset = lazy(() => import("./auth/Reset"));
 const PrivacyPolicy = lazy(() => import("./pages/PrivacyPolicy"));
 const CookiePolicy = lazy(() => import("./pages/CookiePolicy"));
 const ReturnRefundPolicy = lazy(() => import("./pages/ReturnRefundPolicy"));
@@ -551,6 +553,8 @@ const AppContent = () => {
 					<Route path='/signup' exact component={Register} />
 					<Route path='/sellingagent/signup' exact component={RegisterSeller} />
 					<Route path='/signin' exact component={Login} />
+					<Route path='/forgot-password' exact component={Forgot} />
+					<Route path='/reset-password/:token' exact component={Reset} />
 					<Route path='/cart' exact component={Cart} />
 					{/* <Route
 						path='/my-animation-component'

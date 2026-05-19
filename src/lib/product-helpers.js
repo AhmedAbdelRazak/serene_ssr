@@ -8,6 +8,8 @@ import { stripHtml, toSlug, uniqueStrings } from "./utils";
 
 const CLOUDINARY_BASE_URL =
   "https://res.cloudinary.com/infiniteapps/image/upload/";
+const POD_CATEGORY_SLUG = "custom-design";
+const POD_CATEGORY_IDS = new Set(["679bb2a7dba50a58933d01eb"]);
 
 function normalizeToken(value = "") {
   if (typeof value === "symbol") return "";
@@ -33,6 +35,29 @@ function toDisplayTitle(value = "") {
   const raw = `${value || ""}`.trim();
   if (!raw) return "";
   return raw.replace(/\b[a-z]/g, (match) => match.toUpperCase());
+}
+
+function hasPodProductSignal(product = {}) {
+  const categoryValue = product?.category;
+  const categoryId = normalizeToken(
+    categoryValue && typeof categoryValue === "object"
+      ? categoryValue?._id
+      : categoryValue || product?.categoryId,
+  );
+  const categorySlug = normalizeToken(
+    (categoryValue && typeof categoryValue === "object"
+      ? categoryValue?.categorySlug
+      : "") || product?.categorySlug,
+  );
+
+  return Boolean(
+    product?.printifyProductDetails?.POD ||
+      product?.POD ||
+      product?.isPod ||
+      product?.isPrintOnDemand ||
+      (product?.isPrintifyProduct &&
+        (categorySlug === POD_CATEGORY_SLUG || POD_CATEGORY_IDS.has(categoryId))),
+  );
 }
 
 function getPodProductKind(product = {}) {
@@ -688,9 +713,7 @@ export function getProductSeoImages(product = {}, selection = {}, limit = 4) {
 }
 
 export function getProductDisplayName(product = {}) {
-  const isPod = Boolean(
-    product?.isPrintifyProduct && product?.printifyProductDetails?.POD,
-  );
+  const isPod = hasPodProductSignal(product);
   const preferredName = isPod
     ? product?.printifyProductDetails?.title || product?.productName
     : product?.productName || product?.printifyProductDetails?.title;
@@ -705,9 +728,7 @@ export function getProductDescription(product = {}) {
 }
 
 export function isPodProduct(product = {}) {
-  return Boolean(
-    product?.isPrintifyProduct && product?.printifyProductDetails?.POD,
-  );
+  return hasPodProductSignal(product);
 }
 
 export function getPodProductSlug(product = {}) {
@@ -721,9 +742,7 @@ export function getPodProductSlug(product = {}) {
 }
 
 export function getProductSlug(product = {}) {
-  const isPod = Boolean(
-    product?.isPrintifyProduct && product?.printifyProductDetails?.POD,
-  );
+  const isPod = hasPodProductSignal(product);
   if (isPod) return getPodProductSlug(product);
   const candidate =
     product?.slug || getProductDisplayName(product) || "product";

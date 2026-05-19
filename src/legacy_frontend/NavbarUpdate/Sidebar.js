@@ -220,7 +220,7 @@ const Sidebar = ({
 							>
 								<FaUserPlus /> <span>Hello {firstName}</span>
 							</AuthLink>
-							<AuthLink to='#' onClick={handleSignout}>
+							<AuthLink as='button' type='button' onClick={handleSignout}>
 								Signout
 							</AuthLink>
 						</>
@@ -231,7 +231,7 @@ const Sidebar = ({
 							<AuthLink to='/dashboard' onClick={() => setIsSidebarOpen(false)}>
 								<FaUserPlus /> <span>Hello {firstName}</span>
 							</AuthLink>
-							<AuthLink to='#' onClick={handleSignout}>
+							<AuthLink as='button' type='button' onClick={handleSignout}>
 								Signout
 							</AuthLink>
 						</>
@@ -366,6 +366,10 @@ const StyledLink = styled(Link)`
 	width: 100%;
 	text-align: left;
 	border-radius: 5px;
+	border: 0;
+	background: transparent;
+	cursor: pointer;
+	font-family: inherit;
 
 	&:hover {
 		background-color: var(--accent-color-1);

@@ -25,7 +25,14 @@ const getDirectImageUrl = (value) => {
 	if (typeof value === "string") return sanitizeUrlCandidate(value);
 	if (typeof value === "object") {
 		return sanitizeUrlCandidate(
-			value.url || value.src || value.secure_url || value.secureUrl || ""
+			value.cloudinary_url ||
+				value.cloudinaryUrl ||
+				value.cloudinaryURL ||
+				value.url ||
+				value.src ||
+				value.secure_url ||
+				value.secureUrl ||
+				""
 		);
 	}
 	return "";

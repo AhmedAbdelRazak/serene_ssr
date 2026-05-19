@@ -1,5 +1,6 @@
 import ProductRouteClient from "@/components/public/routes/ProductRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
+import SeoCrawlSupport from "@/components/seo/SeoCrawlSupport";
 import { getProductById } from "@/lib/api";
 import {
   buildProductPath,
@@ -113,6 +114,40 @@ function buildStandardVariantSchemas(
   }
 
   return variants;
+}
+
+function buildStandardProductSeoLinks(product = {}, canonicalPath = "") {
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/our-products", label: "All products" },
+    { href: "/custom-gifts", label: "Custom gifts" },
+    { href: "/contact", label: "Contact support" },
+  ];
+  const attributes = Array.isArray(product?.productAttributes)
+    ? product.productAttributes
+    : [];
+  const seenVariants = new Set();
+  for (const attribute of attributes) {
+    const selection = {
+      color: `${attribute?.color || ""}`.trim(),
+      size: `${attribute?.size || ""}`.trim(),
+      scent: `${attribute?.scent || ""}`.trim(),
+    };
+    const label = buildVariantLabel(selection);
+    if (!label || seenVariants.has(label)) continue;
+    const params = new URLSearchParams();
+    if (selection.color) params.set("color", selection.color);
+    if (selection.size) params.set("size", selection.size);
+    if (selection.scent) params.set("scent", selection.scent);
+    if (!params.toString()) continue;
+    seenVariants.add(label);
+    links.push({
+      href: `${canonicalPath}?${params.toString()}`,
+      label,
+    });
+  }
+
+  return links;
 }
 
 export async function generateMetadata({ params, searchParams }) {
@@ -285,6 +320,18 @@ export default async function SingleProductPage({ params, searchParams }) {
       <JsonLd data={productGroup} />
       <JsonLd data={breadcrumbs} />
       <ProductRouteClient initialRouteData={initialRouteData} />
+      <SeoCrawlSupport
+        title={variationLabel ? `${title} - ${variationLabel}` : title}
+        description={
+          variationLabel
+            ? `${description} This product page is currently showing the ${variationLabel.toLowerCase()} option with live pricing, imagery, availability, and cart details.`
+            : `${description} Review product details, available options, pricing, imagery, and cart actions before ordering from Serene Jannat.`
+        }
+        paragraphs={[
+          "Use the product page to compare available variations, check the selected option, and continue browsing related collections from the main storefront.",
+        ]}
+        links={buildStandardProductSeoLinks(product, canonicalPath)}
+      />
     </>
   );
 }

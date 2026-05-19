@@ -2,6 +2,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fallbackApiOrigin = "http://localhost:8101";
 
 function trimTrailingSlash(value = "") {
 	return `${value || ""}`.trim().replace(/\/+$/, "");
@@ -18,13 +19,47 @@ function stripApiSuffix(value = "") {
 	return base.replace(/\/api$/i, "");
 }
 
+function getUrlOrigin(value = "") {
+	try {
+		return new URL(value).origin;
+	} catch {
+		return "";
+	}
+}
+
+function isAbsoluteUrl(value = "") {
+	return /^https?:\/\//i.test(`${value || ""}`.trim());
+}
+
+function resolveApiProxyOrigin() {
+	const explicitOrigin = trimTrailingSlash(
+		process.env.API_PROXY_ORIGIN ||
+			process.env.BACKEND_ORIGIN ||
+			process.env.NEXT_PUBLIC_API_ORIGIN ||
+			"",
+	);
+	if (isAbsoluteUrl(explicitOrigin)) return stripApiSuffix(explicitOrigin);
+
+	const configuredOrigin = stripApiSuffix(
+		process.env.NEXT_PUBLIC_API_URL_MAIN || "",
+	);
+	const siteOrigin = getUrlOrigin(process.env.NEXT_PUBLIC_MAIN_URL || "");
+	const apiOrigin = getUrlOrigin(configuredOrigin);
+
+	if (isAbsoluteUrl(configuredOrigin) && (!siteOrigin || apiOrigin !== siteOrigin)) {
+		return configuredOrigin;
+	}
+
+	return fallbackApiOrigin;
+}
+
 const normalizedApiUrl = ensureApiPrefix(
 	process.env.NEXT_PUBLIC_API_URL || process.env.NEXT_PUBLIC_API_URL_MAIN || "",
 );
 const normalizedApiMain = stripApiSuffix(
 	process.env.NEXT_PUBLIC_API_URL_MAIN || process.env.NEXT_PUBLIC_API_URL || "",
 );
-const apiOrigin = normalizedApiMain || "http://localhost:8101";
+const apiOrigin = resolveApiProxyOrigin();
 
 const nextConfig = {
 	reactStrictMode: false,
@@ -78,6 +113,10 @@ const nextConfig = {
 	},
 	async rewrites() {
 		return [
+			{
+				source: "/api/:path*",
+				destination: `${apiOrigin.replace(/\/+$/, "")}/api/:path*`,
+			},
 			{
 				source: "/backend-api/:path*",
 				destination: `${apiOrigin.replace(/\/+$/, "")}/api/:path*`,

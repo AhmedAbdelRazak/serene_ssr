@@ -160,16 +160,17 @@ const Login = ({ setSignRegister }) => {
 					</Form>
 					<hr />
 
-					<p
-						style={{ textAlign: "center" }}
-						onClick={() => {
-							setSignRegister("Register");
-						}}
-					>
+					<p style={{ textAlign: "center" }}>
 						Don't Have an Account? Please{" "}
-						<Link to='#' className='btn btn-sm btn-outline-danger'>
+						<button
+							type='button'
+							className='btn btn-sm btn-outline-danger'
+							onClick={() => {
+								setSignRegister("Register");
+							}}
+						>
 							Register
-						</Link>
+						</button>
 					</p>
 				</Card>
 			</Col>

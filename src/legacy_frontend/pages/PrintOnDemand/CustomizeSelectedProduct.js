@@ -1172,10 +1172,11 @@ function buildTextElementStyle(el = {}) {
 	const safePaddingX = clampNumber(Number(el.paddingX) || 4, 0, 60);
 	const safePaddingY = clampNumber(Number(el.paddingY) || 4, 0, 40);
 	const safeBorderRadius = clampNumber(Number(el.borderRadius) || 0, 0, 999);
+	const shouldPreserveWords = Boolean(el.preventWordBreak);
 	return {
 		whiteSpace: "pre-wrap",
-		overflowWrap: "break-word",
-		wordBreak: "break-word",
+		overflowWrap: shouldPreserveWords ? "normal" : "break-word",
+		wordBreak: shouldPreserveWords ? "normal" : "break-word",
 		boxSizing: "border-box",
 		color: el.color,
 		backgroundColor: safeBackgroundColor,
@@ -1206,17 +1207,25 @@ function renderTextElementContent(el = {}) {
 	const ornamentLeft = String(el.ornamentLeft || "").trim();
 	const ornamentRight = String(el.ornamentRight || "").trim();
 	const hasOrnaments = Boolean(ornamentLeft || ornamentRight);
+	const shouldPreserveWords = Boolean(el.preventWordBreak);
 	const ornamentStyle = {
 		color: el.ornamentColor || "rgba(120, 80, 40, 0.5)",
 		fontSize: "0.7em",
 		fontWeight: 700,
 		lineHeight: 1,
+		flex: "0 0 auto",
+	};
+	const textSpanStyle = {
+		padding: "0 8px",
+		minWidth: 0,
+		overflowWrap: shouldPreserveWords ? "normal" : "inherit",
+		wordBreak: shouldPreserveWords ? "normal" : "inherit",
 	};
 	if (!hasOrnaments) return el.text;
 	return (
 		<>
 			{ornamentLeft ? <span style={ornamentStyle}>{ornamentLeft}</span> : null}
-			<span style={{ padding: "0 8px" }}>{el.text}</span>
+			<span style={textSpanStyle}>{el.text}</span>
 			{ornamentRight ? <span style={ornamentStyle}>{ornamentRight}</span> : null}
 		</>
 	);
@@ -1663,6 +1672,84 @@ function buildPodBareCaptureAsset(rawCanvas, options = {}) {
 
 let autoDesignMeasureCanvas = null;
 
+function getAutoDesignMeasureContext({
+	fontSize = 16,
+	fontFamily = "sans-serif",
+	fontWeight = "400",
+	fontStyle = "normal",
+} = {}) {
+	if (typeof document === "undefined") return null;
+	autoDesignMeasureCanvas =
+		autoDesignMeasureCanvas || document.createElement("canvas");
+	const context = autoDesignMeasureCanvas.getContext("2d");
+	if (!context) return null;
+	context.font = `${fontStyle || "normal"} ${fontWeight || "400"} ${
+		Math.max(8, Number(fontSize) || 16)
+	}px ${fontFamily || "sans-serif"}`;
+	return context;
+}
+
+function measureAutoDesignTextWidth(text = "", options = {}) {
+	const normalized = `${text || ""}`;
+	const context = getAutoDesignMeasureContext(options);
+	if (context) return context.measureText(normalized).width;
+	const fontSize = Math.max(8, Number(options.fontSize) || 16);
+	return normalized.length * fontSize * 0.56;
+}
+
+function fitAutoDesignMessageTypography({
+	text = "",
+	fontSize = 16,
+	fontFamily = "sans-serif",
+	fontWeight = "400",
+	fontStyle = "normal",
+	width = 120,
+	maxWidth = 120,
+	paddingX = 0,
+	ornamentReserve = 0,
+	minFontSize = 14,
+} = {}) {
+	const words = `${text || ""}`.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+	if (!words.length) {
+		return { fontSize, width };
+	}
+	const safeFontSize = Math.max(8, Number(fontSize) || 16);
+	const safeMaxWidth = Math.max(40, Number(maxWidth) || Number(width) || 120);
+	const safePaddingX = Math.max(0, Number(paddingX) || 0);
+	const ornamentWidth =
+		Math.max(0, Number(ornamentReserve) || 0) * safeFontSize * 0.7;
+	const ornamentTextPadding = ornamentReserve > 0 ? 16 : 0;
+	const horizontalReserve = safePaddingX * 2 + ornamentWidth + ornamentTextPadding;
+	const longestWordWidth = words.reduce(
+		(maxWidthSoFar, word) =>
+			Math.max(
+				maxWidthSoFar,
+				measureAutoDesignTextWidth(word, {
+					fontSize: safeFontSize,
+					fontFamily,
+					fontWeight,
+					fontStyle,
+				})
+			),
+		0
+	);
+	const requiredWidth = Math.ceil(longestWordWidth + horizontalReserve + 4);
+	let nextWidth = Math.min(safeMaxWidth, Math.max(Number(width) || 0, requiredWidth));
+	let nextFontSize = safeFontSize;
+	const availableTextWidth = Math.max(24, nextWidth - horizontalReserve - 4);
+	if (longestWordWidth > availableTextWidth) {
+		nextFontSize = clampNumber(
+			Math.floor((safeFontSize * availableTextWidth) / longestWordWidth),
+			Math.max(10, Number(minFontSize) || 14),
+			safeFontSize
+		);
+	}
+	return {
+		fontSize: nextFontSize,
+		width: Math.round(nextWidth),
+	};
+}
+
 function estimateWrappedTextLineCount(
 	text = "",
 	{
@@ -1679,14 +1766,13 @@ function estimateWrappedTextLineCount(
 	const words = normalized.split(" ").filter(Boolean);
 	if (!words.length) return 1;
 
-	if (typeof document !== "undefined") {
-		autoDesignMeasureCanvas =
-			autoDesignMeasureCanvas || document.createElement("canvas");
-		const context = autoDesignMeasureCanvas.getContext("2d");
-		if (context) {
-			context.font = `${fontStyle || "normal"} ${fontWeight || "400"} ${
-				Math.max(8, Number(fontSize) || 16)
-			}px ${fontFamily || "sans-serif"}`;
+	const context = getAutoDesignMeasureContext({
+		fontSize,
+		fontFamily,
+		fontWeight,
+		fontStyle,
+	});
+	if (context) {
 			const spaceWidth = context.measureText(" ").width;
 			let lineCount = 1;
 			let currentWidth = 0;
@@ -1700,7 +1786,6 @@ function estimateWrappedTextLineCount(
 				currentWidth += (currentWidth > 0 ? spaceWidth : 0) + wordWidth;
 			});
 			return clampNumber(lineCount, 1, 6);
-		}
 	}
 
 	const averageCharacterWidth = Math.max(6, (Number(fontSize) || 16) * 0.56);
@@ -2001,15 +2086,7 @@ export default function CustomizeSelectedProduct() {
 	const [selectedGiftName, setSelectedGiftName] = useState(
 		initialPersonalization.name
 	);
-	const [advancedEditMode, setAdvancedEditMode] = useState(() => {
-		try {
-			const stored = localStorage.getItem(POD_ADVANCED_MODE_KEY);
-			if (stored === null) return true;
-			return stored === "true";
-		} catch {
-			return true;
-		}
-	});
+	const [advancedEditMode, setAdvancedEditMode] = useState(true);
 	const occasionStylePreset = useMemo(
 		() => getOccasionDesignPreset(selectedOccasion),
 		[selectedOccasion]
@@ -2034,6 +2111,15 @@ export default function CustomizeSelectedProduct() {
 			// localStorage may be unavailable in strict privacy mode
 		}
 	};
+
+	useEffect(() => {
+		try {
+			const stored = localStorage.getItem(POD_ADVANCED_MODE_KEY);
+			if (stored !== null) setAdvancedEditMode(stored === "true");
+		} catch {
+			// Keep the default advanced mode when storage is unavailable.
+		}
+	}, []);
 
 	function toPodSlug(name = "") {
 		return (name || "custom-gift")
@@ -2173,6 +2259,10 @@ export default function CustomizeSelectedProduct() {
 	// All design elements (text or images)
 	const [elements, setElements] = useState([]);
 	const [selectedElementId, setSelectedElementId] = useState(null);
+	const selectedElement = useMemo(
+		() => elements.find((item) => item.id === selectedElementId) || null,
+		[elements, selectedElementId],
+	);
 	const [inlineEditId, setInlineEditId] = useState(null);
 	const [inlineEditText, setInlineEditText] = useState("");
 
@@ -2415,11 +2505,10 @@ export default function CustomizeSelectedProduct() {
 		elements.length
 	);
 
-	const [isMobile, setIsMobile] = useState(
-		() => typeof window !== "undefined" && window.innerWidth < 800
-	);
+	const [isMobile, setIsMobile] = useState(false);
 	useEffect(() => {
 		const handleResize = () => setIsMobile(window.innerWidth < 800);
+		handleResize();
 		window.addEventListener("resize", handleResize);
 		return () => window.removeEventListener("resize", handleResize);
 	}, []);
@@ -2980,8 +3069,9 @@ export default function CustomizeSelectedProduct() {
 						? 28
 						: 32
 					: 24;
+		const maxMessageWidth = Math.round(safeWidth * widthCapRatio);
 		let messageWidth = Math.min(
-			Math.round(safeWidth * widthCapRatio),
+			maxMessageWidth,
 			Math.max(
 				minMessageWidth,
 				Math.round(safeWidth * geometry.messageWidthRatio * bagWidthBoost)
@@ -3002,7 +3092,7 @@ export default function CustomizeSelectedProduct() {
 				Math.round(safeWidth * geometry.iconSizeRatio * bagIconBoost)
 			)
 		);
-		const messageFontSize = clampNumber(
+		let messageFontSize = clampNumber(
 			Math.round(
 				messageHeight *
 					(isBagDesign
@@ -3083,115 +3173,135 @@ export default function CustomizeSelectedProduct() {
 				: isMagnetDesign
 					? 1.01
 					: 1.08;
-		const estimatedPaddingX = clampNumber(
-			isBagDesign
-				? Math.round(messageWidth * (isMobile ? 0.042 : 0.045))
-				: isToteDesign
-					? Math.round(messageWidth * (isMobile ? 0.042 : 0.046))
-				: isPillowDesign
-					? Math.round(messageWidth * (isMobile ? 0.026 : 0.03))
-				: isMagnetDesign
-					? Math.round(messageWidth * (isMobile ? 0.024 : 0.028))
-				: isCandleDesign
-					? Math.round(messageWidth * (isMobile ? 0.026 : 0.034))
-					: Number(effectiveOccasionStylePreset.paddingX) ||
-						Math.round(messageWidth * 0.055),
-			isBagDesign
-				? 9
-				: isToteDesign
-					? isMobile
-						? 8
-						: 10
+		const getMessagePaddingX = (targetWidth) =>
+			clampNumber(
+				isBagDesign
+					? Math.round(targetWidth * (isMobile ? 0.042 : 0.045))
+					: isToteDesign
+						? Math.round(targetWidth * (isMobile ? 0.042 : 0.046))
 					: isPillowDesign
+						? Math.round(targetWidth * (isMobile ? 0.026 : 0.03))
+					: isMagnetDesign
+						? Math.round(targetWidth * (isMobile ? 0.024 : 0.028))
+					: isCandleDesign
+						? Math.round(targetWidth * (isMobile ? 0.026 : 0.034))
+						: Number(effectiveOccasionStylePreset.paddingX) ||
+							Math.round(targetWidth * 0.055),
+				isBagDesign
+					? 9
+					: isToteDesign
 						? isMobile
 							? 8
 							: 10
-						: isMagnetDesign
+						: isPillowDesign
 							? isMobile
-								? 6
-								: 8
-							: isCandleDesign
+								? 8
+								: 10
+							: isMagnetDesign
 								? isMobile
 									? 6
-									: 10
-								: 8,
-			isBagDesign
-				? 16
-				: isToteDesign
-					? isMobile
-						? 16
-						: 20
-					: isPillowDesign
+									: 8
+								: isCandleDesign
+									? isMobile
+										? 6
+										: 10
+									: 8,
+				isBagDesign
+					? 16
+					: isToteDesign
 						? isMobile
-							? 12
-							: 16
-						: isMagnetDesign
+							? 16
+							: 20
+						: isPillowDesign
 							? isMobile
 								? 12
-								: 14
-							: isCandleDesign
+								: 16
+							: isMagnetDesign
 								? isMobile
 									? 12
-									: 18
-								: 20
-		);
-		const estimatedPaddingY = clampNumber(
-			isBagDesign
-				? Math.round(messageHeight * 0.08)
-				: isToteDesign
-					? Math.round(messageHeight * (isMobile ? 0.085 : 0.09))
+									: 14
+								: isCandleDesign
+									? isMobile
+										? 12
+										: 18
+									: 20
+			);
+		const getMessagePaddingY = (targetHeight) =>
+			clampNumber(
+				isBagDesign
+					? Math.round(targetHeight * 0.08)
+					: isToteDesign
+						? Math.round(targetHeight * (isMobile ? 0.085 : 0.09))
 					: isPillowDesign
-						? Math.round(messageHeight * (isMobile ? 0.044 : 0.05))
-						: isMagnetDesign
-							? Math.round(messageHeight * (isMobile ? 0.038 : 0.044))
-							: isCandleDesign
-								? Math.round(messageHeight * (isMobile ? 0.036 : 0.05))
-								: Number(effectiveOccasionStylePreset.paddingY) ||
-									Math.round(messageHeight * 0.09),
-			isBagDesign
-				? 4
-				: isToteDesign
-					? isMobile
-						? 6
-						: 8
-					: isPillowDesign
+						? Math.round(targetHeight * (isMobile ? 0.044 : 0.05))
+					: isMagnetDesign
+						? Math.round(targetHeight * (isMobile ? 0.038 : 0.044))
+					: isCandleDesign
+						? Math.round(targetHeight * (isMobile ? 0.036 : 0.05))
+						: Number(effectiveOccasionStylePreset.paddingY) ||
+							Math.round(targetHeight * 0.09),
+				isBagDesign
+					? 4
+					: isToteDesign
 						? isMobile
 							? 6
 							: 8
-						: isMagnetDesign
+						: isPillowDesign
 							? isMobile
-								? 4
-								: 6
-							: isCandleDesign
+								? 6
+								: 8
+							: isMagnetDesign
 								? isMobile
-									? 5
-									: 8
-								: 4,
-			isBagDesign
-				? 8
-				: isToteDesign
-					? isMobile
-						? 12
-						: 16
-					: isPillowDesign
+									? 4
+									: 6
+								: isCandleDesign
+									? isMobile
+										? 5
+										: 8
+									: 4,
+				isBagDesign
+					? 8
+					: isToteDesign
 						? isMobile
-							? 9
-							: 12
-						: isMagnetDesign
+							? 12
+							: 16
+						: isPillowDesign
 							? isMobile
-								? 10
+								? 9
 								: 12
-							: isCandleDesign
+							: isMagnetDesign
 								? isMobile
 									? 10
-									: 14
-								: 10
-		);
+									: 12
+								: isCandleDesign
+									? isMobile
+										? 10
+										: 14
+									: 10
+			);
+		let estimatedPaddingX = getMessagePaddingX(messageWidth);
+		let estimatedPaddingY = getMessagePaddingY(messageHeight);
 		const ornamentReserve = (
 			String(effectiveOccasionStylePreset.ornamentLeft || "").trim() ? 1 : 0
 		) + (
 			String(effectiveOccasionStylePreset.ornamentRight || "").trim() ? 1 : 0
 		);
+		const fittedMessageTypography = fitAutoDesignMessageTypography({
+			text: buildGiftMessage(selectedOccasion, selectedGiftName),
+			fontSize: messageFontSize,
+			fontFamily: effectiveOccasionStylePreset.fontFamily,
+			fontWeight: effectiveOccasionStylePreset.fontWeight,
+			fontStyle: effectiveOccasionStylePreset.fontStyle,
+			width: messageWidth,
+			maxWidth: maxMessageWidth,
+			paddingX: estimatedPaddingX,
+			ornamentReserve,
+			minFontSize: isMobile ? 14 : 16,
+		});
+		messageWidth = fittedMessageTypography.width;
+		messageFontSize = fittedMessageTypography.fontSize;
+		estimatedPaddingX = getMessagePaddingX(messageWidth);
+		estimatedPaddingY = getMessagePaddingY(messageHeight);
 		const estimatedLineCount = estimateWrappedTextLineCount(
 			buildGiftMessage(selectedOccasion, selectedGiftName),
 			{
@@ -3311,76 +3421,14 @@ export default function CustomizeSelectedProduct() {
 							? 1.01
 							: 1.08,
 				paddingX: clampNumber(
-					isBagDesign
-						? Math.round(messageWidth * (isMobile ? 0.042 : 0.045))
-						: isToteDesign
-							? Math.round(messageWidth * (isMobile ? 0.042 : 0.046))
-						: isPillowDesign
-							? Math.round(messageWidth * (isMobile ? 0.026 : 0.03))
-						: isMagnetDesign
-							? Math.round(messageWidth * (isMobile ? 0.024 : 0.028))
-						: isCandleDesign
-							? Math.round(messageWidth * (isMobile ? 0.026 : 0.034))
-						: Number(effectiveOccasionStylePreset.paddingX) ||
-							Math.round(messageWidth * 0.055),
-						isBagDesign
-							? 9
-							: isToteDesign
-								? (isMobile ? 8 : 10)
-							: isPillowDesign
-								? (isMobile ? 8 : 10)
-							: isMagnetDesign
-								? (isMobile ? 6 : 8)
-							: isCandleDesign
-								? (isMobile ? 6 : 10)
-								: 8,
-						isBagDesign
-							? 16
-							: isToteDesign
-								? (isMobile ? 16 : 20)
-							: isPillowDesign
-								? (isMobile ? 12 : 16)
-							: isMagnetDesign
-								? (isMobile ? 12 : 14)
-							: isCandleDesign
-								? (isMobile ? 12 : 18)
-								: 20
+					estimatedPaddingX,
+					0,
+					60
 				),
 				paddingY: clampNumber(
-					isBagDesign
-						? Math.round(messageHeight * 0.08)
-						: isToteDesign
-							? Math.round(messageHeight * (isMobile ? 0.085 : 0.09))
-						: isPillowDesign
-							? Math.round(messageHeight * (isMobile ? 0.044 : 0.05))
-						: isMagnetDesign
-							? Math.round(messageHeight * (isMobile ? 0.038 : 0.044))
-						: isCandleDesign
-							? Math.round(messageHeight * (isMobile ? 0.036 : 0.05))
-						: Number(effectiveOccasionStylePreset.paddingY) ||
-							Math.round(messageHeight * 0.09),
-						isBagDesign
-							? 4
-							: isToteDesign
-								? (isMobile ? 6 : 8)
-							: isPillowDesign
-								? (isMobile ? 6 : 8)
-							: isMagnetDesign
-								? (isMobile ? 4 : 6)
-							: isCandleDesign
-								? (isMobile ? 5 : 8)
-								: 4,
-						isBagDesign
-							? 8
-							: isToteDesign
-								? (isMobile ? 12 : 16)
-							: isPillowDesign
-								? (isMobile ? 9 : 12)
-							: isMagnetDesign
-								? (isMobile ? 10 : 12)
-							: isCandleDesign
-								? (isMobile ? 10 : 14)
-								: 10
+					estimatedPaddingY,
+					0,
+					40
 				),
 				ornamentLeft: effectiveOccasionStylePreset.ornamentLeft || "",
 				ornamentRight: effectiveOccasionStylePreset.ornamentRight || "",
@@ -3395,6 +3443,7 @@ export default function CustomizeSelectedProduct() {
 				wasReset: false,
 				isAutoGenerated: true,
 				autoKind: "message",
+				preventWordBreak: true,
 			},
 			icon: {
 				id: iconId,
@@ -4141,6 +4190,7 @@ export default function CustomizeSelectedProduct() {
 					ornamentColor:
 						effectiveOccasionStylePreset.ornamentColor ||
 						"rgba(16, 33, 24, 0.35)",
+					preventWordBreak: true,
 				};
 			});
 			const nextComparable = JSON.stringify(next);
@@ -4713,10 +4763,25 @@ export default function CustomizeSelectedProduct() {
 		if (!printAreaRef.current) return;
 
 		const boundingRect = printAreaRef.current.getBoundingClientRect();
-		const boxWidth = 200;
-		const boxHeight = 100;
-		const centerX = boundingRect.width / 2 - boxWidth / 2;
-		const centerY = boundingRect.height / 2 - boxHeight / 2;
+		const safeBounds = resolvePrintifySafeBounds(
+			boundingRect.width,
+			boundingRect.height,
+			printifySafeInsetPercent
+		);
+		const safeWidth = Math.max(80, safeBounds.maxX - safeBounds.minX);
+		const safeHeight = Math.max(80, safeBounds.maxY - safeBounds.minY);
+		const boxWidth = clampNumber(
+			safeWidth * (isMobile ? 0.72 : 0.48),
+			120,
+			safeWidth
+		);
+		const boxHeight = clampNumber(
+			safeHeight * (isMobile ? 0.22 : 0.18),
+			64,
+			safeHeight
+		);
+		const centerX = safeBounds.minX + (safeWidth - boxWidth) / 2;
+		const centerY = safeBounds.minY + (safeHeight - boxHeight) / 2;
 
 		const newId = Date.now();
 		const newEl = {
@@ -4739,25 +4804,30 @@ export default function CustomizeSelectedProduct() {
 			isAutoGenerated: false,
 		};
 		setElements((prev) => [...prev, newEl]);
+		setSelectedElementId(newId);
+		setShowTooltipForText(newId);
 	}
 
 	function handleElementClick(el) {
 		setElements((prev) => {
+			const current = prev.find((item) => item.id === el.id) || el;
 			const rest = prev.filter((item) => item.id !== el.id);
-			return [...rest, el];
+			return [...rest, current];
 		});
 		setSelectedElementId(el.id);
 
+		const currentElement =
+			elementsRef.current.find((item) => item.id === el.id) || el;
 		if (el.type === "text") {
-			setUserText(el.text || "");
-			setTextColor(el.color || "#000000");
-			setFontFamily(el.fontFamily || "Arial");
-			setFontSize(el.fontSize || 24);
-			setFontWeight(el.fontWeight || "normal");
-			setFontStyle(el.fontStyle || "normal");
-			setBorderRadius(el.borderRadius || 0);
-		} else if (el.type === "image") {
-			setBorderRadius(el.borderRadius || 0);
+			setUserText(currentElement.text || "");
+			setTextColor(currentElement.color || "#000000");
+			setFontFamily(currentElement.fontFamily || "Arial");
+			setFontSize(currentElement.fontSize || 24);
+			setFontWeight(currentElement.fontWeight || "normal");
+			setFontStyle(currentElement.fontStyle || "normal");
+			setBorderRadius(currentElement.borderRadius || 0);
+		} else if (currentElement.type === "image") {
+			setBorderRadius(currentElement.borderRadius || 0);
 		}
 	}
 
@@ -5203,6 +5273,210 @@ export default function CustomizeSelectedProduct() {
 		messageApi.success("Frame duplicated.");
 	}
 
+	function updateDesignElement(elId, updater) {
+		if (!elId) return;
+		setElements((prev) =>
+			prev.map((item) => {
+				if (item.id !== elId) return item;
+				const updated =
+					typeof updater === "function" ? updater(item) : { ...item, ...updater };
+				const geometryChanged =
+					updated.x !== item.x ||
+					updated.y !== item.y ||
+					updated.width !== item.width ||
+					updated.height !== item.height;
+				if (!geometryChanged) return updated;
+
+				const safeBounds = getActivePrintifySafeBoundsRef.current();
+				if (!safeBounds) return updated;
+				const clamped = clampElementRectWithinBounds(
+					{
+						x: updated.x,
+						y: updated.y,
+						width: updated.width,
+						height: updated.height,
+					},
+					safeBounds
+				);
+				return {
+					...updated,
+					x: clamped.x,
+					y: clamped.y,
+					width: clamped.width,
+					height: clamped.height,
+				};
+			})
+		);
+	}
+
+	function scaleSelectedElement(factor = 1) {
+		updateDesignElement(selectedElementId, (item) => {
+			const safeFactor = clampNumber(Number(factor) || 1, 0.65, 1.35);
+			const nextWidth = Math.max(24, item.width * safeFactor);
+			const nextHeight = Math.max(24, item.height * safeFactor);
+			return {
+				...item,
+				x: item.x + (item.width - nextWidth) / 2,
+				y: item.y + (item.height - nextHeight) / 2,
+				width: nextWidth,
+				height: nextHeight,
+				isAutoGenerated: false,
+			};
+		});
+	}
+
+	function adjustSelectedTextFont(delta = 0) {
+		updateDesignElement(selectedElementId, (item) => {
+			if (item.type !== "text") return item;
+			const nextFontSize = clampNumber(
+				(Number(item.fontSize) || 24) + delta,
+				8,
+				96
+			);
+			setFontSize(nextFontSize);
+			return {
+				...item,
+				fontSize: nextFontSize,
+				isAutoGenerated: false,
+			};
+		});
+	}
+
+	function adjustSelectedBorderRadius(delta = 0) {
+		updateDesignElement(selectedElementId, (item) => {
+			const nextRadius = clampNumber(
+				(Number(item.borderRadius) || 0) + delta,
+				0,
+				999
+			);
+			setBorderRadius(nextRadius);
+			return {
+				...item,
+				borderRadius: nextRadius,
+				isAutoGenerated: false,
+			};
+		});
+	}
+
+	function renderMobileSelectedFrameControls() {
+		if (!isMobile || !selectedElement) return null;
+		const isText = selectedElement.type === "text";
+		return (
+			<MobileFrameControls className='noScreenshot'>
+				<MobileFrameControlsHeader>
+					<span>{isText ? "Selected Text" : "Selected Image"}</span>
+					<Button
+						size='small'
+						icon={<DeleteOutlined />}
+						danger
+						onClick={() => deleteSelectedElement(selectedElement.id)}
+					>
+						Delete
+					</Button>
+				</MobileFrameControlsHeader>
+				<MobileFrameControlGrid>
+					<Button onClick={() => scaleSelectedElement(0.88)}>Smaller</Button>
+					<Button onClick={() => scaleSelectedElement(1.12)}>Larger</Button>
+					<Button
+						onClick={() => {
+							copyFrameToClipboard(selectedElement, { notify: false });
+							pasteFrameFromClipboard({ notify: false });
+						}}
+					>
+						Duplicate
+					</Button>
+					<Button onClick={() => handleResetStyling(selectedElement.id)}>
+						Reset
+					</Button>
+				</MobileFrameControlGrid>
+
+				{isText ? (
+					<>
+						<MobileFrameControlGrid>
+							<Button
+								icon={<DownOutlined />}
+								onClick={() => adjustSelectedTextFont(-2)}
+							>
+								Text
+							</Button>
+							<Button
+								icon={<UpOutlined />}
+								onClick={() => adjustSelectedTextFont(2)}
+							>
+								Text
+							</Button>
+							<MobileColorField>
+								<span>Color</span>
+								<Input
+									type='color'
+									value={selectedElement.color || "#000000"}
+									onChange={(event) => {
+										const nextColor = event.target.value;
+										setTextColor(nextColor);
+										updateDesignElement(selectedElement.id, {
+											color: nextColor,
+											isAutoGenerated: false,
+										});
+									}}
+								/>
+							</MobileColorField>
+							<MobileColorField>
+								<span>Fill</span>
+								<Input
+									type='color'
+									value={
+										selectedElement.backgroundColor &&
+										selectedElement.backgroundColor !== "transparent"
+											? selectedElement.backgroundColor
+											: "#ffffff"
+									}
+									onChange={(event) =>
+										updateDesignElement(selectedElement.id, {
+											backgroundColor: event.target.value,
+											isAutoGenerated: false,
+										})
+									}
+								/>
+							</MobileColorField>
+						</MobileFrameControlGrid>
+						<Select
+							value={selectedElement.fontFamily || "Arial"}
+							onChange={(value) => {
+								setFontFamily(value);
+								updateDesignElement(selectedElement.id, {
+									fontFamily: value,
+									isAutoGenerated: false,
+								});
+							}}
+						>
+							<Option value='Arial'>Arial</Option>
+							<Option value='Times New Roman'>Times New Roman</Option>
+							<Option value='Courier'>Courier</Option>
+							<Option value='Georgia'>Georgia</Option>
+							<Option value='Verdana'>Verdana</Option>
+							<Option value='Allura'>Allura</Option>
+							<Option value='Dancing Script'>Dancing Script</Option>
+							<Option value='Great Vibes'>Great Vibes</Option>
+							<Option value='Lobster'>Lobster</Option>
+						</Select>
+					</>
+				) : (
+					<MobileFrameControlGrid>
+						<Button onClick={() => adjustSelectedBorderRadius(-8)}>
+							Less Round
+						</Button>
+						<Button onClick={() => adjustSelectedBorderRadius(8)}>
+							More Round
+						</Button>
+						<Button onClick={() => handleRemoveBgToggle(selectedElement.id)}>
+							{selectedElement.bgRemoved ? "Default" : "Remove BG"}
+						</Button>
+					</MobileFrameControlGrid>
+				)}
+			</MobileFrameControls>
+		);
+	}
+
 	function moveElementsToHorizontalAnchor(anchorRatio = 0.5) {
 		const safeBounds = getActivePrintifySafeBoundsRef.current();
 		if (!safeBounds) return;
@@ -5409,6 +5683,7 @@ export default function CustomizeSelectedProduct() {
 		hideCenterGuidesImmediate();
 		clearPendingDragPositionRaf();
 		commitElementDragPosition(elId, data.x, data.y);
+		if (isMobile) setSelectedElementId(elId);
 		dragLastPositionRef.current = { elementId: null, x: null, y: null };
 	}
 
@@ -6229,6 +6504,7 @@ export default function CustomizeSelectedProduct() {
 		};
 
 		const previouslySelected = selectedElementId;
+		let localPreviewFallbackImages = [];
 
 		try {
 			if (activePreviewSession?.previewProductId && !isPreviewLinkedToCart) {
@@ -6242,6 +6518,7 @@ export default function CustomizeSelectedProduct() {
 			setPreviewImages([]);
 			setPreviewStatusText("Preparing your design...");
 			setPreviewProgress(8);
+			setIsPreviewModalVisible(true);
 
 			progressTicker = setInterval(() => {
 				setPreviewProgress((prev) => (prev < 92 ? prev + 1 : prev));
@@ -6303,6 +6580,34 @@ export default function CustomizeSelectedProduct() {
 						image: bareDataURL,
 					})
 				).url;
+
+				try {
+					const finalPreviewNode = designOverlayRef.current;
+					if (finalPreviewNode) {
+						setPreviewStatusText("Rendering preview image...");
+						bumpProgress(52);
+						await prepareCaptureNode(finalPreviewNode);
+						const finalPreviewCanvas = await html2canvas(
+							finalPreviewNode,
+							screenshotOptions
+						);
+						const finalPreviewDataUrl = await compressCanvas(
+							finalPreviewCanvas,
+							{
+								mimeType: "image/jpeg",
+								quality: 0.88,
+							}
+						);
+						if (finalPreviewDataUrl) {
+							localPreviewFallbackImages = [finalPreviewDataUrl];
+						}
+					}
+				} catch (localPreviewError) {
+					console.warn(
+						"Local preview fallback capture failed.",
+						localPreviewError
+					);
+				}
 			} catch (htmlCaptureError) {
 				console.warn("html2canvas preview fallback ...", htmlCaptureError);
 				const domOptions = {
@@ -6351,6 +6656,35 @@ export default function CustomizeSelectedProduct() {
 						image: bareDataURL,
 					})
 				).url;
+
+				try {
+					const finalPreviewNode = designOverlayRef.current;
+					if (finalPreviewNode) {
+						setPreviewStatusText("Rendering preview image...");
+						bumpProgress(52);
+						await prepareCaptureNode(finalPreviewNode);
+						const finalPreviewBlob = await domtoimage.toBlob(
+							finalPreviewNode,
+							domOptions
+						);
+						const finalPreviewCanvas = await blobToCanvas(finalPreviewBlob);
+						const finalPreviewDataUrl = await compressCanvas(
+							finalPreviewCanvas,
+							{
+								mimeType: "image/jpeg",
+								quality: 0.88,
+							}
+						);
+						if (finalPreviewDataUrl) {
+							localPreviewFallbackImages = [finalPreviewDataUrl];
+						}
+					}
+				} catch (localPreviewError) {
+					console.warn(
+						"Local preview fallback capture failed.",
+						localPreviewError
+					);
+				}
 			}
 
 			if (!bareUrl) {
@@ -6381,7 +6715,6 @@ export default function CustomizeSelectedProduct() {
 						: product.printifyProductDetails?.print_areas || [],
 			};
 
-			setIsPreviewModalVisible(true);
 			setPreviewStatusText("Generating live mockups...");
 			bumpProgress(62);
 			const response = await axios.post(
@@ -6396,6 +6729,28 @@ export default function CustomizeSelectedProduct() {
 			const previewShopId = response?.data?.shop_id || null;
 
 			if (!images.length) {
+				if (previewProductId) {
+					cleanupPreviewCustomDesign(previewProductId, previewShopId).catch(
+						(cleanupError) => {
+							console.warn(
+								"Failed to cleanup empty Printify preview product:",
+								cleanupError
+							);
+						}
+					);
+				}
+				const fallbackImages = localPreviewFallbackImages.length
+					? localPreviewFallbackImages
+					: [variantContext?.variantImage].filter(Boolean);
+				if (fallbackImages.length) {
+					setPreviewStatusText("Preview ready");
+					bumpProgress(94);
+					setPreviewImages(fallbackImages.slice(0, 3));
+					setActivePreviewSession(null);
+					setIsPreviewLinkedToCart(false);
+					setPreviewProgress(100);
+					return;
+				}
 				throw new Error("No preview images returned.");
 			}
 
@@ -6817,7 +7172,7 @@ export default function CustomizeSelectedProduct() {
 			*/}
 
 			<Row gutter={[18, 20]}>
-				<Col xs={24} md={12}>
+				<Col xs={24} lg={12}>
 					<StyledSlider {...sliderSettings}>
 						{filteredImages.map((image, idx) => {
 							if (idx > 0) {
@@ -7038,10 +7393,11 @@ export default function CustomizeSelectedProduct() {
 															addImageElement(e.target.files[0]);
 														}
 													}}
-												/>
-											</FloatingActions>
-										</MobileToolbarWrapper>
-									)}
+													/>
+												</FloatingActions>
+												{renderMobileSelectedFrameControls()}
+											</MobileToolbarWrapper>
+										)}
 
 									<DesignOverlay ref={designOverlayRef}>
 										<OverlayImage
@@ -7126,7 +7482,7 @@ export default function CustomizeSelectedProduct() {
 				</Col>
 
 				{/* RIGHT COLUMN */}
-				<Col xs={24} md={12}>
+				<Col xs={24} lg={12}>
 					<ProductTitle level={3}>{product.title}</ProductTitle>
 					<ProductDescription>
 						{displayedDescription}
@@ -7783,6 +8139,7 @@ export default function CustomizeSelectedProduct() {
 				onCancel={() => setTextModalVisible(false)}
 				onOk={() => {
 					addTextElement(mobileTextInput, true);
+					setMobileTextInput("");
 					setTextModalVisible(false);
 				}}
 			>
@@ -7936,7 +8293,8 @@ export default function CustomizeSelectedProduct() {
 		return elements.map((el) => {
 			const isSelected = el.id === selectedElementId;
 			const dragEnabled =
-				!forceDragRelease && (advancedEditMode || el.type === "image");
+				!forceDragRelease && (advancedEditMode || isMobile || el.type === "image");
+			const resizeHandleSize = isMobile ? "32px" : "20px";
 			return (
 				<Rnd
 					key={el.id}
@@ -7945,7 +8303,7 @@ export default function CustomizeSelectedProduct() {
 					position={{ x: el.x, y: el.y }}
 					size={{ width: el.width, height: el.height }}
 					enableResizing={
-						advancedEditMode
+						advancedEditMode || isMobile
 							? {
 									topLeft: true,
 									topRight: true,
@@ -7956,19 +8314,21 @@ export default function CustomizeSelectedProduct() {
 					}
 					disableDragging={!dragEnabled}
 					handleStyles={{
-						topLeft: { width: "20px", height: "20px" },
-						topRight: { width: "20px", height: "20px" },
-						bottomLeft: { width: "20px", height: "20px" },
-						bottomRight: { width: "20px", height: "20px" },
+						topLeft: { width: resizeHandleSize, height: resizeHandleSize },
+						topRight: { width: resizeHandleSize, height: resizeHandleSize },
+						bottomLeft: { width: resizeHandleSize, height: resizeHandleSize },
+						bottomRight: { width: resizeHandleSize, height: resizeHandleSize },
 					}}
 					onDragStart={() => {
 						dragSessionRef.current = true;
 						captureCurrentDragGeometry();
-						if (dragEnabled) setSelectedElementId(el.id);
+						if (dragEnabled && !isMobile) setSelectedElementId(el.id);
 					}}
 					onDrag={(e, data) => handleRndDrag(e, data, el.id)}
 					onDragStop={(e, data) => handleRndDragStop(e, data, el.id)}
-					onResizeStart={() => advancedEditMode && setSelectedElementId(el.id)}
+					onResizeStart={() =>
+						(advancedEditMode || isMobile) && setSelectedElementId(el.id)
+					}
 					onResizeStop={(e, dir, ref, delta, pos) =>
 						handleRndResizeStop(e, dir, ref, delta, pos, el.id)
 					}
@@ -7977,14 +8337,20 @@ export default function CustomizeSelectedProduct() {
 					}
 					cancel='.rotate-handle, .text-toolbar, .image-toolbar, .text-toolbar *, .image-toolbar *'
 					style={{
-						border: isSelected && advancedEditMode
+						border: isSelected && (advancedEditMode || isMobile)
 							? "1px dashed var(--text-color-dark)"
 							: "1px dashed transparent",
 						position: "absolute",
 					}}
 					onContextMenu={(event) => handleElementContextMenu(event, el)}
-					onMouseDown={() => handleElementClick(el)}
-					onTouchStart={() => handleElementClick(el)}
+					onMouseDown={() => {
+						if (!isMobile) handleElementClick(el);
+					}}
+					onClick={(event) => {
+						if (!isMobile) return;
+						event.stopPropagation();
+						handleElementClick(el);
+					}}
 				>
 					<div
 						className={DRAGGABLE_REGION_CLASS}
@@ -8061,7 +8427,7 @@ export default function CustomizeSelectedProduct() {
 						)}
 					</div>
 
-					{isSelected && advancedEditMode && (
+					{isSelected && (advancedEditMode || isMobile) && (
 						<RotateHandle
 							className='rotate-handle'
 							onMouseDown={(evt) => onRotationStart(evt, el.id)}
@@ -8069,7 +8435,7 @@ export default function CustomizeSelectedProduct() {
 							title='Rotate this element'
 							style={{ touchAction: "none" }}
 						>
-							â†»
+							<ReloadOutlined />
 						</RotateHandle>
 					)}
 
@@ -8404,20 +8770,114 @@ const CustomizeWrapper = styled.section`
 	padding: 40px;
 	min-height: 85vh;
 	background-color: var(--background-light);
+	overflow-x: hidden;
 
 	@media (max-width: 800px) {
 		padding: 16px 14px 20px !important;
 		margin: 0 !important;
+		width: 100%;
+		max-width: 100vw;
+
+		.ant-row {
+			margin-left: 0 !important;
+			margin-right: 0 !important;
+		}
+
+		.ant-col {
+			max-width: 100%;
+			padding-left: 0 !important;
+			padding-right: 0 !important;
+		}
 	}
 `;
 
 const StyledSlider = styled(Slider)`
+	&.slick-slider {
+		position: relative;
+		display: block;
+		box-sizing: border-box;
+		user-select: none;
+		touch-action: pan-y;
+		-webkit-tap-highlight-color: transparent;
+	}
+
+	width: 100%;
+	max-width: 100%;
+	overflow: hidden;
+
+	.slick-list {
+		position: relative;
+		display: block;
+		width: 100%;
+		overflow: hidden;
+		margin: 0;
+		padding: 0;
+	}
+
+	.slick-track {
+		position: relative;
+		top: 0;
+		left: 0;
+		display: block;
+		margin-left: auto;
+		margin-right: auto;
+	}
+
+	.slick-track::before,
+	.slick-track::after {
+		display: table;
+		content: "";
+	}
+
+	.slick-track::after {
+		clear: both;
+	}
+
 	.slick-slide {
+		display: none;
+		float: left;
+		height: 100%;
+		min-height: 1px;
 		text-align: center;
 		outline: none;
 	}
+
+	&.slick-initialized .slick-slide {
+		display: block;
+	}
+
 	.slick-dots {
 		bottom: -30px;
+	}
+
+	@media (max-width: 800px) {
+		.slick-list,
+		.slick-slide,
+		.slick-slide > div {
+			max-width: 100%;
+		}
+
+		.slick-track {
+			max-width: none;
+		}
+
+		.slick-slide {
+			float: left;
+		}
+
+		.slick-slide > div {
+			width: 100%;
+		}
+
+		.slick-prev {
+			left: 4px;
+			z-index: 5;
+		}
+
+		.slick-next {
+			right: 4px;
+			z-index: 5;
+		}
 	}
 `;
 
@@ -8439,6 +8899,7 @@ const DesignOverlay = styled.div`
 		border-radius: 18px;
 		border: 1px solid #ece0d6;
 		box-shadow: 0 14px 28px rgba(0, 0, 0, 0.08);
+		touch-action: pan-y;
 	}
 `;
 
@@ -8450,6 +8911,7 @@ const PrintArea = styled.div`
 	height: 75%;
 	pointer-events: auto;
 	z-index: 1;
+	touch-action: none;
 `;
 
 const DottedOverlay = styled.div`
@@ -8504,8 +8966,15 @@ const SlideImageWrapper = styled.div`
 	}
 
 	@media (max-width: 800px) {
+		width: 100%;
+		max-width: 100%;
 		min-height: auto !important;
 		padding-bottom: 0 !important;
+
+		img {
+			width: 100%;
+			max-width: 100%;
+		}
 	}
 `;
 
@@ -8513,6 +8982,9 @@ const MobileToolbarWrapper = styled.div`
 	display: flex;
 	flex-direction: column;
 	gap: 12px;
+	box-sizing: border-box;
+	width: 100%;
+	max-width: 100%;
 	padding: 14px;
 	margin: 4px 0 14px;
 	background: linear-gradient(180deg, #fffaf6 0%, #ffffff 100%);
@@ -8543,8 +9015,19 @@ const FloatingActions = styled.div`
 		justify-content: center;
 		gap: 6px;
 		width: 100%;
+		min-width: 0;
 		min-height: 44px;
 		margin: 0 !important;
+		padding-inline: 8px;
+		font-size: 0.92rem;
+		overflow: hidden;
+	}
+
+	> button > span:not(.anticon) {
+		min-width: 0;
+		overflow: hidden;
+		text-overflow: ellipsis;
+		white-space: nowrap;
 	}
 
 	> button:last-of-type {
@@ -8557,6 +9040,65 @@ const FloatingActions = styled.div`
 		> button:last-of-type {
 			grid-column: auto;
 		}
+	}
+`;
+
+const MobileFrameControls = styled.div`
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	width: 100%;
+	padding: 10px;
+	border: 1px solid #e8ddd3;
+	border-radius: 12px;
+	background: #ffffff;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.75);
+
+	.ant-select {
+		width: 100%;
+	}
+`;
+
+const MobileFrameControlsHeader = styled.div`
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+
+	span {
+		font-size: 0.9rem;
+		font-weight: 700;
+		color: var(--text-color-dark);
+	}
+`;
+
+const MobileFrameControlGrid = styled.div`
+	display: grid;
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 8px;
+
+	> button {
+		min-height: 40px;
+	}
+`;
+
+const MobileColorField = styled.label`
+	display: grid;
+	grid-template-columns: auto 40px;
+	align-items: center;
+	gap: 8px;
+	min-height: 40px;
+	padding: 0 10px;
+	border: 1px solid #d9d9d9;
+	border-radius: 6px;
+	background: #ffffff;
+	font-size: 0.9rem;
+	color: rgba(0, 0, 0, 0.88);
+
+	.ant-input {
+		width: 40px;
+		height: 30px;
+		padding: 2px;
 	}
 `;
 
@@ -8696,8 +9238,8 @@ const TextToolbarContainer = styled.div`
 	left: 0;
 	z-index: 9999;
 
-	@media (max-width: 700px) {
-		top: -160px;
+	@media (max-width: 800px) {
+		display: none;
 	}
 `;
 
@@ -8912,6 +9454,16 @@ const RotateHandle = styled.div`
 	&:active {
 		cursor: grabbing;
 	}
+
+	@media (max-width: 800px) {
+		top: -18px;
+		right: -18px;
+		width: 34px;
+		height: 34px;
+		font-size: 16px;
+		box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+		touch-action: none;
+	}
 `;
 
 const ImageToolbarContainer = styled.div`
@@ -8920,8 +9472,8 @@ const ImageToolbarContainer = styled.div`
 	left: 0;
 	z-index: 9999;
 
-	@media (max-width: 700px) {
-		top: -100px;
+	@media (max-width: 800px) {
+		display: none;
 	}
 `;
 

@@ -17,6 +17,11 @@ function normalizeProtoHeader(value = "") {
 	return proto === "http" || proto === "https" ? proto : "";
 }
 
+function isLocalHost(value = "") {
+	const host = `${value || ""}`.trim().toLowerCase();
+	return /^(localhost|127\.0\.0\.1|\[::1\]|::1)(:\d+)?$/.test(host);
+}
+
 function ensureLeadingSlash(value = "") {
 	if (!value) return "/";
 	return value.startsWith("/") ? value : `/${value}`;
@@ -48,7 +53,8 @@ export function getRequestOrigin(request) {
 
 	const defaultProto = url.protocol === "https:" ? "https" : "http";
 	const proto = forwardedProto || defaultProto;
-	return `${proto}://${host}`;
+	const publicProto = proto === "http" && !isLocalHost(host) ? "https" : proto;
+	return `${publicProto}://${host}`;
 }
 
 export function absoluteXmlUrl(path = "/", request) {

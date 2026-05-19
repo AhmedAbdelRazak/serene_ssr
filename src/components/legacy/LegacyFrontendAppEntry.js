@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo } from "react";
 import ProductCard from "@/components/ProductCard";
 import { getPrimaryProductImage } from "@/lib/product-helpers";
+import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
 
 const routeModulePreloaders = {
 	home: () => import("@/legacy_frontend/pages/Home/Home"),
@@ -117,6 +118,11 @@ function SeoProductGrid({ cards = [] }) {
 }
 
 function HeaderShell({ logoUrl = "/logo192.png" }) {
+	const optimizedLogoUrl = getCloudinaryOptimizedUrl(logoUrl, {
+		width: 96,
+		quality: "auto:eco",
+	});
+
 	return (
 		<header
 			style={{
@@ -158,7 +164,7 @@ function HeaderShell({ logoUrl = "/logo192.png" }) {
 					}}
 				>
 					<img
-						src={logoUrl}
+						src={optimizedLogoUrl || logoUrl}
 						alt='Serene Jannat'
 						style={{
 							width: 42,
@@ -212,7 +218,11 @@ function HomeFallback({ initialRouteData }) {
 	const websiteSetup = initialRouteData?.websiteSetup || null;
 	const heroBanner = websiteSetup?.homeMainBanners?.[0] || null;
 	const logoUrl =
-		websiteSetup?.sereneJannatLogo?.url || initialRouteData?.logoUrl || "/logo192.png";
+		websiteSetup?.sereneJannatLogo?.cloudinary_url ||
+		websiteSetup?.sereneJannatLogo?.cloudinaryUrl ||
+		websiteSetup?.sereneJannatLogo?.url ||
+		initialRouteData?.logoUrl ||
+		"/logo192.png";
 	const categories = Array.isArray(initialRouteData?.categories)
 		? initialRouteData.categories
 		: [];

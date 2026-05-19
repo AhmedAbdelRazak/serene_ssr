@@ -11,10 +11,14 @@ const Footer = lazy(() => import("@/legacy_frontend/Footer"));
 const ChatIcon = lazy(() => import("@/legacy_frontend/Chat/ChatIcon"));
 
 function buildFallbackLogoUrl(websiteSetup = null) {
-	const logoUrl = websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const logoUrl =
+		websiteSetup?.sereneJannatLogo?.cloudinary_url ||
+		websiteSetup?.sereneJannatLogo?.cloudinaryUrl ||
+		websiteSetup?.sereneJannatLogo?.url ||
+		"/logo192.png";
 	return getCloudinaryOptimizedUrl(logoUrl, {
-		width: 300,
-		quality: "auto",
+		width: 320,
+		quality: "auto:eco",
 	});
 }
 

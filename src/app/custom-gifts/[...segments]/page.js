@@ -1,5 +1,6 @@
 import PodProductRouteClient from "@/components/public/routes/PodProductRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
+import SeoCrawlSupport from "@/components/seo/SeoCrawlSupport";
 import { getProductById, getWebsiteSetupData } from "@/lib/api";
 import {
   getPrimaryProductImage,
@@ -215,6 +216,28 @@ function buildPodSeoKeywords(name = "", selection = {}) {
   return keywords.filter(Boolean);
 }
 
+function buildPodProductSeoLinks(product = {}, canonicalPath = "") {
+  const links = [
+    { href: "/", label: "Home" },
+    { href: "/custom-gifts", label: "All custom gifts" },
+    { href: "/our-products", label: "All products" },
+    { href: "/contact", label: "Contact support" },
+  ];
+
+  for (const occasion of getPodOccasions(product)) {
+    const safeOccasion = `${occasion || ""}`.trim();
+    if (!safeOccasion) continue;
+    const params = new URLSearchParams();
+    params.set("occasion", safeOccasion);
+    links.push({
+      href: `${canonicalPath}?${params.toString()}`,
+      label: `${safeOccasion} design`,
+    });
+  }
+
+  return links;
+}
+
 export async function generateMetadata({ params, searchParams }) {
   const resolvedParams = await params;
   const resolvedSearchParams = await searchParams;
@@ -397,6 +420,18 @@ export default async function PodProductPage({ params, searchParams }) {
       <JsonLd data={productGroup} />
       <JsonLd data={breadcrumbs} />
       <PodProductRouteClient initialRouteData={initialRouteData} />
+      <SeoCrawlSupport
+        title={variationLabel ? `${title} - ${variationLabel}` : title}
+        description={
+          selection.occasion
+            ? `${description} This personalized ${title.toLowerCase()} is ready for ${selection.occasion.toLowerCase()} and can be customized with names, text, photos, and design details before checkout.`
+            : `${description} Customize this print-on-demand gift with occasion artwork, names, photos, text, color choices, size choices, and other product-specific options.`
+        }
+        paragraphs={[
+          "Use the product designer to preview the final artwork, adjust each design layer, and add the finished personalized item to the cart with the selected product options.",
+        ]}
+        links={buildPodProductSeoLinks(product, canonicalPath)}
+      />
     </>
   );
 }

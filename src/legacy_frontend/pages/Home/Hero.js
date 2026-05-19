@@ -141,6 +141,7 @@ const Hero = ({ websiteSetup }) => {
 	const renderSlide = (banner, idx) => {
 		const {
 			url,
+			cloudinary_url: cloudinaryUrl,
 			title,
 			subTitle,
 			buttonTitle,
@@ -149,34 +150,35 @@ const Hero = ({ websiteSetup }) => {
 		} = banner;
 
 		const isFirstSlide = idx === 0;
-		const base1600 = getCloudinaryOptimizedUrl(url, {
-			width: 1600,
-			quality: isFirstSlide ? "auto" : "auto:eco",
+		const imageUrl = cloudinaryUrl || url;
+		const base1280 = getCloudinaryOptimizedUrl(imageUrl, {
+			width: 1280,
+			quality: isFirstSlide ? "auto:good" : "auto:eco",
 		});
-		const base1200 = getCloudinaryOptimizedUrl(url, {
-			width: 1200,
-			quality: isFirstSlide ? "auto" : "auto:eco",
+		const base960 = getCloudinaryOptimizedUrl(imageUrl, {
+			width: 960,
+			quality: isFirstSlide ? "auto:good" : "auto:eco",
 		});
-		const base768 = getCloudinaryOptimizedUrl(url, {
+		const base768 = getCloudinaryOptimizedUrl(imageUrl, {
 			width: 768,
 			quality: "auto:eco",
 		});
-		const base480 = getCloudinaryOptimizedUrl(url, {
+		const base480 = getCloudinaryOptimizedUrl(imageUrl, {
 			width: 480,
 			quality: "auto:eco",
 		});
 
 		return (
 			<Slide key={idx}>
-				{base1600 ? (
+				{imageUrl ? (
 					<BannerImageWrapper>
 						<img
 							src={base480}
 							srcSet={`
                         ${base480} 480w,
                         ${base768} 768w,
-                        ${base1200} 1200w,
-                        ${base1600} 1600w
+                        ${base960} 960w,
+                        ${base1280} 1280w
                       `}
 							sizes='100vw'
 							alt={`Banner ${idx + 1}`}
@@ -301,7 +303,7 @@ const SliderContainer = styled.div`
 	}
 
 	.slick-dots li button:before {
-		content: "\2022";
+		content: "\\2022";
 		font-family: inherit;
 		font-size: 13px;
 		line-height: 1;

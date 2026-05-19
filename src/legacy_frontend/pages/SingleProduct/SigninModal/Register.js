@@ -229,16 +229,17 @@ const Register = ({ setSignRegister }) => {
 						</Form.Item>
 					</Form>
 					<hr />
-					<p
-						style={{ textAlign: "center" }}
-						onClick={() => {
-							setSignRegister("Login");
-						}}
-					>
+					<p style={{ textAlign: "center" }}>
 						If you already have an account, please{" "}
-						<Link to='#' className='btn btn-sm btn-outline-primary'>
+						<button
+							type='button'
+							className='btn btn-sm btn-outline-primary'
+							onClick={() => {
+								setSignRegister("Login");
+							}}
+						>
 							Login Here
-						</Link>
+						</button>
 					</p>
 				</Card>
 			</Col>
@@ -260,7 +261,7 @@ const Register = ({ setSignRegister }) => {
 					name='description'
 					content='Serene Janat Shop Platform Developed By https://infinite-apps.com'
 				/>
-				<link rel='canonical' href='https://serenejanat.com/signup' />
+				<link rel='canonical' href='https://serenejannat.com/signup' />
 			</Helmet>
 			<br />
 			<ToastContainer className='toast-top-center' position='top-center' />

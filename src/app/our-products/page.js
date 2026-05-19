@@ -1,5 +1,6 @@
 import ShopRouteClient from "@/components/public/routes/ShopRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
+import SeoCrawlSupport from "@/components/seo/SeoCrawlSupport";
 import { absoluteUrl } from "@/lib/config";
 import { getCategoriesAndSubcategories, getFilteredProducts } from "@/lib/api";
 import {
@@ -64,6 +65,74 @@ function createSeoCard(product = {}) {
 	};
 }
 
+function buildShopPaginationLinks(seoState = {}, totalPages = 1) {
+	const currentPage = Number(seoState?.page || 1);
+	const safeTotalPages = Math.max(1, Number(totalPages || 1));
+	const pages = new Set();
+
+	for (let page = 1; page <= Math.min(safeTotalPages, 8); page += 1) {
+		if (page !== currentPage) pages.add(page);
+	}
+	if (currentPage > 1) pages.add(currentPage - 1);
+	if (currentPage < safeTotalPages) pages.add(currentPage + 1);
+
+	return [...pages]
+		.sort((a, b) => a - b)
+		.map((page) => {
+			const params = new URLSearchParams(seoState?.canonicalSearchParams);
+			if (page > 1) {
+				params.set("page", String(page));
+			} else {
+				params.delete("page");
+			}
+			const query = params.toString();
+			return {
+				href: query ? `/our-products?${query}` : "/our-products",
+				label: page > 1 ? `Products page ${page}` : "Products page 1",
+			};
+		});
+}
+
+function buildShopSeoLinks({
+	categories = [],
+	cards = [],
+	pageLinks = [],
+} = {}) {
+	const links = [
+		{ href: "/", label: "Home" },
+		{ href: "/custom-gifts", label: "Custom gifts" },
+		{ href: "/contact", label: "Contact" },
+		...pageLinks,
+	];
+
+	for (const card of cards.slice(0, 30)) {
+		if (card.href && card.title) {
+			links.push({ href: card.href, label: card.title });
+		}
+	}
+
+	for (const category of categories.slice(0, 6)) {
+		const categoryId = `${category?._id || ""}`.trim();
+		const categorySlug = `${category?.categorySlug || ""}`.trim();
+		const categoryName = `${category?.categoryName || ""}`.trim();
+		if (!categoryId || !categoryName) continue;
+		const params = new URLSearchParams();
+		params.set("category", categoryId);
+		if (categorySlug) params.set("categorySlug", categorySlug);
+		links.push({
+			href: `/our-products?${params.toString()}`,
+			label: categoryName,
+		});
+	}
+
+	const seen = new Set();
+	return links.filter((link) => {
+		if (!link.href || seen.has(link.href)) return false;
+		seen.add(link.href);
+		return true;
+	});
+}
+
 export async function generateMetadata({ searchParams }) {
 	const resolvedSearchParams = await searchParams;
 	const categoriesPayload = await getCategoriesAndSubcategories({
@@ -124,6 +193,7 @@ export default async function OurProductsPage({ searchParams }) {
 	const page = seoState.page;
 
 	let seoCards = [];
+	let totalPages = 1;
 	let initialRouteData = null;
 	try {
 		const productsPayload = await getFilteredProducts({
@@ -132,8 +202,12 @@ export default async function OurProductsPage({ searchParams }) {
 			records: 30,
 			revalidate: 180,
 		});
+		totalPages = Math.max(
+			1,
+			Math.ceil(Number(productsPayload?.totalRecords || 0) / 30)
+		);
 		seoCards = Array.isArray(productsPayload?.products)
-			? productsPayload.products.slice(0, 12).map(createSeoCard).filter((card) => card.href)
+			? productsPayload.products.map(createSeoCard).filter((card) => card.href)
 			: [];
 		initialRouteData = {
 			type: "shop",
@@ -173,6 +247,21 @@ export default async function OurProductsPage({ searchParams }) {
 			<JsonLd data={schema} />
 			<JsonLd data={breadcrumbs} />
 			<ShopRouteClient initialRouteData={initialRouteData} />
+			<SeoCrawlSupport
+				title={seoState.schemaName}
+				description={seoState.description}
+				paragraphs={[
+					"Browse Serene Jannat by category, occasion, and product style. These collection links help shoppers find decor, candles, vases, outdoor pieces, and gift-ready items without relying on filters alone.",
+					"Each paginated collection keeps a clear path back to featured products, related pages, and the main storefront so shoppers can continue browsing even when a page has only a few remaining items.",
+				]}
+				links={buildShopSeoLinks({
+					categories: Array.isArray(categoriesPayload?.categories)
+						? categoriesPayload.categories
+						: [],
+					cards: seoCards,
+					pageLinks: buildShopPaginationLinks(seoState, totalPages),
+				})}
+			/>
 		</>
 	);
 }

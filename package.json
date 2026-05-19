@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev --webpack",
+    "build": "next build --webpack",
     "start": "next start"
   },
   "dependencies": {
+    "@ant-design/icons": "^5.6.1",
     "@ant-design/v5-patch-for-react-19": "^1.0.3",
     "@emotion/is-prop-valid": "^1.4.0",
     "@paypal/react-paypal-js": "^8.8.3",
@@ -21,22 +22,20 @@
     "antd": "^5.13.2",
     "aos": "^2.3.4",
     "apexcharts": "^3.45.2",
-    "axios": "^1.10.0",
+    "axios": "^1.16.1",
     "bootstrap-icons": "^1.11.3",
     "chart.js": "^4.4.1",
     "dom-to-image-more": "^3.5.0",
     "emoji-picker-react": "^4.9.3",
-    "express": "^4.18.2",
-    "fabric": "^6.5.4",
+    "express": "^4.22.2",
     "framer-motion": "^12.6.3",
     "heic2any": "^0.0.4",
     "html-react-parser": "^5.2.2",
     "html2canvas": "^1.4.1",
     "install": "^0.13.0",
     "jsonwebtoken": "^9.0.2",
-    "jspdf": "^2.5.1",
     "moment": "^2.30.1",
-    "next": "16.1.6",
+    "next": "16.2.6",
     "prettier": "^3.2.4",
     "query-string": "^9.0.0",
     "react": "19.2.3",
@@ -47,7 +46,7 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "19.2.3",
-    "react-draggable": "^4.4.6",
+    "react-draggable": "4.4.6",
     "react-dropzone": "^14.3.5",
     "react-facebook-pixel": "^1.0.4",
     "react-ga4": "^2.1.0",
@@ -59,7 +58,7 @@
     "react-loading-skeleton": "^3.5.0",
     "react-messenger-chat-plugin": "^3.0.5",
     "react-moveable": "^0.56.0",
-    "react-quill-new": "^3.8.3",
+    "react-quill-new": "3.7.0",
     "react-responsive-carousel": "^3.2.23",
     "react-rnd": "^10.4.14",
     "react-router-dom": "^5.3.0",
@@ -71,14 +70,18 @@
     "react-transition-group": "^4.4.5",
     "slick-carousel": "^1.8.1",
     "socket.io-client": "^4.7.5",
-    "styled-components": "^6.1.8",
-    "web-vitals": "^2.1.4",
-    "xlsx": "^0.18.5"
+    "styled-components": "^6.4.2",
+    "web-vitals": "^2.1.4"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1"
+  },
+  "overrides": {
+    "postcss": "8.5.10",
+    "quill": "2.0.2",
+    "ws": "8.20.1"
   }
 }

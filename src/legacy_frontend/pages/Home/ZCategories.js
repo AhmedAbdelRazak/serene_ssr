@@ -1,7 +1,17 @@
 import React, { useCallback } from "react";
 import styled from "styled-components";
 import { isAuthenticated } from "../../auth";
-import { getCloudinaryOptimizedUrl } from "../../utils/image";
+import {
+	buildCloudinarySrcSet,
+	getCloudinaryOptimizedUrl,
+	resolveImageUrl,
+} from "../../utils/image";
+
+const CATEGORY_IMAGE_WIDTHS = [240, 320, 420, 520, 640];
+const CATEGORY_IMAGE_SIZES = `(max-width: 480px) 45vw,
+	(max-width: 768px) 45vw,
+	(max-width: 1024px) 30vw,
+	18vw`;
 
 function trackAnalyticsEvent(payload = {}) {
 	if (typeof window === "undefined") return;
@@ -105,46 +115,36 @@ const ZCategories = ({ allCategories }) => {
 					let imageUrl = "";
 					let webpUrl = "";
 					if (category.thumbnail && category.thumbnail.length > 0) {
-						const originalUrl = category.thumbnail[0].url;
-
-						// Base (JPEG/PNG/etc.) - tuned smaller to reduce homepage payload
-						const baseJpg = getCloudinaryOptimizedUrl(originalUrl, {
-							width: 640,
-							quality: "auto:low",
-						});
-						// WebP version
-						const baseWebp = getCloudinaryOptimizedUrl(originalUrl, {
-							width: 640,
-							format: "webp",
-							quality: "auto:low",
+						const originalUrl = resolveImageUrl(category.thumbnail[0], {
+							preferCloudinary: true,
 						});
 
-						// Now let's do *responsive* widths via string replace:
-						// e.g. w_640 => w_240/w_320/w_480
-						const jpg240 = baseJpg.replace("w_640", "w_240");
-						const jpg320 = baseJpg.replace("w_640", "w_320");
-						const jpg480 = baseJpg.replace("w_640", "w_480");
+						if (originalUrl) {
+							const hasCloudinarySource =
+								originalUrl.includes("res.cloudinary.com");
+							// Base (JPEG/PNG/etc.) - tuned smaller to reduce homepage payload
+							const fallbackJpg = getCloudinaryOptimizedUrl(originalUrl, {
+								width: 320,
+								quality: "auto:eco",
+							});
+							imageUrl = {
+								fallback: fallbackJpg,
+								srcset: hasCloudinarySource
+									? buildCloudinarySrcSet(originalUrl, CATEGORY_IMAGE_WIDTHS, {
+											quality: "auto:eco",
+										})
+									: "",
+							};
 
-						const webp240 = baseWebp.replace("w_640", "w_240");
-						const webp320 = baseWebp.replace("w_640", "w_320");
-						const webp480 = baseWebp.replace("w_640", "w_480");
-
-						// We'll pass these to <source> and <img> so the browser picks the best size
-						imageUrl = {
-							fallback: jpg320, // smallest fallback if older browser doesn't handle srcset
-							srcset: `${jpg240} 240w,
-                       ${jpg320} 320w,
-                       ${jpg480} 480w,
-                       ${baseJpg} 640w`,
-						};
-
-						webpUrl = {
-							fallback: webp320, // smallest
-							srcset: `${webp240} 240w,
-                       ${webp320} 320w,
-                       ${webp480} 480w,
-                       ${baseWebp} 640w`,
-						};
+							webpUrl = {
+								srcset: hasCloudinarySource
+									? buildCloudinarySrcSet(originalUrl, CATEGORY_IMAGE_WIDTHS, {
+											format: "webp",
+											quality: "auto:eco",
+										})
+									: "",
+							};
+						}
 					}
 
 					return (
@@ -160,26 +160,19 @@ const ZCategories = ({ allCategories }) => {
                       with responsive widths. The fallback <img> is for older browsers.
                     */}
 										<picture>
-											<source
-												type='image/webp'
-												srcSet={webpUrl.srcset}
-												sizes='(max-width: 480px) 45vw,
-                               (max-width: 768px) 45vw,
-                               (max-width: 1024px) 30vw,
-                               18vw'
-											/>
-											<source
-												type='image/jpeg'
-												srcSet={imageUrl.srcset}
-												sizes='(max-width: 480px) 45vw,
-                               (max-width: 768px) 45vw,
-                               (max-width: 1024px) 30vw,
-                               18vw'
-											/>
+											{webpUrl.srcset ? (
+												<source
+													type='image/webp'
+													srcSet={webpUrl.srcset}
+													sizes={CATEGORY_IMAGE_SIZES}
+												/>
+											) : null}
 
 											<CategoryImage
 												loading='lazy'
 												src={imageUrl.fallback}
+												srcSet={imageUrl.srcset || undefined}
+												sizes={imageUrl.srcset ? CATEGORY_IMAGE_SIZES : undefined}
 												alt={category.categoryName}
 												width={640}
 												height={360}

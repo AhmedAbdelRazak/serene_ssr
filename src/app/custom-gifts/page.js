@@ -1,6 +1,8 @@
 import PodListRouteClient from "@/components/public/routes/PodListRouteClient";
 import JsonLd from "@/components/seo/JsonLd";
+import SeoCrawlSupport from "@/components/seo/SeoCrawlSupport";
 import { absoluteUrl } from "@/lib/config";
+import { POD_OCCASIONS } from "@/lib/pod-occasions";
 import { buildPodCollectionSeo } from "@/lib/collection-seo";
 import {
   appendTrackingQueryParams,
@@ -11,6 +13,7 @@ import { getPodProducts } from "@/lib/api";
 import {
   buildProductPath,
   getPodOccasions,
+  getPodProductSlug,
   getPrimaryProductImage,
   getProductDisplayName,
   getProductPrice,
@@ -41,7 +44,10 @@ function buildPodCollectionRouteSearchParams(searchParams = {}, seoState = {}) {
 
 function createSeoCard(product = {}, occasion = "") {
   const title = getProductDisplayName(product);
-  const basePath = buildProductPath(product);
+  const productId = `${product?._id || ""}`.trim();
+  const basePath = productId
+    ? `/custom-gifts/${getPodProductSlug(product)}/${productId}`
+    : buildProductPath(product);
   const params = new URLSearchParams();
   if (occasion) {
     params.set("occasion", occasion);
@@ -57,6 +63,38 @@ function createSeoCard(product = {}, occasion = "") {
     imageUrl: getPrimaryProductImage(product, occasion ? { occasion } : {}),
     isPod: true,
   };
+}
+
+function buildPodSeoLinks(cards = []) {
+	const links = [
+		{ href: "/", label: "Home" },
+		{ href: "/our-products", label: "All products" },
+		{ href: "/contact", label: "Contact" },
+	];
+
+	for (const card of cards.slice(0, 30)) {
+		if (card.href && card.title) {
+			links.push({ href: card.href, label: card.title });
+		}
+	}
+
+	links.push(
+		...POD_OCCASIONS.map((occasion) => {
+			const params = new URLSearchParams();
+			params.set("occasion", occasion);
+			return {
+				href: `/custom-gifts?${params.toString()}`,
+				label: `${occasion} gifts`,
+			};
+		}),
+	);
+
+	const seen = new Set();
+	return links.filter((link) => {
+		if (!link.href || seen.has(link.href)) return false;
+		seen.add(link.href);
+		return true;
+	});
 }
 
 export async function generateMetadata({ searchParams }) {
@@ -90,7 +128,7 @@ export default async function CustomGiftsPage({ searchParams }) {
   try {
     const products = await getPodProducts({
       revalidate: 180,
-      limit: 12,
+      limit: 30,
       lite: true,
     });
     seoCards = Array.isArray(products)
@@ -100,7 +138,7 @@ export default async function CustomGiftsPage({ searchParams }) {
               !seoState.occasion ||
               getPodOccasions(product).includes(seoState.occasion),
           )
-          .slice(0, 12)
+          .slice(0, 30)
           .map((product) => createSeoCard(product, seoState.occasion))
           .filter((card) => card.href)
       : [];
@@ -139,6 +177,14 @@ export default async function CustomGiftsPage({ searchParams }) {
       <JsonLd data={schema} />
       <JsonLd data={breadcrumbs} />
       <PodListRouteClient />
+      <SeoCrawlSupport
+        title={seoState.schemaName}
+        description={seoState.description}
+        paragraphs={[
+          "Choose a product, pick an occasion, and personalize the design with names, photos, or a message. These custom gift pages connect birthday, anniversary, wedding, holiday, and just-because gift ideas to the products customers can design.",
+        ]}
+        links={buildPodSeoLinks(seoCards)}
+      />
     </>
   );
 }

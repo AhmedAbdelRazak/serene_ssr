@@ -15,25 +15,24 @@ import { Link, useHistory } from "react-router-dom";
 import { isAuthenticated, signout } from "../auth";
 import { useCartContext } from "../cart_context";
 import { useLegacyRouteBootstrap } from "../bootstrap/LegacyRouteBootstrapContext";
+import {
+	buildCloudinarySrcSet,
+	getCloudinaryOptimizedUrl,
+} from "../utils/image";
 
 const Sidebar = lazy(() => import("./Sidebar"));
 const SidebarCart = lazy(() => import("./SidebarCart"));
+const LOGO_WIDTHS = [220, 320, 441];
+const LOGO_SIZES = "(max-width: 768px) 180px, 348px";
 
-/**
- * Helper to transform Cloudinary URLs by inserting f_auto,q_auto,
- * and an optional w_{width}.
- * If it's not a Cloudinary URL or already has transformations, return as is.
- */
-const getCloudinaryOptimizedUrl = (url, { width = 300 } = {}) => {
-	if (!url?.includes("res.cloudinary.com")) return url;
-	if (url.includes("f_auto") || url.includes("q_auto")) return url;
-
-	const parts = url.split("/upload/");
-	if (parts.length === 2) {
-		return `${parts[0]}/upload/f_auto,q_auto,w_${width}/${parts[1]}`;
-	}
-	return url;
-};
+function getSetupLogoUrl(websiteSetup = null, fallback = "/logo192.png") {
+	return (
+		websiteSetup?.sereneJannatLogo?.cloudinary_url ||
+		websiteSetup?.sereneJannatLogo?.cloudinaryUrl ||
+		websiteSetup?.sereneJannatLogo?.url ||
+		fallback
+	);
+}
 
 const NavbarTop = memo(() => {
 	const [isSidebarOpen, setIsSidebarOpen] = useState(false);
@@ -46,8 +45,7 @@ const NavbarTop = memo(() => {
 	const routeBootstrap = useLegacyRouteBootstrap();
 	const navigate = useHistory();
 	const user = authState?.user || null;
-	const bootstrapLogoUrl =
-		routeBootstrap?.websiteSetup?.sereneJannatLogo?.url || "/logo192.png";
+	const bootstrapLogoUrl = getSetupLogoUrl(routeBootstrap?.websiteSetup || null);
 	const [resolvedLogoUrl, setResolvedLogoUrl] = useState(bootstrapLogoUrl);
 
 	// Memoize the first name
@@ -73,12 +71,22 @@ const NavbarTop = memo(() => {
 
 	// If we have a Cloudinary logo URL, generate an optimized version + WebP version
 	const originalLogoUrl = resolvedLogoUrl || "/logo192.png";
+	const hasCloudinaryLogo = originalLogoUrl.includes("res.cloudinary.com");
 	const optimizedLogoUrl = getCloudinaryOptimizedUrl(originalLogoUrl, {
-		width: 300,
+		width: 320,
+		quality: "auto:eco",
 	});
-	const webpLogoUrl = optimizedLogoUrl?.includes("/f_auto,q_auto")
-		? optimizedLogoUrl.replace("/f_auto,q_auto", "/f_auto,q_auto,f_webp")
-		: optimizedLogoUrl;
+	const logoSrcSet = hasCloudinaryLogo
+		? buildCloudinarySrcSet(originalLogoUrl, LOGO_WIDTHS, {
+				quality: "auto:eco",
+			})
+		: "";
+	const webpLogoSrcSet = hasCloudinaryLogo
+		? buildCloudinarySrcSet(originalLogoUrl, LOGO_WIDTHS, {
+				format: "webp",
+				quality: "auto:eco",
+			})
+		: "";
 
 	useEffect(() => {
 		setAuthState(isAuthenticated() || null);
@@ -86,9 +94,14 @@ const NavbarTop = memo(() => {
 
 	useEffect(() => {
 		setResolvedLogoUrl(
-			websiteSetup?.sereneJannatLogo?.url || bootstrapLogoUrl || "/logo192.png"
+			getSetupLogoUrl(websiteSetup, bootstrapLogoUrl || "/logo192.png")
 		);
-	}, [bootstrapLogoUrl, websiteSetup?.sereneJannatLogo?.url]);
+	}, [
+		bootstrapLogoUrl,
+		websiteSetup?.sereneJannatLogo?.cloudinary_url,
+		websiteSetup?.sereneJannatLogo?.cloudinaryUrl,
+		websiteSetup?.sereneJannatLogo?.url,
+	]);
 
 	useEffect(() => {
 		if (typeof window === "undefined") return undefined;
@@ -122,9 +135,17 @@ const NavbarTop = memo(() => {
 
 				<Link to='/' style={{ textDecoration: "none", display: "flex" }}>
 					<picture>
-						<source srcSet={webpLogoUrl} type='image/webp' />
+						{webpLogoSrcSet ? (
+							<source
+								srcSet={webpLogoSrcSet}
+								type='image/webp'
+								sizes={LOGO_SIZES}
+							/>
+						) : null}
 						<Logo
 							src={optimizedLogoUrl}
+							srcSet={logoSrcSet || undefined}
+							sizes={logoSrcSet ? LOGO_SIZES : undefined}
 							alt='Serene Jannat Shop'
 							width={441}
 							height={111}

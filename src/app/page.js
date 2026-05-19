@@ -1,4 +1,5 @@
 import HomeRouteClient from "@/components/public/routes/HomeRouteClient";
+import SeoCrawlSupport from "@/components/seo/SeoCrawlSupport";
 import {
 	getCategoriesAndSubcategories,
 	getSpecificProducts,
@@ -7,6 +8,7 @@ import {
 import { preload } from "react-dom";
 import { createMetadata } from "@/lib/seo";
 import { getCloudinaryOptimizedUrl } from "@/legacy_frontend/utils/image";
+import { buildProductPath, getProductDisplayName } from "@/lib/product-helpers";
 
 export const revalidate = 300;
 
@@ -18,7 +20,12 @@ export const metadata = createMetadata({
 });
 
 function getHomeHeroAsset(websiteSetup = null) {
-	const heroUrl = `${websiteSetup?.homeMainBanners?.[0]?.url || ""}`.trim();
+	const heroUrl = `${
+		websiteSetup?.homeMainBanners?.[0]?.cloudinary_url ||
+		websiteSetup?.homeMainBanners?.[0]?.cloudinaryUrl ||
+		websiteSetup?.homeMainBanners?.[0]?.url ||
+		""
+	}`.trim();
 	if (!heroUrl) return null;
 
 	if (heroUrl.includes("res.cloudinary.com")) {
@@ -30,23 +37,23 @@ function getHomeHeroAsset(websiteSetup = null) {
 			width: 768,
 			quality: "auto:eco",
 		});
-		const hero1200 = getCloudinaryOptimizedUrl(heroUrl, {
-			width: 1200,
-			quality: "auto",
+		const hero960 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 960,
+			quality: "auto:good",
 		});
-		const hero1600 = getCloudinaryOptimizedUrl(heroUrl, {
-			width: 1600,
-			quality: "auto",
+		const hero1280 = getCloudinaryOptimizedUrl(heroUrl, {
+			width: 1280,
+			quality: "auto:good",
 		});
 
 		return {
-			preloadHref: hero1200,
+			preloadHref: hero960,
 			src: hero480,
 			srcSet: [
 				`${hero480} 480w`,
 				`${hero768} 768w`,
-				`${hero1200} 1200w`,
-				`${hero1600} 1600w`,
+				`${hero960} 960w`,
+				`${hero1280} 1280w`,
 			].join(", "),
 			sizes: "100vw",
 		};
@@ -72,6 +79,53 @@ function preloadHomeHero(heroAsset = null) {
 				}
 			: {}),
 		fetchPriority: "high",
+	});
+}
+
+function buildHomeSeoLinks({
+	categories = [],
+	featuredProducts = [],
+	newArrivalProducts = [],
+	customDesignProducts = [],
+} = {}) {
+	const links = [
+		{ href: "/our-products", label: "Shop all products" },
+		{ href: "/custom-gifts", label: "Personalized custom gifts" },
+		{ href: "/about", label: "About Serene Jannat" },
+		{ href: "/contact", label: "Contact us" },
+	];
+
+	for (const category of categories.slice(0, 6)) {
+		const categoryId = `${category?._id || ""}`.trim();
+		const categorySlug = `${category?.categorySlug || ""}`.trim();
+		const categoryName = `${category?.categoryName || ""}`.trim();
+		if (!categoryId || !categoryName) continue;
+		const params = new URLSearchParams();
+		params.set("category", categoryId);
+		if (categorySlug) params.set("categorySlug", categorySlug);
+		links.push({
+			href: `/our-products?${params.toString()}`,
+			label: categoryName,
+		});
+	}
+
+	for (const product of [
+		...featuredProducts,
+		...newArrivalProducts,
+		...customDesignProducts,
+	].slice(0, 10)) {
+		const href = buildProductPath(product);
+		const label = getProductDisplayName(product);
+		if (href && href !== "/" && label) {
+			links.push({ href, label });
+		}
+	}
+
+	const seen = new Set();
+	return links.filter((link) => {
+		if (!link.href || seen.has(link.href)) return false;
+		seen.add(link.href);
+		return true;
 	});
 }
 
@@ -183,10 +237,24 @@ export default async function HomePage() {
 				customDesignProducts,
 			}
 		: null;
+	const seoLinks = buildHomeSeoLinks({
+		categories: sanitizedCategories,
+		featuredProducts,
+		newArrivalProducts,
+		customDesignProducts,
+	});
 
 	return (
 		<>
 			<HomeRouteClient initialRouteData={initialRouteData} />
+			<SeoCrawlSupport
+				title='Shop Personalized Gifts, Home Decor, and Custom Designs'
+				description='Serene Jannat helps shoppers find handcrafted decor, thoughtful gifts, candles, seasonal pieces, and personalized print-on-demand products for birthdays, anniversaries, holidays, and everyday moments.'
+				paragraphs={[
+					"Explore curated collections, browse new arrivals, or customize a gift with names, photos, and occasion-ready artwork. Every public page links back to the main shopping paths so customers and crawlers can move through the storefront clearly.",
+				]}
+				links={seoLinks}
+			/>
 		</>
 	);
 }
