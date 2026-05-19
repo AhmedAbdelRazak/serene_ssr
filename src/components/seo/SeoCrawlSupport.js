@@ -13,6 +13,7 @@ export default function SeoCrawlSupport({
 	links = [],
 	headingLevel = 1,
 	compact = false,
+	visuallyHidden = true,
 }) {
 	const safeTitle = `${title || "Serene Jannat"}`.trim();
 	const headingId = `seo-${normalizeHeadingId(safeTitle)}`;
@@ -31,8 +32,11 @@ export default function SeoCrawlSupport({
 
 	return (
 		<section
-			className={`seo-crawl-support${compact ? " seo-crawl-support--compact" : ""}`}
-			aria-labelledby={headingId}
+			className={`seo-crawl-support${compact ? " seo-crawl-support--compact" : ""}${
+				visuallyHidden ? " seo-crawl-support--visually-hidden" : ""
+			}`}
+			aria-labelledby={visuallyHidden ? undefined : headingId}
+			aria-hidden={visuallyHidden ? "true" : undefined}
 		>
 			<div className='site-container seo-crawl-support__inner'>
 				<HeadingTag id={headingId}>{safeTitle}</HeadingTag>
@@ -44,7 +48,9 @@ export default function SeoCrawlSupport({
 						<ul>
 							{safeLinks.map((link) => (
 								<li key={`${link.href}-${link.label}`}>
-									<a href={link.href}>{link.label}</a>
+									<a href={link.href} tabIndex={visuallyHidden ? -1 : undefined}>
+										{link.label}
+									</a>
 								</li>
 							))}
 						</ul>
