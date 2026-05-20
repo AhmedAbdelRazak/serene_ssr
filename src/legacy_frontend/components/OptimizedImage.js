@@ -1,8 +1,25 @@
 import React, { useMemo } from "react";
 
-const CLOUDINARY_FETCH_BASE =
-	"https://res.cloudinary.com/infiniteapps/image/fetch";
 const DEFAULT_WIDTHS = [240, 360, 480, 600, 800, 1200];
+const NEXT_IMAGE_QUALITY = 75;
+const NEXT_IMAGE_WIDTHS = [
+	16,
+	32,
+	48,
+	64,
+	96,
+	128,
+	256,
+	384,
+	640,
+	750,
+	828,
+	1080,
+	1200,
+	1920,
+	2048,
+	3840,
+];
 
 const toAbsoluteUrl = (url) => {
 	if (!url) return "";
@@ -73,10 +90,20 @@ const buildCloudinaryUrl = (url, width, format) => {
 	return `${prefix}/upload/${newParts.join("/")}`;
 };
 
-const buildFetchUrl = (url, width, format) => {
-	const encodedUrl = encodeURIComponent(url);
-	const formatToken = format === "webp" ? "f_webp" : "f_auto";
-	return `${CLOUDINARY_FETCH_BASE}/${formatToken},q_auto:eco,w_${width}/${encodedUrl}`;
+const buildNextImageUrl = (url, width) => {
+	const encodedUrl = encodeURIComponent(toAbsoluteUrl(url));
+	const safeWidth =
+		NEXT_IMAGE_WIDTHS.find((candidate) => candidate >= Number(width || 0)) ||
+		NEXT_IMAGE_WIDTHS[NEXT_IMAGE_WIDTHS.length - 1];
+	return `/_next/image?url=${encodedUrl}&w=${safeWidth}&q=${NEXT_IMAGE_QUALITY}`;
+};
+
+const getSrcSetWidth = (width, { useFetch = false } = {}) => {
+	if (!useFetch) return width;
+	return (
+		NEXT_IMAGE_WIDTHS.find((candidate) => candidate >= Number(width || 0)) ||
+		NEXT_IMAGE_WIDTHS[NEXT_IMAGE_WIDTHS.length - 1]
+	);
 };
 
 const buildOptimizedUrl = (url, width, format, { useFetch = true } = {}) => {
@@ -88,12 +115,12 @@ const buildOptimizedUrl = (url, width, format, { useFetch = true } = {}) => {
 	if (!useFetch) {
 		return normalizedUrl;
 	}
-	return buildFetchUrl(normalizedUrl, width, format);
+	return buildNextImageUrl(normalizedUrl, width);
 };
 
-const buildSrcSet = (url, widths, format) =>
-	widths
-		.map((width) => `${buildOptimizedUrl(url, width, format)} ${width}w`)
+const buildSrcSet = (url, widths, format, options = {}) =>
+	Array.from(new Set(widths.map((width) => getSrcSetWidth(width, options))))
+		.map((width) => `${buildOptimizedUrl(url, width, format, options)} ${width}w`)
 		.join(", ");
 
 const OptimizedImage = ({
@@ -147,18 +174,18 @@ const OptimizedImage = ({
 		const resolved = buildOptimizedUrl(baseSrc, primaryWidth, "auto", {
 			useFetch,
 		});
-		const optimizedFallback = fallback
+		const optimizedFallback = !useFetch && fallback
 			? buildOptimizedUrl(fallback, primaryWidth, "auto", { useFetch })
 			: "";
 		return {
 			srcSet: shouldUseResponsiveSources
-				? buildSrcSet(baseSrc, safeWidths, "auto")
+				? buildSrcSet(baseSrc, safeWidths, "auto", { useFetch })
 				: "",
-			webpSrcSet: shouldUseResponsiveSources
-				? buildSrcSet(baseSrc, safeWidths, "webp")
+			webpSrcSet: shouldUseResponsiveSources && !useFetch
+				? buildSrcSet(baseSrc, safeWidths, "webp", { useFetch })
 				: "",
 			resolvedSrc: resolved || optimizedFallback || fallback,
-			resolvedFallback: optimizedFallback || fallback,
+			resolvedFallback: useFetch ? fallback : optimizedFallback || fallback,
 		};
 	}, [
 		baseSrc,
@@ -181,14 +208,21 @@ const OptimizedImage = ({
 		img.dataset.fallbackApplied = "true";
 		img.removeAttribute("srcset");
 		img.removeAttribute("sizes");
+		if (img.parentElement?.tagName === "PICTURE") {
+			img.parentElement.querySelectorAll("source").forEach((source) => {
+				source.remove();
+			});
+		}
 		img.src = resolvedFallback;
 	};
 
-	if (!srcSet && !webpSrcSet) {
+	if (!webpSrcSet) {
 		return (
 			<img
 				{...imgProps}
 				src={resolvedSrc || resolvedFallback || fallback}
+				srcSet={srcSet || undefined}
+				sizes={srcSet ? sizes : undefined}
 				alt={alt}
 				className={className}
 				style={style}

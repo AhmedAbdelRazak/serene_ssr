@@ -125,12 +125,14 @@ export default async function CustomGiftsPage({ searchParams }) {
     permanentRedirect(query ? `/custom-gifts?${query}` : "/custom-gifts");
   }
   let seoCards = [];
+  let podProducts = [];
   try {
     const products = await getPodProducts({
       revalidate: 180,
       limit: 30,
       lite: true,
     });
+    podProducts = Array.isArray(products) ? products.slice(0, 30) : [];
     seoCards = Array.isArray(products)
       ? products
           .filter(
@@ -176,7 +178,12 @@ export default async function CustomGiftsPage({ searchParams }) {
     <>
       <JsonLd data={schema} />
       <JsonLd data={breadcrumbs} />
-      <PodListRouteClient />
+      <PodListRouteClient
+        initialRouteData={{
+          type: "pod-list",
+          products: podProducts,
+        }}
+      />
       <SeoCrawlSupport
         title={seoState.schemaName}
         description={seoState.description}

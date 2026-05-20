@@ -8,6 +8,7 @@ import ReactPixel from "react-facebook-pixel";
 
 import PrintifyPageHelmet from "./PrintifyPageHelmet";
 import { isAuthenticated } from "../../auth";
+import { useLegacyRouteBootstrap } from "../../bootstrap/LegacyRouteBootstrapContext";
 import { cleanupPodListPreviewSession, getPodListPreview } from "../../apiCore";
 import OptimizedImage from "../../components/OptimizedImage";
 import {
@@ -34,6 +35,54 @@ const POD_LIFESTYLE_HINT_REGEX =
 	/(lifestyle|model|wear|wearing|person|people|man|woman|male|female|on-model|on_model|studio)/i;
 const POD_FLAT_HINT_REGEX =
 	/(flat|blank|template|ghost|isolated|back|side|cutout)/i;
+
+function getPodProductPriority(product) {
+	const name = product.productName?.toLowerCase() || "";
+	if (name.includes("unisex garment-dyed t-shirt")) return 1;
+	if (
+		name.includes("bag") ||
+		name.includes("shirt") ||
+		name.includes("hoodie") ||
+		name.includes("clothing")
+	) {
+		return 2;
+	}
+	if (name.includes("mug")) return 3;
+	return 4;
+}
+
+function sortPodProducts(products = []) {
+	return (Array.isArray(products) ? products : [])
+		.slice()
+		.sort((a, b) => getPodProductPriority(a) - getPodProductPriority(b));
+}
+
+function preferOptimizedImageSources(primarySrc = "", fallbackSrc = "") {
+	const primary = `${primarySrc || ""}`.trim();
+	const fallback = `${fallbackSrc || ""}`.trim();
+	const cloudinaryCandidate = [primary, fallback].find((src) =>
+		src.includes("res.cloudinary.com")
+	);
+	const optimizedPrimary = cloudinaryCandidate || primary || fallback || "";
+	const optimizedFallback =
+		(optimizedPrimary !== primary && primary) ||
+		(optimizedPrimary !== fallback && fallback) ||
+		optimizedPrimary;
+	return {
+		primarySrc: optimizedPrimary,
+		fallbackSrc: optimizedFallback || optimizedPrimary,
+	};
+}
+
+function resolveOptimizedImageSources(image) {
+	const { primary, fallback } = resolveImageSources(image);
+	return preferOptimizedImageSources(primary, fallback);
+}
+
+function resolveOptimizedImageUrl(image) {
+	const { primarySrc, fallbackSrc } = resolveOptimizedImageSources(image);
+	return primarySrc || fallbackSrc || "";
+}
 
 function getPodCardKindByName(name = "") {
 	const normalizedName = String(name || "").toLowerCase();
@@ -89,8 +138,7 @@ function getStoredDefaultDesignImagesForOccasion(product, occasion) {
 				: [];
 			const resolvedImages = images
 				.map((image) => {
-					const { primary, fallback } = resolveImageSources(image);
-					const src = primary || fallback;
+					const src = resolveOptimizedImageUrl(image);
 					return src ? `${src}`.trim() : "";
 				})
 				.filter(Boolean);
@@ -250,10 +298,22 @@ function removePreviewLocalCacheEntriesByPreviewIds(previewProductIds = []) {
 }
 
 const PrintifyAvailableProducts = () => {
-	const [products, setProducts] = useState([]);
-	const [loading, setLoading] = useState(true);
+	const routeBootstrap = useLegacyRouteBootstrap();
+	const initialProducts = useMemo(
+		() =>
+			sortPodProducts(
+				routeBootstrap?.products || routeBootstrap?.payload?.products || []
+			),
+		[routeBootstrap?.payload?.products, routeBootstrap?.products]
+	);
+	const [products, setProducts] = useState(() => initialProducts);
+	const [loading, setLoading] = useState(() => initialProducts.length === 0);
 	const [previewByProductId, setPreviewByProductId] = useState({});
 	const [previewStatusByProductId, setPreviewStatusByProductId] = useState({});
+	const [isDesktopPreviewViewport, setIsDesktopPreviewViewport] =
+		useState(false);
+	const [canAutoGenerateListPreviews, setCanAutoGenerateListPreviews] =
+		useState(false);
 	const previewSessionCleanupRef = useRef([]);
 	const previewPendingCleanupRef = useRef([]);
 	const cleanupFlushInFlightRef = useRef(null);
@@ -312,20 +372,60 @@ const PrintifyAvailableProducts = () => {
 		setPodNameDraft(resolved.name);
 	}, [location.search]);
 
-	const getPriority = (product) => {
-		const name = product.productName?.toLowerCase() || "";
-		if (name.includes("unisex garment-dyed t-shirt")) return 1;
-		if (
-			name.includes("bag") ||
-			name.includes("shirt") ||
-			name.includes("hoodie") ||
-			name.includes("clothing")
-		) {
-			return 2;
+	useEffect(() => {
+		if (!initialProducts.length) return;
+		setProducts((currentProducts) =>
+			currentProducts.length ? currentProducts : initialProducts
+		);
+		setLoading(false);
+	}, [initialProducts]);
+
+	useEffect(() => {
+		if (typeof window === "undefined" || typeof window.matchMedia !== "function") {
+			return undefined;
 		}
-		if (name.includes("mug")) return 3;
-		return 4;
-	};
+
+		const mediaQuery = window.matchMedia("(min-width: 769px)");
+		const syncViewport = () => {
+			const isDesktop = mediaQuery.matches;
+			setIsDesktopPreviewViewport(isDesktop);
+			if (!isDesktop) setCanAutoGenerateListPreviews(false);
+		};
+
+		syncViewport();
+		if (typeof mediaQuery.addEventListener === "function") {
+			mediaQuery.addEventListener("change", syncViewport);
+			return () => mediaQuery.removeEventListener("change", syncViewport);
+		}
+
+		mediaQuery.addListener(syncViewport);
+		return () => mediaQuery.removeListener(syncViewport);
+	}, []);
+
+	useEffect(() => {
+		if (!isDesktopPreviewViewport) return undefined;
+
+		let idleId = null;
+		let timeoutId = null;
+		const enablePreviewGeneration = () => {
+			setCanAutoGenerateListPreviews(true);
+		};
+
+		if (typeof window !== "undefined" && typeof window.requestIdleCallback === "function") {
+			idleId = window.requestIdleCallback(enablePreviewGeneration, {
+				timeout: 3500,
+			});
+		} else if (typeof window !== "undefined") {
+			timeoutId = window.setTimeout(enablePreviewGeneration, 3000);
+		}
+
+		return () => {
+			if (idleId && typeof window.cancelIdleCallback === "function") {
+				window.cancelIdleCallback(idleId);
+			}
+			if (timeoutId) window.clearTimeout(timeoutId);
+		};
+	}, [isDesktopPreviewViewport]);
 
 	const getCardImageSources = useCallback((product) => {
 		const firstVariantImages = product?.productAttributes?.[0]?.productImages || [];
@@ -368,7 +468,7 @@ const PrintifyAvailableProducts = () => {
 		const seen = new Set();
 		for (let index = 0; index < candidates.length; index += 1) {
 			const candidate = candidates[index];
-			const { primary: primarySrc, fallback: fallbackSrc } = resolveImageSources(
+			const { primarySrc, fallbackSrc } = resolveOptimizedImageSources(
 				candidate.raw
 			);
 			const resolved = primarySrc || fallbackSrc;
@@ -420,9 +520,9 @@ const PrintifyAvailableProducts = () => {
 
 		const preferredCandidate = scored[0] || null;
 		const {
-			primary: examplePrimary,
-			fallback: exampleFallback,
-		} = resolveImageSources(exampleDesignImage);
+			primarySrc: examplePrimary,
+			fallbackSrc: exampleFallback,
+		} = resolveOptimizedImageSources(exampleDesignImage);
 		let primarySrc = preferredCandidate?.primarySrc || preferredCandidate?.fallbackSrc;
 		let fallbackSrc =
 			preferredCandidate?.fallbackSrc ||
@@ -603,25 +703,34 @@ const PrintifyAvailableProducts = () => {
 	}, [flushPreviewSessionCleanup]);
 
 	useEffect(() => {
+		if (initialProducts.length) {
+			setLoading(false);
+			return undefined;
+		}
+
+		let cancelled = false;
 		const fetchProducts = async () => {
 			try {
 				const response = await axios.get(
-					`${process.env.REACT_APP_API_URL}/products/pod/print-on-demand-products`
+					`${process.env.REACT_APP_API_URL}/products/pod/print-on-demand-products?limit=30&lite=1`
 				);
-				if (Array.isArray(response.data)) {
-					const sortedData = response.data.slice().sort((a, b) => {
-						return getPriority(a) - getPriority(b);
-					});
+				if (!cancelled && Array.isArray(response.data)) {
+					const sortedData = sortPodProducts(response.data);
 					setProducts(sortedData);
 				}
 			} catch (error) {
-				console.error("Error fetching POD products:", error);
+				if (!cancelled) {
+					console.error("Error fetching POD products:", error);
+				}
 			}
-			setLoading(false);
+			if (!cancelled) setLoading(false);
 		};
 
 		fetchProducts();
-	}, []);
+		return () => {
+			cancelled = true;
+		};
+	}, [initialProducts.length]);
 
 	useEffect(() => {
 		if (!products.length) {
@@ -630,23 +739,74 @@ const PrintifyAvailableProducts = () => {
 			return undefined;
 		}
 
-		let cancelled = false;
 		const localCache = readPreviewLocalCache();
 		const initialPreviewMap = {};
 		const initialStatusMap = {};
+		const previewQueue = [];
+		const now = Date.now();
 
 		for (const product of products) {
-			if (product?._id) {
-				initialStatusMap[product._id] = "idle";
+			const productId = product?._id;
+			if (!productId) continue;
+			const cacheKey = buildPreviewLocalCacheKey(
+				productId,
+				podOccasion,
+				podName,
+			);
+			initialStatusMap[productId] = "idle";
+
+			if (!`${podName || ""}`.trim()) {
+				const storedDefaultImages = getStoredDefaultDesignImagesForOccasion(
+					product,
+					podOccasion,
+				);
+				if (storedDefaultImages.length) {
+					const previewImage = storedDefaultImages[0];
+					initialPreviewMap[productId] = previewImage;
+					initialStatusMap[productId] = "ready";
+					localCache[cacheKey] = {
+						previewImage,
+						expiresAt: now + POD_LIST_PREVIEW_LOCAL_CACHE_TTL_MS,
+						updatedAt: now,
+						previewProductId: null,
+						previewShopId: null,
+						source: "stored-default-design",
+					};
+					continue;
+				}
+			}
+
+			const cachedPreview = localCache[cacheKey];
+			const cachedPreviewImage =
+				typeof cachedPreview?.previewImage === "string"
+					? cachedPreview.previewImage.trim()
+					: "";
+			const hasCachedPreview =
+				Boolean(cachedPreviewImage) &&
+				Number(cachedPreview?.expiresAt || 0) > now;
+			if (hasCachedPreview) {
+				initialPreviewMap[productId] = cachedPreviewImage;
+				initialStatusMap[productId] = "ready";
+				continue;
+			}
+
+			if (canAutoGenerateListPreviews) {
+				previewQueue.push(product);
 			}
 		}
 
 		setPreviewByProductId(initialPreviewMap);
 		setPreviewStatusByProductId(initialStatusMap);
+		writePreviewLocalCache(localCache);
 
-		const queue = products.slice();
+		if (!canAutoGenerateListPreviews || !previewQueue.length) {
+			return undefined;
+		}
+
+		let cancelled = false;
+		const queue = previewQueue.slice(0, 12);
 		let cursor = 0;
-		const workerCount = Math.min(4, queue.length);
+		const workerCount = Math.min(2, queue.length);
 
 		const processNext = async () => {
 			while (!cancelled) {
@@ -661,52 +821,6 @@ const PrintifyAvailableProducts = () => {
 					podOccasion,
 					podName,
 				);
-				if (!`${podName || ""}`.trim()) {
-					const storedDefaultImages = getStoredDefaultDesignImagesForOccasion(
-						product,
-						podOccasion,
-					);
-					if (storedDefaultImages.length) {
-						const previewImage = storedDefaultImages[0];
-						setPreviewByProductId((prev) => ({
-							...prev,
-							[productId]: previewImage,
-						}));
-						setPreviewStatusByProductId((prev) => ({
-							...prev,
-							[productId]: "ready",
-						}));
-						localCache[cacheKey] = {
-							previewImage,
-							expiresAt: Date.now() + POD_LIST_PREVIEW_LOCAL_CACHE_TTL_MS,
-							updatedAt: Date.now(),
-							previewProductId: null,
-							previewShopId: null,
-							source: "stored-default-design",
-						};
-						continue;
-					}
-				}
-				const cachedPreview = localCache[cacheKey];
-				const cachedPreviewImage =
-					typeof cachedPreview?.previewImage === "string"
-						? cachedPreview.previewImage.trim()
-						: "";
-				const hasCachedPreview =
-					Boolean(cachedPreviewImage) &&
-					Number(cachedPreview?.expiresAt || 0) > Date.now();
-				if (hasCachedPreview) {
-					setPreviewByProductId((prev) => ({
-						...prev,
-						[productId]: cachedPreviewImage,
-					}));
-					setPreviewStatusByProductId((prev) => ({
-						...prev,
-						[productId]: "ready",
-					}));
-					continue;
-				}
-
 				setPreviewStatusByProductId((prev) => {
 					if (prev[productId] === "ready") return prev;
 					return { ...prev, [productId]: "loading" };
@@ -801,7 +915,13 @@ const PrintifyAvailableProducts = () => {
 		return () => {
 			cancelled = true;
 		};
-	}, [products, podOccasion, podName, registerPreviewForSessionCleanup]);
+	}, [
+		canAutoGenerateListPreviews,
+		products,
+		podOccasion,
+		podName,
+		registerPreviewForSessionCleanup,
+	]);
 
 	const handleProductClick = useCallback(
 		(product) => {
@@ -868,8 +988,9 @@ const PrintifyAvailableProducts = () => {
 					</HeroTextWrap>
 
 					<PersonalizationCard>
-						<FieldLabel>Occasion</FieldLabel>
+						<FieldLabel htmlFor='pod-list-occasion'>Occasion</FieldLabel>
 						<Select
+							id='pod-list-occasion'
 							size='large'
 							value={podOccasion}
 							style={{ width: "100%" }}
@@ -886,8 +1007,11 @@ const PrintifyAvailableProducts = () => {
 							))}
 						</Select>
 
-						<FieldLabel style={{ marginTop: "10px" }}>Name (Optional)</FieldLabel>
+						<FieldLabel htmlFor='pod-list-name' style={{ marginTop: "10px" }}>
+							Name (Optional)
+						</FieldLabel>
 						<Input
+							id='pod-list-name'
 							size='large'
 							value={podNameDraft}
 							onChange={(e) => setPodNameDraft(e.target.value)}
@@ -908,7 +1032,7 @@ const PrintifyAvailableProducts = () => {
 				</HeroPanel>
 
 				<GridContainer>
-					{products.map((product) => {
+					{products.map((product, index) => {
 						const { primarySrc, fallbackSrc, exampleSrc } = getCardImageSources(product);
 						const previewStatus = previewStatusByProductId[product._id] || "idle";
 						const readyPreview =
@@ -952,7 +1076,8 @@ const PrintifyAvailableProducts = () => {
 								mouseEnterDelay={0.12}
 								zIndex={4200}
 								destroyOnHidden
-								content={
+								open={isDesktopPreviewViewport ? undefined : false}
+								content={isDesktopPreviewViewport ? (
 									<HoverPreviewContent>
 										{hasStoredDefaultHoverImages ? (
 											<>
@@ -962,13 +1087,15 @@ const PrintifyAvailableProducts = () => {
 															key={`${product._id}-default-hover-${index}`}
 														>
 															<DirectPreviewImage
-																src={imageSrc}
-																alt={`${product.productName} default example ${
-																	index + 1
-																}`}
-																loading='lazy'
-																decoding='async'
-																referrerPolicy='strict-origin-when-cross-origin'
+															src={imageSrc}
+															alt={`${product.productName} default example ${
+																index + 1
+															}`}
+															loading='lazy'
+															decoding='async'
+															width={320}
+															height={320}
+															referrerPolicy='strict-origin-when-cross-origin'
 																onError={(event) =>
 																	handleDirectPreviewImageError(
 																		event,
@@ -990,6 +1117,8 @@ const PrintifyAvailableProducts = () => {
 															alt={`${product.productName} preview`}
 															loading='lazy'
 															decoding='async'
+															width={420}
+															height={420}
 															referrerPolicy='strict-origin-when-cross-origin'
 															onError={(event) =>
 																handleDirectPreviewImageError(
@@ -1007,6 +1136,9 @@ const PrintifyAvailableProducts = () => {
 															decoding='async'
 															sizes='(max-width: 1200px) 360px, 420px'
 															widths={[420, 640, 800]}
+															width={420}
+															height={420}
+															enableFetchOptimization
 														/>
 													)}
 													{loadingPreview && (
@@ -1024,7 +1156,7 @@ const PrintifyAvailableProducts = () => {
 											</>
 										)}
 									</HoverPreviewContent>
-								}
+								) : null}
 							>
 								<CardAnchor>
 									<Card onClick={() => handleProductClick(product)}>
@@ -1033,8 +1165,11 @@ const PrintifyAvailableProducts = () => {
 												<DirectPreviewImage
 													src={cardPreviewSrc}
 													alt={product.productName}
-													loading='lazy'
+													loading={index < 2 ? "eager" : "lazy"}
 													decoding='async'
+													width={320}
+													height={320}
+													fetchPriority={index < 2 ? "high" : undefined}
 													referrerPolicy='strict-origin-when-cross-origin'
 													onError={(event) =>
 														handleDirectPreviewImageError(
@@ -1048,10 +1183,14 @@ const PrintifyAvailableProducts = () => {
 													src={placeholderSrc}
 													fallbackSrc={primarySrc || fallbackSrc}
 													alt={product.productName}
-													loading='lazy'
+													loading={index < 2 ? "eager" : "lazy"}
 													decoding='async'
+													fetchPriority={index < 2 ? "high" : undefined}
 													sizes='(max-width: 600px) 94vw, (max-width: 1024px) 46vw, 320px'
 													widths={[320, 480, 640, 800]}
+													width={320}
+													height={320}
+													enableFetchOptimization
 												/>
 											)}
 											{loadingPreview && (
@@ -1221,6 +1360,17 @@ const ImageWrap = styled.div`
 	min-height: 260px;
 	overflow: hidden;
 	background: linear-gradient(180deg, #f8f5f1 0%, #f2ede7 100%);
+
+	> picture {
+		display: block !important;
+		width: 100%;
+		height: 100%;
+	}
+
+	> picture > img,
+	> img {
+		display: block;
+	}
 `;
 
 const ProductImage = styled(OptimizedImage)`
@@ -1287,6 +1437,12 @@ const HoverPreviewGalleryItem = styled.div`
 	overflow: hidden;
 	border: 1px solid #efded0;
 	background: linear-gradient(180deg, #faf7f3 0%, #f3ece3 100%);
+
+	> picture {
+		display: block !important;
+		width: 100%;
+		height: 100%;
+	}
 `;
 
 const HoverPreviewImageWrap = styled.div`
@@ -1297,6 +1453,12 @@ const HoverPreviewImageWrap = styled.div`
 	overflow: hidden;
 	border: 1px solid #efded0;
 	background: linear-gradient(180deg, #faf7f3 0%, #f3ece3 100%);
+
+	> picture {
+		display: block !important;
+		width: 100%;
+		height: 100%;
+	}
 `;
 
 const HoverPreviewLabel = styled.p`
@@ -1314,7 +1476,7 @@ const CardBody = styled.div`
 	flex: 1;
 `;
 
-const ProductTitle = styled.h3`
+const ProductTitle = styled.h2`
 	font-size: 0.93rem;
 	font-weight: 700;
 	color: #1f1915;

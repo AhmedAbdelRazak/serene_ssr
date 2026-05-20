@@ -290,7 +290,12 @@ function clampPriceRange(range = [0, 1000], bounds = [0, 1000]) {
 
 function resolvePreferredImageSources(image) {
 	const { primary, fallback } = resolveImageSources(image);
-	return { primary: primary || "", fallback: fallback || primary || "" };
+	const cloudinaryCandidate =
+		fallback && fallback.includes("res.cloudinary.com") ? fallback : "";
+	const optimizedPrimary = cloudinaryCandidate || primary || fallback || "";
+	const safeFallback =
+		(optimizedPrimary !== primary && primary) || fallback || optimizedPrimary;
+	return { primary: optimizedPrimary, fallback: safeFallback || optimizedPrimary };
 }
 
 function expandProductsForShop(rawProducts = [], legacyCategorySlug = "") {
@@ -1486,6 +1491,8 @@ function ShopPageMain() {
 													decoding='async'
 													sizes='(max-width: 576px) 48vw, (max-width: 992px) 48vw, (max-width: 1200px) 32vw, 16vw'
 													widths={[220, 320, 420, 540, 720]}
+													width={320}
+													height={320}
 													onClick={() => {
 														const eventId = `Lead-ShopMain-${prod?._id}-${Date.now()}`;
 
@@ -2015,6 +2022,17 @@ const ImageContainer = styled.div`
 	aspect-ratio: 1 / 1;
 	overflow: hidden;
 	border-radius: 10px 10px 0 0;
+
+	> picture {
+		display: block !important;
+		width: 100%;
+		height: 100%;
+	}
+
+	> picture > img,
+	> img {
+		display: block;
+	}
 `;
 
 const BadgeContainer = styled.div`
