@@ -22,6 +22,7 @@ export default function SiteHeader() {
 								width={44}
 								height={44}
 								priority
+								unoptimized
 							/>
 						</div>
 						<div className='brand-copy'>

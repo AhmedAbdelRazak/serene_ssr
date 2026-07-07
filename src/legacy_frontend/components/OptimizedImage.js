@@ -2,6 +2,8 @@ import React, { useMemo } from "react";
 
 const DEFAULT_WIDTHS = [240, 360, 480, 600, 800, 1200];
 const NEXT_IMAGE_QUALITY = 75;
+const ENABLE_NEXT_IMAGE_PROXY =
+	process.env.NEXT_PUBLIC_ENABLE_NEXT_IMAGE_PROXY === "true";
 const NEXT_IMAGE_WIDTHS = [
 	16,
 	32,
@@ -158,7 +160,11 @@ const OptimizedImage = ({
 		}
 	}
 
-	const useFetch = enableFetchOptimization && !isSameSite && !isCloudinarySource;
+	const useFetch =
+		ENABLE_NEXT_IMAGE_PROXY &&
+		enableFetchOptimization &&
+		!isSameSite &&
+		!isCloudinarySource;
 	const shouldUseResponsiveSources = useFetch || isCloudinarySource;
 
 	const { srcSet, webpSrcSet, resolvedSrc, resolvedFallback } = useMemo(() => {

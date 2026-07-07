@@ -98,6 +98,7 @@ const nextConfig = {
 		REACT_APP_FACEBOOK_PIXEL_ID: process.env.NEXT_PUBLIC_FACEBOOK_PIXEL_ID || "",
 	},
 	images: {
+		formats: ["image/webp"],
 		remotePatterns: [
 			{ protocol: "https", hostname: "res.cloudinary.com" },
 			{ protocol: "https", hostname: "serenejannat.com" },

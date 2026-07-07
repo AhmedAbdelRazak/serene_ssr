@@ -21,6 +21,7 @@ export default function ProductDetailView({
 					alt={title}
 					fill
 					priority
+					unoptimized
 					sizes='(max-width: 980px) 100vw, 50vw'
 					style={{ objectFit: "contain" }}
 				/>
